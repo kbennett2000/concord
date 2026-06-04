@@ -22,6 +22,12 @@ bible.db
 *.db-wal
 *.db-shm
 
+# Embedding model weights (large build artifact, fetched at build/test — never committed)
+models/
+
+# Built embeddings database (v2 build artifact — never committed)
+embeddings.db
+
 # Non-distributable data (local-only translations)
 data/private/
 

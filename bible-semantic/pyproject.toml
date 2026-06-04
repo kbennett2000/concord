@@ -1,0 +1,28 @@
+[project]
+name = "bible-semantic"
+version = "0.0.0"
+description = "Concord's semantic layer — local ONNX embeddings over Scripture, web-free."
+requires-python = ">=3.11"
+# HARD INVARIANT: no web framework may ever appear here (no fastapi, starlette,
+# uvicorn, httpx, ...) — same rule as bible-core, same reason: this package is an
+# embeddable library, not a service, so soap-journal could link it in-process. It MAY
+# carry ML deps (onnxruntime, tokenizers, numpy); it must NOT carry torch, transformers,
+# sentence-transformers, or optimum — the lean ONNX runtime is what keeps the image at
+# hundreds of MB instead of ~2 GB. See docs/v2/SPEC.md §2-§5.
+dependencies = [
+    "bible-core",
+    "onnxruntime>=1.17",
+    "tokenizers>=0.15",
+    "numpy>=1.26",
+]
+
+# Local path-dependency wiring: bible-core is resolved from this workspace, not PyPI.
+[tool.uv.sources]
+bible-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bible_semantic"]

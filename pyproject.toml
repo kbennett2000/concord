@@ -5,7 +5,7 @@
 # See docs/SPEC.md §2 for why the two packages are physically separate.
 
 [tool.uv.workspace]
-members = ["bible-core", "bible-api"]
+members = ["bible-core", "bible-api", "bible-semantic"]
 
 [tool.uv]
 package = false
@@ -36,7 +36,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 # --- Pytest ------------------------------------------------------------------
 # One `pytest` run from the repo root covers both packages' test suites.
 [tool.pytest.ini_options]
-testpaths = ["bible-core/tests", "bible-api/tests"]
+testpaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: slow/integration tests, excluded from the default run (CLAUDE.md)",
@@ -55,7 +55,9 @@ include = [
     "bible-core/tests",
     "bible-api/src",
     "bible-api/tests",
+    "bible-semantic/src",
+    "bible-semantic/tests",
 ]
 # Let tests import sibling test-helper modules (e.g. bible-core/tests/loaderkit.py),
 # matching pytest's prepend import mode at runtime.
-extraPaths = ["bible-core/tests", "bible-api/tests"]
+extraPaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests"]
