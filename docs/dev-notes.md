@@ -234,3 +234,43 @@ in the README.
   patterns are reusable; search responses follow the same envelope + caching conventions.
   The per-request `get_conn` dependency and `resolve_translations` (note: search uses a
   single `?translation=`, not the CSV set) are the wiring to copy.
+
+### Slice 5 — Search endpoint
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/6. `GET /v1/search` over
+  FTS5, single-translation, optional book filter + pagination, `<mark>` snippets. Pure
+  reuse of Slice 4 (only two new error handlers added). `bible-core` change confined to
+  `queries.py`; no web imports. 280 default + 3 integration tests green. Smoke-tested
+  against the real `bible.db`.
+- **Q1 module → `bible_core.queries.search_verses`.** **Q2 aux fn → `snippet()`**
+  (32-token window, `…`): short verses show fully, long ones window; `highlight()` would
+  dump the whole verse. **Q3 response** `{query, translation, book, limit, offset, total,
+  hits[{book, chapter, verse, reference, snippet}]}`. **Q4 pagination** `limit` default
+  20 / max 100, `offset` default 0; out-of-range → 422. **Q5 FTS5 → passthrough.** **Q6
+  ETag → reuse `cached_json_response`** (body hash captures full query state). **Q7
+  markers → `<mark>…</mark>`** (constant, not env-configurable).
+- **Exposed FTS5 syntax (→ Slice 9 user docs):** terms = implicit AND (`god world`);
+  phrase `"in the beginning"`; prefix `lov*`; boolean `OR`/`NOT`/`AND`, parentheses;
+  `NEAR(...)`. Malformed (unbalanced quote, bare `*`) → `sqlite3.OperationalError` →
+  caught → **400 `invalid_search_query`** with the FTS5 message in
+  `error.detail.fts5_error`.
+- **Book-filter status (the cross-slice wrinkle):** unknown `?book=` filter → **400
+  `unknown_book`** (Kris's call) — a query-param bad request, deliberately distinct from
+  `/verses` where the book is a path resource (**404** `unknown_book`). Same code, two
+  statuses, by design. `BookFilterError` (bible-api) carries the 400; Slice 4's
+  `UnknownBookError` still carries the 404.
+- **Pagination is non-overlapping by construction:** `ORDER BY f.rank, b.canonical_order,
+  v.chapter, v.verse` — relevance first, with a total-order canonical tiebreak so
+  successive `limit`/`offset` pages never repeat a row. `total` is a separate `COUNT(*)`
+  (independent of limit/offset). Empty results = **200** with `total:0`, never 404.
+- **FTS5 quirks:** `snippet(verses_fts, 0, open, close, '…', tokens)` — markers/token-count
+  are SQL literals (trusted constants, not params), so they're string-interpolated into the
+  SQL while `q`/translation/book stay parameterized. `unicode61` (default) tokenizer
+  lowercases, so queries are case-insensitive and punctuation/brackets (`[is]`) are split
+  out but preserved in the stored text shown in snippets. Real-DB search of common phrases
+  is instant (sub-ms) on the 529k-verse index. `text:foo` (column syntax) is harmless —
+  one column.
+- **For Slice 6 (cross-references) future-you:** the envelope + `cached_json_response` +
+  resolver-based `?book=`/ref handling apply identically. Cross-refs will parse a single
+  `{ref}` via the Slice 3 parser (like `/verses`) and may hydrate target text via a
+  single `?translation=` (reuse `resolve_translation`). `min_votes`/`limit` are plain
+  validated query params (422 on bad values, as here).

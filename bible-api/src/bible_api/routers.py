@@ -11,14 +11,15 @@ import sqlite3
 from typing import Annotated, Literal
 
 from bible_core.parser import UnknownBookError, parse_reference
-from bible_core.queries import QueryResult, get_chapter, get_verses
+from bible_core.queries import QueryResult, get_chapter, get_verses, search_verses
 from bible_core.resolver import SqliteBookResolver
-from fastapi import APIRouter, Depends, Path, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import Response
 
 from .caching import cached_json_response
-from .dependencies import get_conn, resolve_translations
-from .errors import NoVersesFoundError
+from .dependencies import get_conn, resolve_translation, resolve_translations
+from .errors import BookFilterError, NoVersesFoundError
+from .schemas import SearchHit, SearchResponse
 from .shaping import shape_grouped, shape_parallel
 
 router = APIRouter(prefix="/v1")
@@ -65,3 +66,44 @@ def get_chapter_endpoint(
     if info is None:
         raise UnknownBookError(f"unrecognised book {book!r}")
     return _respond(get_chapter(conn, info.id, info.name, chapter, ids), format, request)
+
+
+@router.get("/search")
+def search_endpoint(
+    request: Request,
+    conn: Conn,
+    q: Annotated[str, Query(min_length=1)],
+    translation: str | None = None,
+    book: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    translation_id = resolve_translation(request, translation)
+
+    book_id: str | None = None
+    if book is not None and book.strip():
+        info = SqliteBookResolver(conn).resolve(book)
+        if info is None:
+            raise BookFilterError(f"unknown book filter {book!r}")
+        book_id = info.id
+
+    page = search_verses(conn, q, translation_id, book_id, limit, offset)
+    response = SearchResponse(
+        query=q,
+        translation=translation_id,
+        book=book_id,
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        hits=[
+            SearchHit(
+                book=hit.book_id,
+                chapter=hit.chapter,
+                verse=hit.verse,
+                reference=f"{hit.book_name} {hit.chapter}:{hit.verse}",
+                snippet=hit.snippet,
+            )
+            for hit in page.hits
+        ],
+    )
+    return cached_json_response(response, request)

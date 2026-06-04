@@ -43,3 +43,25 @@ class VerseResponseGrouped(BaseModel):
 
     reference: str
     translations: dict[str, list[GroupedVerse]]
+
+
+class SearchHit(BaseModel):
+    """One full-text search match with its highlighted snippet."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    snippet: str
+
+
+class SearchResponse(BaseModel):
+    """A page of search results: the echoed query state, total count, and hits."""
+
+    query: str
+    translation: str
+    book: str | None
+    limit: int
+    offset: int
+    total: int
+    hits: list[SearchHit]

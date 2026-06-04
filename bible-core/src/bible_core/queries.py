@@ -123,3 +123,82 @@ def _query_span(
         "ORDER BY chapter, verse, translation_id"
     )
     return [VerseRow(r[0], r[1], r[2], r[3], r[4]) for r in conn.execute(sql, params)]
+
+
+# --- full-text search (FTS5) ---------------------------------------------------------
+
+# Markers wrapped around matched terms in the snippet (semantic HTML; easy to transform).
+SEARCH_MARK_OPEN = "<mark>"
+SEARCH_MARK_CLOSE = "</mark>"
+SNIPPET_TOKENS = 32  # snippet window; short verses show in full, long ones are windowed
+
+
+class SearchQueryError(Exception):
+    """The FTS5 MATCH expression is malformed (mapped to HTTP 400 by the API)."""
+
+
+@dataclass(frozen=True)
+class SearchHit:
+    """One search match: its position, canonical book name, and highlighted snippet."""
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+    snippet: str
+
+
+@dataclass(frozen=True)
+class SearchPage:
+    """A page of hits plus the total match count (for pagination metadata)."""
+
+    hits: tuple[SearchHit, ...]
+    total: int
+
+
+def search_verses(
+    conn: sqlite3.Connection,
+    query: str,
+    translation_id: str,
+    book_id: str | None,
+    limit: int,
+    offset: int,
+) -> SearchPage:
+    """Full-text search one translation, optionally filtered to one book.
+
+    Relevance-ranked (FTS5 ``rank``) with a canonical tiebreak, so successive
+    ``limit``/``offset`` pages don't overlap. Returns the page plus the total match count
+    (a second query). Raises :class:`SearchQueryError` if the MATCH expression is invalid.
+    """
+    book_filter = " AND v.book_id = ?" if book_id is not None else ""
+    base_params: list[str] = [query, translation_id]
+    if book_id is not None:
+        base_params.append(book_id)
+
+    snippet_fn = (
+        f"snippet(verses_fts, 0, '{SEARCH_MARK_OPEN}', "
+        f"'{SEARCH_MARK_CLOSE}', '…', {SNIPPET_TOKENS})"
+    )
+    hits_sql = (
+        f"SELECT v.book_id, b.name, v.chapter, v.verse, {snippet_fn} "
+        "FROM verses_fts f "
+        "JOIN verses v ON v.id = f.rowid "
+        "JOIN books b ON b.id = v.book_id "
+        f"WHERE verses_fts MATCH ? AND v.translation_id = ?{book_filter} "
+        "ORDER BY f.rank, b.canonical_order, v.chapter, v.verse "
+        "LIMIT ? OFFSET ?"
+    )
+    count_sql = (
+        "SELECT COUNT(*) FROM verses_fts f "
+        "JOIN verses v ON v.id = f.rowid "
+        f"WHERE verses_fts MATCH ? AND v.translation_id = ?{book_filter}"
+    )
+
+    try:
+        hit_rows = conn.execute(hits_sql, [*base_params, limit, offset]).fetchall()
+        total = conn.execute(count_sql, base_params).fetchone()[0]
+    except sqlite3.OperationalError as exc:
+        raise SearchQueryError(str(exc)) from exc
+
+    hits = tuple(SearchHit(r[0], r[1], r[2], r[3], r[4]) for r in hit_rows)
+    return SearchPage(hits=hits, total=total)
