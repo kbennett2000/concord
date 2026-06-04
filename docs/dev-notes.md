@@ -412,3 +412,47 @@ in the README.
   Slice 9 warms it into a welcoming guide (the "what/why" narrative, a committed banner
   image, repo description + tags, an endpoint walkthrough). The OpenBible.info CC-BY
   attribution already in the README must stay. Nothing else to build — it's polish.
+
+### Slice 9 — Documentation & polish
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/11. The final slice.
+  Audience-aware `README.md` rewrite + new `docs/API.md` endpoint reference + committed
+  `docs/banner.svg`. **No code changes** (`git diff main -- bible-core bible-api/src` empty);
+  337 tests still green.
+- **Q1** `docs/API.md` = one file, TOC + anchors. **Q2** env-var table canonical in the
+  README, API.md links to it. **Q3** three-way decision tree (developer / curious / wants-an-app).
+  **Q4** "Building on Concord" = soap-journal(-mobile) + tutorial forward-signal + `/v1`
+  stability + in-process `bible-core` embedding.
+- **Repo metadata applied (confirmed via `gh repo view`):** description = "A self-hosted,
+  LAN-first, read-only Scripture API serving multiple public-domain Bible translations from
+  one canonical source."; topics = bible, bible-api, scripture, self-hosted, lan-first,
+  offline-first, fastapi, sqlite, fts5, public-domain, church-tech, homelab (12).
+- **Accuracy discipline:** every `curl`/JSON in the README and API.md was captured from a
+  live instance built with the 13 PD translations (not hand-written). Verse texts are real
+  KJV/WEB; params/fields/codes cross-checked against `routers.py`/`schemas.py`/`errors.py`.
+- **Consolidation done:** the user-facing nuggets earlier slices flagged "for the docs" are
+  now surfaced — FTS5 syntax, cross-ref clamping, `/random` no-store, the `/healthz` shape,
+  env-var defaults, error codes, the OpenBible.info attribution, the reference grammar +
+  jud/jdg. The dev-notes stay as the build's historical record.
+- **A late catch worth remembering:** PR #9 (Slice 8) was merged at its pre-verification tip,
+  so the two image fixes I made *while building the container* (`.dockerignore`,
+  `.venv/bin/python` loader) didn't reach `main` — `main`'s image was briefly both broken and
+  non-distributable. Landed via a follow-up (PR #10) before this slice. Lesson: fixes pushed
+  to a branch *after* its PR merges are orphaned; open a fresh PR.
+
+#### Retrospective — nine slices, v1 shipped
+- **What worked:** the slice discipline (one reviewable PR each, dev-notes captured as we
+  went) and the hard `bible-core`/`bible-api` boundary. The web-free core paid off repeatedly
+  — pure, fast unit tests and a free in-process embedding path. Establishing the patterns
+  early (error envelope, `cached_json_response`, resolver, parser) made Slices 5–7 nearly
+  mechanical. Discovering each input contract from the *real* files instead of assuming caught
+  quirks (JPS Masoretic verse splits, 655 cross-chapter clamps, votes ≤ 0) before they became
+  bugs. Reproducible byte-identical `bible.db` made the Docker bake trivial.
+- **Deferred to v2:** semantic search via embeddings (highest-leverage next step),
+  Catholic/deuterocanonical data + Vulgate versification mapping, multi-translation search,
+  biblical geography, and a CI pipeline running the gate on PRs.
+- **What I'd do differently:** wire CI from Slice 0 (the gate ran only locally throughout),
+  and **build the Docker image earlier** — green pytest/pyright/`compose config` hid two
+  image-level bugs until an actual build in Slice 8. Verify the artifact, not just the tests.
+- **v1 is shipped.** Concord's first milestone: a complete, feature-frozen, deployable,
+  documented, offline-first Scripture API — exactly the read surface designed in SPEC §6, no
+  more and no less.
