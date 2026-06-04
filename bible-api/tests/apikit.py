@@ -66,5 +66,23 @@ def build_corpus(path: Path) -> None:
         rows,
     )
     conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild')")
+
+    # Deterministic cross-references for the endpoint tests:
+    #  - John 3:16 → 4 targets (votes 50/40/30/5) incl. a same-chapter range (JHN 4:2-4)
+    #  - John 4:1  → JHN 3:16, which WEB omits (exercises include_text null)
+    # (from_book, from_ch, from_v, to_book, to_ch, to_vstart, to_vend, votes)
+    cross_refs = [
+        ("JHN", 3, 16, "GEN", 1, 1, None, 50),
+        ("JHN", 3, 16, "1JN", 1, 1, None, 40),
+        ("JHN", 3, 16, "JHN", 4, 2, 4, 30),  # same-chapter range target
+        ("JHN", 3, 16, "JHN", 4, 1, None, 5),  # low votes (min_votes filter)
+        ("JHN", 4, 1, "JHN", 3, 16, None, 20),  # target WEB omits
+    ]
+    conn.executemany(
+        "INSERT INTO cross_references "
+        "(from_book_id, from_chapter, from_verse, to_book_id, to_chapter, "
+        "to_verse_start, to_verse_end, votes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        cross_refs,
+    )
     conn.commit()
     conn.close()
