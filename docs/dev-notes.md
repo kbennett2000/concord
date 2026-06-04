@@ -185,3 +185,52 @@ in the README.
   13 PD), so Slice 4 will need **synthetic fixtures** to exercise that path. Slice 4 maps
   each `Span` → one SQL `WHERE`: chapter-mode (`chapter BETWEEN …`) when verses are None,
   else a linear `(chapter, verse)` range; a verse list is N point-spans.
+
+### Slice 4 — Core read endpoints
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/5. The combined slice:
+  query functions + `/v1/verses/{ref}` + `/v1/chapters/{book}/{chapter}` (parallel +
+  grouped) + the shared shaper + error envelope + ETag/caching, and `/healthz` wired to
+  real counts. 246 default + 2 integration tests green. Smoke-tested against the real
+  17-translation `bible.db` (529,146 verses).
+- **Q1 query result → flat `VerseRow` rows** in a `QueryResult` (feeds both shapers). **Q2
+  DB → per-request read-only conn** (`connect_readonly`, `file:…?mode=ro`); startup opens
+  one conn, verifies schema, caches `{translations, default_translation, counts}` on
+  `app.state`, closes it. **Q3 translations case-insensitive** (upper at boundary). **Q4
+  ETag = body-hashed sha256** (quoted, 32 hex), 304 on If-None-Match. **Q5 unknown
+  translation → 404** (SPEC §7 404 family: unknown_book/unknown_translation/
+  no_verses_found; unparseable grammar → 400). **Q6 default KJV**, validated at startup,
+  **fail fast** if not loaded. **Q7 `/chapters` echo = `"<name> <chapter>"`** (`John 3`).
+- **`UnknownBookError(ParseError)` added to `bible-core/parser.py`** so the HTTP layer can
+  split unknown-book (404) from unparseable grammar (400). Subclass ⇒ Slice 3 tests
+  (`except ParseError`) unaffected. Starlette dispatches to the most specific handler in
+  the exception MRO, so registering both handlers works regardless of order.
+- **Span→SQL:** chapter-mode `chapter BETWEEN`, same-chapter `verse BETWEEN`, cross-chapter
+  a linear `(chapter,verse)` predicate. Ranges never materialized (`John 1:1-99999999`
+  stays one cheap query — tested).
+- **Synthetic missing-verse fixture pattern (reusable by Slices 5/6):** build a small DB
+  with `create_schema` + `seed_books` + direct verse inserts where one translation omits a
+  verse (`apikit.build_corpus`: WEB omits John 3:16). Parallel → `"WEB": null`; grouped →
+  WEB's list omits it; only-WEB request for that verse → 404. The production corpus has
+  Matt 17:21 everywhere, so this is the only way to exercise the null path.
+- **ETag = body hash, not input hash:** correct by construction (different bytes ⇒
+  different ETag) and immune to input-normalization subtleties. Costs one query before the
+  304, which is negligible for an immutable LAN read API; chosen over input-keying which
+  would have to capture translation order, default resolution, and format exactly.
+- **Underspecified SPEC points decided:** grouped includes every requested translation as
+  a key (empty list if none); parallel `translations` + `text` keys are the requested set
+  in requested order (deduped); a verse present in *no* requested translation just doesn't
+  appear (404 only when the whole reference is empty).
+- **Strict-typing / framework snags:** FastAPI `Depends`/`Path` in parameter defaults trip
+  ruff **B008** → use `Annotated[T, Depends(...)]` / `Annotated[int, Path(ge=1)]`. TestClient
+  JSON (`.json()`) is untyped in this stack → API test files carry a narrow
+  `# pyright: reportUnknownMemberType/VariableType/ArgumentType=false`; typed JSON helpers
+  need explicit `dict[str, Any]` (bare `dict` trips `reportMissingTypeArgument`).
+- **DB-required-at-startup ripple:** the app now refuses to boot without `bible.db`, so the
+  dev Dockerfile bakes it (`COPY data/` + `RUN … loader`) to keep `docker compose up`
+  working. `create_app(db_path=…)` lets tests point at a temp DB. The Slice 0 healthz test
+  was rewritten (zeros → real counts). **Docker unverified locally (no Docker on this
+  box).**
+- **For Slice 5 (search) future-you:** the shaper/error-envelope/ETag/Cache-Control
+  patterns are reusable; search responses follow the same envelope + caching conventions.
+  The per-request `get_conn` dependency and `resolve_translations` (note: search uses a
+  single `?translation=`, not the CSV set) are the wiring to copy.
