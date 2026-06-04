@@ -67,6 +67,14 @@ def build_corpus(path: Path) -> None:
     )
     conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild')")
 
+    # Compute chapter_count for populated books, mirroring the loader, so /books returns
+    # real values (books without verses keep the seeded NULL).
+    conn.execute(
+        "UPDATE books SET chapter_count = ("
+        "  SELECT COUNT(DISTINCT v.chapter) FROM verses v WHERE v.book_id = books.id"
+        ") WHERE id IN (SELECT DISTINCT book_id FROM verses)"
+    )
+
     # Deterministic cross-references for the endpoint tests:
     #  - John 3:16 → 4 targets (votes 50/40/30/5) incl. a same-chapter range (JHN 4:2-4)
     #  - John 4:1  → JHN 3:16, which WEB omits (exercises include_text null)
