@@ -32,9 +32,14 @@ All public domain. Fill in one row per committed translation.
 
 | Field | Value |
 |---|---|
-| Source | _(e.g. OpenBible.info cross-reference dataset)_ |
-| License | _(e.g. CC BY 4.0)_ |
-| Attribution | _(required credit line — must travel with the data and appear in the README)_ |
+| File | `cross_references.txt` (TSV: `From Verse` · `To Verse` · `Votes`; 344,799 rows) |
+| Source | OpenBible.info cross-reference dataset — <https://www.openbible.info/labs/cross-references/> |
+| License | Creative Commons Attribution (CC BY) |
+| Attribution | **Cross-reference data courtesy of [OpenBible.info](https://www.openbible.info/labs/cross-references/), licensed under a Creative Commons Attribution (CC BY) license.** |
+
+This dataset is redistributable under CC BY, so it is committed to the repo with the
+attribution above. The file's header line carries `#www.openbible.info CC-BY <date>`. The
+attribution line **must appear in the README** (Slice 9).
 
 If the cross-reference dataset's license does not permit redistribution, it must move to
 `data/private/` (gitignored) and be loaded locally only.
