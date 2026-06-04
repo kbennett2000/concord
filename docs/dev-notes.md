@@ -359,3 +359,38 @@ in the README.
   `/chapters`, `/search`, `/cross-references`, `/random`, `/books`, `/translations`,
   `/healthz`) — walk them in a sensible order. The **OpenBible.info CC-BY attribution line**
   (Slice 6 / `data/SOURCES.md`) **must appear in the README**.
+
+### Slice 8 — Docker & deploy
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/9. Deployment hardening,
+  no feature changes. `bible-core` untouched. 337 default + 5 integration tests green.
+  **Docker build + offline `/docs` verified by Kris on a Docker host** (I have no Docker
+  on this machine).
+- **Q1 one multi-stage Dockerfile** (replaced the dev single-stage). **Q2 runtime
+  `python:3.12-slim`** (same base both stages so the venv interpreter symlinks resolve).
+  **Q3 vendor + commit** the docs assets. **Q4 single hardened compose.** **Q5 512M
+  memory rail** (tunable), no CPU limit. **Q6 healthcheck** 30s/3s/3/10s.
+- **The offline `/docs` fix (load-bearing):** FastAPI 0.136.3 defaults reach jsdelivr
+  (swagger bundle+css), `fastapi.tiangolo.com` (favicon), and — easy to miss —
+  `fonts.googleapis.com` (ReDoc, `with_google_fonts=True`). Fix: `FastAPI(docs_url=None,
+  redoc_url=None)`, mount vendored assets at `/static`, and module-level `/docs` +
+  `/docs/oauth2-redirect` + `/redoc` routes via `get_swagger_ui_html`/`get_redoc_html`
+  with local URLs and **`with_google_fonts=False`**. A default-suite test
+  (`test_docs_offline.py`) asserts no CDN URLs + assets served — always-on guard against a
+  FastAPI upgrade flipping the defaults back.
+- **Pinned vendored versions (upgrades are deliberate):** swagger-ui-dist **5.32.6**
+  (Apache-2.0), redoc **2.5.3** (MIT) — in `bible-api/src/bible_api/static/` (+ a
+  `static/README.md`). They ship in the `bible_api` wheel (verified `uv build`), so
+  `/docs` works offline under Docker *and* local `uv run`.
+- **Runtime self-containment:** builder uses `uv sync --no-editable` so package code +
+  static assets land in `.venv`; runtime copies only `.venv` + the baked `bible.db` (no
+  source, data, loader, or build tools). `HEALTHCHECK` uses stdlib `urllib` (slim has no
+  curl) and is healthy only when `translation_count > 0`. `bible.db` is baked, not mounted
+  (reproducible per Slice 2).
+- **Image size:** _TBD — fill in from Kris's `docker images concord:latest` after build._
+- **Over-the-wire verification notes:** _TBD — record anything from Kris's Docker-host run
+  (build success, healthy transition, `--network none` /docs render, surprises)._
+- **For Slice 9 (Documentation) future-you:** Concord is now **feature-complete and
+  deployable**. The functional operator README this slice produced is the *skeleton* —
+  Slice 9 warms it into a welcoming guide (the "what/why" narrative, a committed banner
+  image, repo description + tags, an endpoint walkthrough). The OpenBible.info CC-BY
+  attribution already in the README must stay. Nothing else to build — it's polish.
