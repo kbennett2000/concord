@@ -21,10 +21,13 @@ token the same way before lookup. Normalization is:
 
 1. Lowercase.
 2. Strip punctuation (periods, apostrophes).
-3. Remove internal whitespace (`1 sam` → `1sam`, `song of songs` → `songofsongs`).
-4. **Leading ordinal → digit**, applied before lookup so the table only stores digit
-   forms: `i`/`first` → `1`, `ii`/`second` → `2`, `iii`/`third` → `3`
-   (e.g. `I Samuel` → `1samuel`, `Second Kings` → `2kings`, `III John` → `3john`).
+3. Tokenize on whitespace.
+4. **Leading ordinal → digit**: if the first token is an ordinal word, replace it with
+   its digit — `i`/`first` → `1`, `ii`/`second` → `2`, `iii`/`third` → `3`. This is a
+   leading-token step, applied before the tokens are joined, so `I Samuel` → `1samuel`
+   while `Isaiah` stays `isaiah` (a bare leading `i` *inside* a word is never an ordinal).
+5. Join the tokens, removing the internal whitespace (`1 sam` → `1sam`,
+   `song of songs` → `songofsongs`).
 
 Because of (4), the alias lists below carry only the digit-prefixed forms for numbered
 books. Each book's own USFM code (lowercased) and its full name (normalized) are

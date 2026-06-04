@@ -89,3 +89,38 @@ in the README.
 - **FTS5 check brought forward:** `create_schema` creating `verses_fts` is the SPEC §8
   "FTS5 compiled in" check; a missing build raises an unmistakable `RuntimeError`.
   Confirmed available locally.
+
+### Slice 2 — Loader
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/3. Reproducible,
+  idempotent JSON→SQLite loader (library + CLI). Pure `bible-core`; `bible-api`
+  unchanged; `cross_references` still empty. 123 tests + 1 integration green.
+- **Input contract as implemented (reference for future slices + soap-journal).**
+  All 17 files share one shape. top: `code`, `name`, `language`, `copyright`, `books`(66).
+  book: `abbreviation`, `name`, `order_index`, `chapters`. chapter: `number`, `verses`,
+  `headings`, `footnotes`. verse: `number`, `text`, `is_red_letter`. Map → `translations`
+  (`code`→`id`, `copyright`→`attribution`, `direction`="ltr", `versification`="standard")
+  and `verses` (resolved `book_id`, `chapter`, `verse`, trimmed `text`). Ignored:
+  `headings`, `footnotes`, `is_red_letter`. Books resolve via `normalize(abbreviation)`
+  → `book_aliases`, asserted equal to `order_index`→`canonical_order`.
+- **Q1 input contract** — above. **Q2 `bible.db`** → repo-root default, CLI `--output`;
+  library takes an explicit path (tests use `tmp_path`). **Q3 CLI** → single
+  `python -m bible_core.loader` build command + `make build-db`. **Q4 load pragmas**
+  (loader connection only) `journal_mode=MEMORY`/`synchronous=OFF`/`temp_store=MEMORY`,
+  one transaction; per-connection so output bytes unaffected. **Q5 text** → trim only;
+  Unicode/brackets/spacing sacred.
+- **`db.connect()` delivered** (the Slice 1 carry-over) + `apply_load_pragmas()`.
+- **JSON quirks / data facts:** 529,146 verses, **zero** data-quality issues; **zero**
+  cross-translation chapter-count disagreements (agreement check passes cleanly). **JPS**
+  carries Hebrew/Masoretic *verse* splitting (higher verse count) but identical chapter
+  counts — tagged `"standard"` for v1, cross-scheme mapping still deferred (SPEC §3).
+  **Matt 17:21 present in all 13 PD** (so Slice 4's missing-verse `null` path won't fire
+  on it from this corpus). `code` (e.g. ESV), not filename, is the translation id.
+- **Idempotency holds out of the box:** two builds → identical sha256; no `VACUUM`/fixed
+  page_size needed. **Timing:** 17 local files (incl. private) ≈ 5s; 13 PD ≈ 3.8s.
+- **Pyright strict gotcha:** narrowing a `json.loads` `Any` via `isinstance(x, dict/list)`
+  yields `dict[Unknown]`/`list[Unknown]`, which trips `reportUnknownVariableType` even
+  under an `Any` return. Fixed with a `cast("dict[str, Any]", …)` / `cast("list[Any]", …)`
+  in the two extraction helpers. Added `extraPaths` to `[tool.pyright]` so tests resolve
+  the sibling `loaderkit` helper (matches pytest prepend import mode).
+- **Bundled `docs(spec)` normalize step-order fix** — rewrote the contract to match the
+  implemented algorithm; updated the vendored copy in lockstep to keep the drift guard green.
