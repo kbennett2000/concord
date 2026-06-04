@@ -56,3 +56,6 @@ include = [
     "bible-api/src",
     "bible-api/tests",
 ]
+# Let tests import sibling test-helper modules (e.g. bible-core/tests/loaderkit.py),
+# matching pytest's prepend import mode at runtime.
+extraPaths = ["bible-core/tests", "bible-api/tests"]
