@@ -11,6 +11,8 @@ import os
 
 DEFAULT_PORT = 8000
 DEFAULT_CORS_ORIGINS = "*"
+DEFAULT_DB_PATH = "bible.db"
+DEFAULT_TRANSLATION = "KJV"
 
 
 def port() -> int:
@@ -32,3 +34,17 @@ def cors_origins() -> list[str]:
     if raw == "*":
         return ["*"]
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+def db_path() -> str:
+    """Path to the built ``bible.db``. ``BIBLE_DB_PATH`` (default ``bible.db``)."""
+    return os.environ.get("BIBLE_DB_PATH", DEFAULT_DB_PATH)
+
+
+def default_translation() -> str:
+    """Translation used when ``?translations=`` is omitted.
+
+    ``CONCORD_DEFAULT_TRANSLATION`` (default ``KJV``), upper-cased to match stored ids.
+    Verified to be loaded at startup; the app refuses to start otherwise.
+    """
+    return os.environ.get("CONCORD_DEFAULT_TRANSLATION", DEFAULT_TRANSLATION).strip().upper()
