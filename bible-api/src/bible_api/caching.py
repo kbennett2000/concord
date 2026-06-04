@@ -33,3 +33,15 @@ def cached_json_response(model: BaseModel, request: Request) -> Response:
         return Response(status_code=304, headers=headers)
 
     return Response(content=body, media_type="application/json", headers=headers)
+
+
+def no_store_json_response(model: BaseModel) -> Response:
+    """Serialize ``model`` to JSON with ``Cache-Control: no-store`` and **no** ETag.
+
+    For /random, whose whole point is a fresh result each call — the immutable-ETag
+    pattern would let clients keep replaying one "random" verse, so it must not apply.
+    """
+    body = model.model_dump_json(by_alias=True).encode("utf-8")
+    return Response(
+        content=body, media_type="application/json", headers={"Cache-Control": "no-store"}
+    )

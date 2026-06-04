@@ -14,8 +14,11 @@ from bible_core.parser import UnknownBookError, parse_reference
 from bible_core.queries import (
     CrossRefRow,
     QueryResult,
+    get_books,
     get_chapter,
     get_cross_references,
+    get_random_verse,
+    get_translations,
     get_verse_text,
     get_verses,
     reference_exists,
@@ -25,16 +28,22 @@ from bible_core.resolver import SqliteBookResolver
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import Response
 
-from .caching import cached_json_response
+from .caching import cached_json_response, no_store_json_response
 from .dependencies import get_conn, resolve_translation, resolve_translations
-from .errors import BookFilterError, NoVersesFoundError
+from .errors import BookFilterError, NoMatchError, NoVersesFoundError
 from .schemas import (
+    Book,
+    BooksResponse,
     CrossRefEntry,
     CrossRefResponse,
     CrossRefSource,
     CrossRefTarget,
+    RandomResponse,
+    RandomVerse,
     SearchHit,
     SearchResponse,
+    Translation,
+    TranslationsResponse,
 )
 from .shaping import shape_grouped, shape_parallel
 
@@ -186,3 +195,72 @@ def cross_references_endpoint(
         cross_references=entries,
     )
     return cached_json_response(response, request)
+
+
+@router.get("/books")
+def books_endpoint(request: Request, conn: Conn) -> Response:
+    books = [
+        Book(
+            id=b.id,
+            name=b.name,
+            testament=b.testament,
+            chapter_count=b.chapter_count,
+            canonical_order=b.canonical_order,
+        )
+        for b in get_books(conn)
+    ]
+    return cached_json_response(BooksResponse(books=books), request)
+
+
+@router.get("/translations")
+def translations_endpoint(request: Request, conn: Conn) -> Response:
+    translations = [
+        Translation(
+            id=t.id,
+            name=t.name,
+            language=t.language,
+            versification=t.versification,
+            attribution=t.attribution,
+        )
+        for t in get_translations(conn)
+    ]
+    return cached_json_response(TranslationsResponse(translations=translations), request)
+
+
+@router.get("/random")
+def random_endpoint(
+    request: Request,
+    conn: Conn,
+    translation: str | None = None,
+    book: str | None = None,
+    testament: Annotated[str | None, Query(pattern="(?i)^(ot|nt)$")] = None,
+) -> Response:
+    translation_id = resolve_translation(request, translation)
+
+    book_id: str | None = None
+    if book is not None and book.strip():
+        info = SqliteBookResolver(conn).resolve(book)
+        if info is None:
+            raise BookFilterError(f"unknown book filter {book!r}")
+        book_id = info.id
+
+    testament_id = testament.upper() if testament else None
+
+    chosen = get_random_verse(conn, translation_id, book_id, testament_id)
+    if chosen is None:
+        raise NoMatchError("no verse matches the requested filters")
+
+    response = RandomResponse(
+        translation=translation_id,
+        book=book_id,
+        testament=testament_id,
+        verse=RandomVerse(
+            book=chosen.book_id,
+            chapter=chosen.chapter,
+            verse=chosen.verse,
+            reference=f"{chosen.book_name} {chosen.chapter}:{chosen.verse}",
+            text=chosen.text,
+        ),
+    )
+    # /random must NOT use the immutable-ETag cache — a fresh verse every call.
+    return no_store_json_response(response)

@@ -43,6 +43,10 @@ class BookFilterError(Exception):
     """
 
 
+class NoMatchError(Exception):
+    """A /random request's filters (book/testament) matched no verse."""
+
+
 def _envelope(code: str, message: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "detail": detail or {}}}
 
@@ -80,6 +84,10 @@ async def _handle_book_filter(_request: Request, exc: Exception) -> Response:
     return _error_response(400, "unknown_book", str(exc))
 
 
+async def _handle_no_match(_request: Request, exc: Exception) -> Response:
+    return _error_response(404, "no_match", str(exc))
+
+
 async def _handle_search_query(_request: Request, exc: Exception) -> Response:
     return _error_response(
         400, "invalid_search_query", "Malformed search query.", {"fts5_error": str(exc)}
@@ -98,5 +106,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UnknownTranslationError, _handle_unknown_translation)
     app.add_exception_handler(NoVersesFoundError, _handle_no_verses)
     app.add_exception_handler(BookFilterError, _handle_book_filter)
+    app.add_exception_handler(NoMatchError, _handle_no_match)
     app.add_exception_handler(SearchQueryError, _handle_search_query)
     app.add_exception_handler(RequestValidationError, _handle_validation)

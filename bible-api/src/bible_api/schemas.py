@@ -109,3 +109,54 @@ class CrossRefResponse(BaseModel):
     offset: int
     total: int
     cross_references: list[CrossRefEntry]
+
+
+class Book(BaseModel):
+    """A book's catalog metadata."""
+
+    id: str
+    name: str
+    testament: str
+    chapter_count: int | None
+    canonical_order: int
+
+
+class BooksResponse(BaseModel):
+    """The full 66-book catalog, in canonical order."""
+
+    books: list[Book]
+
+
+class Translation(BaseModel):
+    """A loaded translation's catalog metadata."""
+
+    id: str
+    name: str
+    language: str
+    versification: str
+    attribution: str | None
+
+
+class TranslationsResponse(BaseModel):
+    """All loaded translations."""
+
+    translations: list[Translation]
+
+
+class RandomVerse(BaseModel):
+    """The verse returned by /random."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    text: str
+
+
+class RandomResponse(BaseModel):
+    """A randomly selected verse, echoing the filters that were applied."""
+
+    translation: str
+    book: str | None
+    testament: str | None
+    verse: RandomVerse
