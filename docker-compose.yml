@@ -1,0 +1,12 @@
+# Concord — DEV compose. Builds and runs bible-api.
+# Change the published port with one edit: set BIBLE_API_PORT (env or .env).
+# Hardened compose + healthcheck land in Slice 8.
+
+services:
+  api:
+    build: .
+    ports:
+      # host:container — container is fixed at 8000; the host port is configurable.
+      - "${BIBLE_API_PORT:-8000}:8000"
+    environment:
+      CONCORD_CORS_ORIGINS: "${CONCORD_CORS_ORIGINS:-*}"
