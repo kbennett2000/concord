@@ -317,3 +317,45 @@ in the README.
   (optionally constrained by `?book=`/`?testament=`) in `?translation=` — and is the one
   response that is **not** cacheable, so it should send `Cache-Control: no-store` rather
   than the immutable ETag treatment (the only place to deviate from the caching pattern).
+
+### Slice 7 — Utility endpoints
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/8. `/v1/books`,
+  `/v1/translations`, `/v1/random`, and `book_count` on `/healthz`. **The v1 read surface
+  is now complete.** Pure reuse of Slice 4–6 (3 routes, 3 query fns, 1 caching helper, 1
+  error code). 330 default + 5 integration tests green. `bible-core` change confined to
+  `queries.py`; no web imports.
+- **Q1 shape → wrapped** (`{"books":[...]}`, `{"translations":[...]}`). **Q2 `/translations`
+  ordered by `id`** (`/books` by `canonical_order`). **Q3 `/random`** =
+  `{translation, book, testament, verse{book,chapter,verse,reference,text}}` (echoes the
+  resolved/normalized filters). **Q4 contradicting/empty filters → 404 `no_match`** (new
+  `NoMatchError` handler; filters individually valid, intersection empty → not-found, not
+  422). **Q5 `/healthz` adds `book_count`**. **Q6** translations case-insensitive via
+  `resolve_translation`; `?testament=` via `Query(pattern="(?i)^(ot|nt)$")` → free 422 on
+  bad values (verified); `?book=` via `SqliteBookResolver`.
+- **The one design point — `/random` is NOT cached:** new `no_store_json_response`
+  (`Cache-Control: no-store`, **no ETag**, no If-None-Match). Reusing the immutable-ETag
+  pattern would let clients replay one "random" verse. Tested as a negative-presence
+  assertion + non-determinism (≥2 distinct over 20 calls). Every other endpoint keeps the
+  immutable cache unchanged.
+- **Final `/healthz` shape (for Slice 9 user docs):**
+  `{"status":"ok","translation_count":N,"verse_count":N,"cross_ref_count":N,"book_count":66}`.
+- **`/random` query:** `… FROM verses v JOIN books b ON b.id=v.book_id WHERE
+  v.translation_id=? [AND v.book_id=?] [AND b.testament=?] ORDER BY RANDOM() LIMIT 1` —
+  `ORDER BY RANDOM()` scans the matching rows (~31k for one translation), sub-10ms; fine
+  at this scale (no need for a rowid-sampling scheme).
+- **Test-infra note:** `apikit.build_corpus` now computes `chapter_count` for populated
+  books (`COUNT(DISTINCT chapter)`, mirroring the loader) so `/books` returns real values
+  in unit tests; the real `chapter_count == MAX(chapter)` cross-check (GEN=50, PSA=150)
+  runs in the integration test.
+- **For Slice 8 (Docker & deploy) future-you:** the v1 read surface is **complete** — Slice
+  8 is hardening, not new features. Preserve and verify, don't reinvent: multi-stage build
+  baking `bible.db` at build time (the loader already does this; the dev Dockerfile from
+  Slice 4 bakes it — make it a clean multi-stage prod image), a compose **healthcheck**
+  hitting `/healthz`, **self-hosted Swagger/ReDoc assets** so `/docs` + `/redoc` work fully
+  offline (FastAPI's default CDN-hosted assets render blank air-gapped — SPEC §3 gotcha),
+  and the already-working env config (`BIBLE_API_PORT`, `CONCORD_CORS_ORIGINS`,
+  `BIBLE_DB_PATH`, `CONCORD_DEFAULT_TRANSLATION`).
+- **For Slice 9 (Documentation) future-you:** every endpoint now exists (`/verses`,
+  `/chapters`, `/search`, `/cross-references`, `/random`, `/books`, `/translations`,
+  `/healthz`) — walk them in a sensible order. The **OpenBible.info CC-BY attribution line**
+  (Slice 6 / `data/SOURCES.md`) **must appear in the README**.
