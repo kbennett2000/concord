@@ -124,3 +124,64 @@ in the README.
   the sibling `loaderkit` helper (matches pytest prepend import mode).
 - **Bundled `docs(spec)` normalize step-order fix** — rewrote the contract to match the
   implemented algorithm; updated the vendored copy in lockstep to keep the drift guard green.
+
+### Slice 3 — Reference parser
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/4. Pure reference parser
+  + `BookResolver`. Pure `bible-core`; `bible-api` unchanged; no new deps. 202 default +
+  2 integration tests green.
+- **Edge-case policy table (preserved for Slice 4's HTTP error mapping):**
+
+  | Input | Outcome |
+  |---|---|
+  | `John 3:16` | verse `Span(3,16,3,16)` |
+  | `John 3:16-18` | verse range `Span(3,16,3,18)` |
+  | `John 3:16,18,20` | verse list → point-spans (sorted, deduped) |
+  | `John 3` | whole chapter `Span(3,None,3,None)` |
+  | `John 3-4` | chapter range `Span(3,None,4,None)` |
+  | `John 3:16-4:2` | cross-chapter range `Span(3,16,4,2)` |
+  | `3.16` ≡ `3:16` | `.` normalized to `:` |
+  | `1 John`/`1John`/`1 Jn`/`I John`/`First John` | all → `1JN`, echo `1 John …` |
+  | `Jn.` / `1 Jn.` | trailing punctuation stripped, accepted |
+  | en/em dash `–`/`—` | normalized to ASCII `-` |
+  | `John 1:99999999` | parses (no bounds check) |
+  | `3-3`, `3:16-3:16`, `3:16-3:18` | collapse to simpler form |
+  | `3:18-16`, `5-3` | reject "descending … range" |
+  | `3-4:2` | reject "ambiguous range" |
+  | `3:16-4` | reject "descending verse range" (16→4) |
+  | `3:16,4:2` | reject "bare verse numbers" (no cross-chapter lists) |
+  | `3:16-18,20` | reject "expected a verse number" (no ranges-in-lists) |
+  | `John` | reject "needs at least a chapter" |
+  | `3:16` | reject "no book name found" |
+  | `` / whitespace | reject "empty reference" |
+  | `0:5`, `3:0` | reject "must be positive" |
+  | `-3:16` | reject "missing a bound" |
+  | `3:16,,18` | reject "empty list element" |
+  | `3:16--18` | reject "malformed range" |
+  | `3:16!` | reject "unexpected character" |
+  | `Hezekiah 1:1` | reject "unrecognised book" |
+  | `John 3:16; Rom 8:1` | reject "multiple references" (semicolons out of scope) |
+  | `3:16-18.20` | accept as cross-chapter range (`.`≡`:`) |
+
+- **Q1 result shape → normalized `Span` list** (`start_chapter, start_verse|None,
+  end_chapter, end_verse|None`); one type covers all forms, query-friendly for Slice 4
+  (verse-None ⇒ chapter selection). **Ranges are never expanded** — so `John 1:1-99999999`
+  is one cheap Span. **Q2 echo → no compression** (Kris's call): lists stay lists, ranges
+  stay ranges (sorted/deduped, same-bound collapses); this is what makes the round-trip
+  exact without unsafe range expansion. **Q3 → `resolve(token)->BookInfo|None`** (id +
+  name in one call; resolver owns `normalize()`). **Q4** policy table above. **Q5 →
+  hand-rolled.**
+- **Split trick:** the chapter/verse spec is always numeric+separators (no letters), so
+  the book name ends at the **last ASCII letter**; everything after (minus leading
+  `.`/`'`/space) is the spec. This sidesteps the "is `1` an ordinal or a chapter?" problem
+  for `1 John 3:16` and handles `Song of Solomon 1:1` and `Jn. 3:16` uniformly.
+- **A couple of cases resolve by consistent rule, not special-case:** `John 3:16-4`
+  rejects as a *descending* range (16→4), and `John 3:16-18.20` parses as a cross-chapter
+  range because `.`≡`:`. Both intentional; both tested.
+- **Pyright clean, no friction** (sqlite rows are `Any`, no `cast` needed in the resolver).
+  Reused Slice 2's `extraPaths` so tests import the sibling `parserkit` resolver fixture.
+- **For Slice 4 future-you:** the parser does **not** bounds-check chapters/verses — the
+  HTTP layer owns the SPEC §5 "404 when nothing exists" outcome. The Matt 17:21
+  missing-verse `null` path isn't in the production corpus (Slice 2 found it present in all
+  13 PD), so Slice 4 will need **synthetic fixtures** to exercise that path. Slice 4 maps
+  each `Span` → one SQL `WHERE`: chapter-mode (`chapter BETWEEN …`) when verses are None,
+  else a linear `(chapter, verse)` range; a verse list is N point-spans.
