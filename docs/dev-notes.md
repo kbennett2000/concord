@@ -18,5 +18,8 @@ in the README.
 
 ## Log
 
+### Bootstrap
+- 2026-06-04 — Re-bootstrapped repo, pushed to `main` (the one allowed direct-to-`main` commit; slices use branches from here on). Initial commit `0f3046b`. Public repo: https://github.com/kbennett2000/concord. Re-bootstrapped after attribution issue; identity now set globally via GitHub noreply email.
+
 ### Slice 0 — Skeleton & boot
 _(append notes here)_
