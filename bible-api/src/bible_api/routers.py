@@ -11,7 +11,16 @@ import sqlite3
 from typing import Annotated, Literal
 
 from bible_core.parser import UnknownBookError, parse_reference
-from bible_core.queries import QueryResult, get_chapter, get_verses, search_verses
+from bible_core.queries import (
+    CrossRefRow,
+    QueryResult,
+    get_chapter,
+    get_cross_references,
+    get_verse_text,
+    get_verses,
+    reference_exists,
+    search_verses,
+)
 from bible_core.resolver import SqliteBookResolver
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import Response
@@ -19,7 +28,14 @@ from fastapi.responses import Response
 from .caching import cached_json_response
 from .dependencies import get_conn, resolve_translation, resolve_translations
 from .errors import BookFilterError, NoVersesFoundError
-from .schemas import SearchHit, SearchResponse
+from .schemas import (
+    CrossRefEntry,
+    CrossRefResponse,
+    CrossRefSource,
+    CrossRefTarget,
+    SearchHit,
+    SearchResponse,
+)
 from .shaping import shape_grouped, shape_parallel
 
 router = APIRouter(prefix="/v1")
@@ -105,5 +121,68 @@ def search_endpoint(
             )
             for hit in page.hits
         ],
+    )
+    return cached_json_response(response, request)
+
+
+def _target_reference(row: CrossRefRow) -> str:
+    if row.to_verse_end is not None and row.to_verse_end != row.to_verse_start:
+        return f"{row.to_book_name} {row.to_chapter}:{row.to_verse_start}-{row.to_verse_end}"
+    return f"{row.to_book_name} {row.to_chapter}:{row.to_verse_start}"
+
+
+@router.get("/cross-references/{ref}")
+def cross_references_endpoint(
+    ref: str,
+    request: Request,
+    conn: Conn,
+    include_text: bool = False,
+    translation: str | None = None,
+    min_votes: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    reference = parse_reference(ref, SqliteBookResolver(conn))
+    if not reference_exists(conn, reference):
+        raise NoVersesFoundError(f"{reference.echo!r} is out of range in every loaded translation")
+
+    translation_id = resolve_translation(request, translation) if include_text else None
+    page = get_cross_references(conn, reference, min_votes, limit, offset)
+
+    entries: list[CrossRefEntry] = []
+    for row in page.rows:
+        text = (
+            get_verse_text(conn, translation_id, row.to_book_id, row.to_chapter, row.to_verse_start)
+            if translation_id is not None
+            else None
+        )
+        entries.append(
+            CrossRefEntry(
+                from_=CrossRefSource(
+                    book=row.from_book_id,
+                    chapter=row.from_chapter,
+                    verse=row.from_verse,
+                    reference=f"{row.from_book_name} {row.from_chapter}:{row.from_verse}",
+                ),
+                to=CrossRefTarget(
+                    book=row.to_book_id,
+                    chapter=row.to_chapter,
+                    verse_start=row.to_verse_start,
+                    verse_end=row.to_verse_end,
+                    reference=_target_reference(row),
+                ),
+                votes=row.votes,
+                text=text,
+            )
+        )
+
+    response = CrossRefResponse(
+        reference=reference.echo,
+        translation=translation_id,
+        min_votes=min_votes,
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        cross_references=entries,
     )
     return cached_json_response(response, request)

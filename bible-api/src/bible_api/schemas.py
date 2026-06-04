@@ -8,7 +8,7 @@ on ``?format=``.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ParallelVerse(BaseModel):
@@ -65,3 +65,47 @@ class SearchResponse(BaseModel):
     offset: int
     total: int
     hits: list[SearchHit]
+
+
+class CrossRefSource(BaseModel):
+    """The source verse of a cross-reference (the verse the user asked about)."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+
+
+class CrossRefTarget(BaseModel):
+    """The target verse (or same-chapter range) a cross-reference points to."""
+
+    book: str
+    chapter: int
+    verse_start: int
+    verse_end: int | None
+    reference: str
+
+
+class CrossRefEntry(BaseModel):
+    """One cross-reference. ``text`` is the target's text (null when not requested or
+    missing in the chosen translation)."""
+
+    from_: CrossRefSource = Field(serialization_alias="from")
+    to: CrossRefTarget
+    votes: int | None
+    text: str | None
+
+
+class CrossRefResponse(BaseModel):
+    """A page of cross-references for a reference.
+
+    ``translation`` is null unless ``include_text=true`` (in which case a null entry
+    ``text`` means the target verse is missing in that translation)."""
+
+    reference: str
+    translation: str | None
+    min_votes: int
+    limit: int
+    offset: int
+    total: int
+    cross_references: list[CrossRefEntry]

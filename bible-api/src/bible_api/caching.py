@@ -22,7 +22,9 @@ def _etag(body: bytes) -> str:
 
 def cached_json_response(model: BaseModel, request: Request) -> Response:
     """Serialize ``model`` to JSON with a strong ETag; return 304 on an If-None-Match hit."""
-    body = model.model_dump_json().encode("utf-8")
+    # by_alias serializes fields with a serialization alias (e.g. cross-refs' "from");
+    # a no-op for every model without aliases.
+    body = model.model_dump_json(by_alias=True).encode("utf-8")
     etag = _etag(body)
     headers = {"ETag": etag, "Cache-Control": CACHE_CONTROL}
 
