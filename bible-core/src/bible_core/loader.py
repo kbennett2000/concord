@@ -70,7 +70,14 @@ class BuildStats:
     translations: int
     verses: int
     books_with_verses: int
+    cross_references: int
+    cross_refs_clamped: int
     elapsed_seconds: float
+
+
+# (from_book_id, from_chapter, from_verse, to_book_id, to_chapter,
+#  to_verse_start, to_verse_end, votes)
+CrossRefDbRow = tuple[str, int, int, str, int, int, int | None, int]
 
 
 # --- JSON extraction helpers (validate + narrow types, with actionable errors) -------
@@ -163,6 +170,108 @@ def parse_translation_file(
     )
 
 
+# --- cross-references (openbible.info TSV: From Verse / To Verse / Votes) -------------
+
+
+def _parse_xref_verse(token: str, alias_to_book: dict[str, str], ctx: str) -> tuple[str, int, int]:
+    """Parse a ``Book.Chapter.Verse`` token (e.g. ``1Cor.8.6``) to ``(book_id, ch, v)``."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise LoaderError(f"{ctx}: malformed verse {token!r} (expected Book.Chapter.Verse).")
+    book_token, chapter_text, verse_text = parts
+    book_id = alias_to_book.get(normalize(book_token))
+    if book_id is None:
+        raise LoaderError(
+            f"{ctx}: book {book_token!r} in {token!r} does not resolve to a known book."
+        )
+    try:
+        chapter, verse = int(chapter_text), int(verse_text)
+    except ValueError as exc:
+        raise LoaderError(f"{ctx}: non-integer chapter/verse in {token!r}.") from exc
+    if chapter < 1 or verse < 1:
+        raise LoaderError(f"{ctx}: chapter and verse must be positive in {token!r}.")
+    return book_id, chapter, verse
+
+
+def parse_cross_reference_file(
+    path: Path, alias_to_book: dict[str, str]
+) -> tuple[list[CrossRefDbRow], int]:
+    """Parse one cross-reference TSV file. Returns (rows, clamped_count).
+
+    The first line is the header. ``From`` is a single verse; ``To`` is a single verse or
+    a ``A-B`` range. A target range that crosses a chapter or book boundary cannot be held
+    by the schema's single ``to_chapter``, so it is **clamped to its start verse**
+    (``to_verse_end = NULL``) and counted.
+    """
+    rows: list[CrossRefDbRow] = []
+    clamped = 0
+    with path.open(encoding="utf-8") as handle:
+        for line_no, raw_line in enumerate(handle, start=1):
+            if line_no == 1:  # header row
+                continue
+            line = raw_line.rstrip("\n")
+            if not line:
+                continue
+            ctx = f"{path.name}:{line_no}"
+            fields = line.split("\t")
+            if len(fields) != 3:
+                raise LoaderError(f"{ctx}: expected 3 tab-separated columns, found {len(fields)}.")
+            from_field, to_field, votes_field = fields
+            from_book, from_ch, from_v = _parse_xref_verse(from_field, alias_to_book, ctx)
+
+            to_end: int | None
+            if "-" in to_field:
+                left, right = to_field.split("-", 1)
+                to_book, to_ch, to_start = _parse_xref_verse(left, alias_to_book, ctx)
+                end_book, end_ch, end_v = _parse_xref_verse(right, alias_to_book, ctx)
+                if end_book == to_book and end_ch == to_ch:
+                    to_end = end_v
+                else:  # cross-chapter / cross-book range → clamp to the start verse
+                    to_end = None
+                    clamped += 1
+            else:
+                to_book, to_ch, to_start = _parse_xref_verse(to_field, alias_to_book, ctx)
+                to_end = None
+
+            try:
+                votes = int(votes_field)
+            except ValueError as exc:
+                raise LoaderError(f"{ctx}: non-integer votes {votes_field!r}.") from exc
+
+            rows.append((from_book, from_ch, from_v, to_book, to_ch, to_start, to_end, votes))
+    return rows, clamped
+
+
+def discover_cross_ref_files(cross_ref_dirs: list[Path]) -> list[Path]:
+    """Return every regular (non-hidden) file under the given dirs, deterministically."""
+    files: list[Path] = []
+    for directory in cross_ref_dirs:
+        if directory.is_dir():
+            files.extend(
+                p for p in directory.glob("*") if p.is_file() and not p.name.startswith(".")
+            )
+    return sorted(files, key=lambda p: str(p))
+
+
+def load_cross_references(
+    conn: sqlite3.Connection, cross_ref_dirs: list[Path], alias_to_book: dict[str, str]
+) -> tuple[int, int]:
+    """Insert cross-references from the given dirs. Returns (inserted, clamped)."""
+    rows: list[CrossRefDbRow] = []
+    clamped_total = 0
+    for path in discover_cross_ref_files(cross_ref_dirs):
+        file_rows, clamped = parse_cross_reference_file(path, alias_to_book)
+        rows.extend(file_rows)
+        clamped_total += clamped
+    conn.executemany(
+        "INSERT INTO cross_references "
+        "(from_book_id, from_chapter, from_verse, to_book_id, to_chapter, "
+        "to_verse_start, to_verse_end, votes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    return len(rows), clamped_total
+
+
 # --- build ---------------------------------------------------------------------------
 
 
@@ -207,9 +316,13 @@ def _update_chapter_counts(conn: sqlite3.Connection) -> None:
     conn.executemany("UPDATE books SET chapter_count = ? WHERE id = ?", updates)
 
 
-def build_database(db_path: Path, data_dirs: list[Path]) -> BuildStats:
-    """Build a complete ``bible.db`` from the JSON under ``data_dirs``. Idempotent."""
+def build_database(
+    db_path: Path, data_dirs: list[Path], cross_ref_dirs: list[Path] | None = None
+) -> BuildStats:
+    """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations) and
+    ``cross_ref_dirs`` (cross-reference TSV). Idempotent — same inputs, byte-identical db."""
     start = time.perf_counter()
+    cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
 
     conn = connect(db_path)
@@ -257,6 +370,9 @@ def build_database(db_path: Path, data_dirs: list[Path]) -> BuildStats:
                 verse_total += len(t.verses)
             conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild')")
             _update_chapter_counts(conn)
+            cross_ref_count, cross_refs_clamped = load_cross_references(
+                conn, cross_ref_dirs, alias_to_book
+            )
 
         books_with_verses = conn.execute(
             "SELECT COUNT(*) FROM books WHERE chapter_count IS NOT NULL"
@@ -268,6 +384,8 @@ def build_database(db_path: Path, data_dirs: list[Path]) -> BuildStats:
         translations=len(translations),
         verses=verse_total,
         books_with_verses=books_with_verses,
+        cross_references=cross_ref_count,
+        cross_refs_clamped=cross_refs_clamped,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -300,17 +418,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="suppress the summary line")
     args = parser.parse_args(argv)
 
-    data_dirs = _default_data_dirs(Path(args.data_dir))
+    base = Path(args.data_dir)
+    data_dirs = _default_data_dirs(base)
+    cross_ref_dirs = [base / "cross-references"]
     try:
-        stats = build_database(Path(args.output), data_dirs)
+        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs)
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
     if not args.quiet:
+        clamped = (
+            f" ({stats.cross_refs_clamped} multi-chapter targets clamped to start)"
+            if stats.cross_refs_clamped
+            else ""
+        )
         print(
             f"Built {args.output}: {stats.translations} translations, "
-            f"{stats.verses} verses, {stats.books_with_verses} books "
+            f"{stats.verses} verses, {stats.books_with_verses} books, "
+            f"{stats.cross_references} cross-references{clamped} "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0
