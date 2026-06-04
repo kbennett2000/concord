@@ -309,3 +309,89 @@ def get_cross_references(
         0
     ]
     return CrossRefPage(rows=rows, total=total)
+
+
+# --- metadata + random ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BookMeta:
+    """A book's catalog metadata."""
+
+    id: str
+    name: str
+    testament: str
+    canonical_order: int
+    chapter_count: int | None
+
+
+@dataclass(frozen=True)
+class TranslationMeta:
+    """A loaded translation's catalog metadata."""
+
+    id: str
+    name: str
+    language: str
+    versification: str
+    attribution: str | None
+
+
+@dataclass(frozen=True)
+class RandomVerse:
+    """One verse picked at random."""
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+    text: str
+
+
+def get_books(conn: sqlite3.Connection) -> list[BookMeta]:
+    """All books in canonical order."""
+    return [
+        BookMeta(r[0], r[1], r[2], r[3], r[4])
+        for r in conn.execute(
+            "SELECT id, name, testament, canonical_order, chapter_count "
+            "FROM books ORDER BY canonical_order"
+        )
+    ]
+
+
+def get_translations(conn: sqlite3.Connection) -> list[TranslationMeta]:
+    """All loaded translations, ordered by id."""
+    return [
+        TranslationMeta(r[0], r[1], r[2], r[3], r[4])
+        for r in conn.execute(
+            "SELECT id, name, language, versification, attribution FROM translations ORDER BY id"
+        )
+    ]
+
+
+def get_random_verse(
+    conn: sqlite3.Connection,
+    translation_id: str,
+    book_id: str | None,
+    testament: str | None,
+) -> RandomVerse | None:
+    """One random verse in ``translation_id``, optionally filtered by book and/or testament.
+
+    Returns ``None`` when the filters match no verse (e.g. ``book`` and ``testament``
+    contradict). ``ORDER BY RANDOM()`` scans the matching rows — fine at this scale.
+    """
+    clauses = ["v.translation_id = ?"]
+    params: list[str] = [translation_id]
+    if book_id is not None:
+        clauses.append("v.book_id = ?")
+        params.append(book_id)
+    if testament is not None:
+        clauses.append("b.testament = ?")
+        params.append(testament)
+
+    row = conn.execute(
+        "SELECT v.book_id, b.name, v.chapter, v.verse, v.text "
+        "FROM verses v JOIN books b ON b.id = v.book_id "
+        f"WHERE {' AND '.join(clauses)} ORDER BY RANDOM() LIMIT 1",
+        params,
+    ).fetchone()
+    return None if row is None else RandomVerse(row[0], row[1], row[2], row[3], row[4])
