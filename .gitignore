@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Built database (Docker build artifact — never committed)
+bible.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Non-distributable data (local-only translations)
+data/private/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (shared .claude/ settings stay tracked)
+.claude/settings.local.json
