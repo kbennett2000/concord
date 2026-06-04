@@ -45,3 +45,21 @@ def resolve_translations(request: Request, translations: str | None) -> tuple[st
             resolved.append(tid)
 
     return tuple(resolved) if resolved else (default,)
+
+
+def resolve_translation(request: Request, translation: str | None) -> str:
+    """Resolve a single ``?translation=`` to a validated, upper-cased id.
+
+    Search is single-translation (SPEC §3). Omitted/blank → the configured default.
+    Anything not loaded (including a comma'd value like ``kjv,web``) → 404.
+    """
+    loaded: set[str] = request.app.state.translations
+    default: str = request.app.state.default_translation
+
+    if translation is None or not translation.strip():
+        return default
+
+    tid = translation.strip().upper()
+    if tid not in loaded:
+        raise UnknownTranslationError(tid, list(loaded))
+    return tid
