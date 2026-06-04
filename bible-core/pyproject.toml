@@ -14,4 +14,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
+# Includes everything under the package, so the reference-data markdown
+# (src/bible_core/data/*.md, read at runtime via importlib.resources) ships in the
+# wheel — verified with `uv build`. Editable installs read it from the source tree.
 packages = ["src/bible_core"]
