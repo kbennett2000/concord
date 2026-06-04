@@ -10,3 +10,5 @@ services:
       - "${BIBLE_API_PORT:-8000}:8000"
     environment:
       CONCORD_CORS_ORIGINS: "${CONCORD_CORS_ORIGINS:-*}"
+      # bible.db is baked into the image at /app/bible.db (the default path).
+      CONCORD_DEFAULT_TRANSLATION: "${CONCORD_DEFAULT_TRANSLATION:-KJV}"
