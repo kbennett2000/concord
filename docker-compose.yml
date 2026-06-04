@@ -1,14 +1,37 @@
-# Concord — DEV compose. Builds and runs bible-api.
-# Change the published port with one edit: set BIBLE_API_PORT (env or .env).
-# Hardened compose + healthcheck land in Slice 8.
+# Concord — production compose. Builds the runtime image and serves bible-api.
+# Every operator knob is env-configurable via ${VAR:-default} (host env or .env). The
+# database is baked into the image at /app/bible.db; nothing is mounted.
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: concord:latest
     ports:
-      # host:container — container is fixed at 8000; the host port is configurable.
+      # host:container — the container always listens on 8000; the host port is configurable.
       - "${BIBLE_API_PORT:-8000}:8000"
     environment:
       CONCORD_CORS_ORIGINS: "${CONCORD_CORS_ORIGINS:-*}"
-      # bible.db is baked into the image at /app/bible.db (the default path).
       CONCORD_DEFAULT_TRANSLATION: "${CONCORD_DEFAULT_TRANSLATION:-KJV}"
+      BIBLE_DB_PATH: "${BIBLE_DB_PATH:-/app/bible.db}"
+    restart: unless-stopped
+    healthcheck:
+      # Mirrors the Dockerfile HEALTHCHECK; uses the venv python (no curl in the slim image).
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import sys,json,urllib.request;
+          d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2));
+          sys.exit(0 if d.get('translation_count', 0) > 0 else 1)
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # A generous rail for a LAN service (SQLite + ~530k verses). Tune for your host.
+          memory: 512M

@@ -22,6 +22,13 @@ import structlog
 from bible_core.db import connect_readonly
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import (
+    get_redoc_html,
+    get_swagger_ui_html,
+    get_swagger_ui_oauth2_redirect_html,
+)
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import __version__, config
@@ -29,6 +36,10 @@ from .errors import register_error_handlers
 from .routers import router as v1_router
 
 router = APIRouter()
+
+# Vendored Swagger UI / ReDoc assets, served from /static so /docs works fully offline.
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+_SWAGGER_FAVICON = "/static/swagger-ui/favicon-32x32.png"
 
 
 def _configure_logging() -> None:
@@ -111,6 +122,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
 
 
+@router.get("/docs", include_in_schema=False)
+def swagger_ui_html(request: Request) -> HTMLResponse:
+    app = request.app
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} — Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="/static/swagger-ui/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger-ui/swagger-ui.css",
+        swagger_favicon_url=_SWAGGER_FAVICON,
+    )
+
+
+@router.get("/docs/oauth2-redirect", include_in_schema=False)
+def swagger_ui_redirect() -> HTMLResponse:
+    return get_swagger_ui_oauth2_redirect_html()
+
+
+@router.get("/redoc", include_in_schema=False)
+def redoc_html(request: Request) -> HTMLResponse:
+    app = request.app
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} — ReDoc",
+        redoc_js_url="/static/redoc/redoc.standalone.js",
+        redoc_favicon_url=_SWAGGER_FAVICON,
+        with_google_fonts=False,  # ReDoc otherwise pulls Montserrat/Roboto from a CDN
+    )
+
+
 @router.get("/healthz")
 def healthz(request: Request) -> HealthResponse:
     state = request.app.state
@@ -130,8 +171,13 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         version=__version__,
         summary="A self-hosted, LAN-first, read-only Scripture API.",
         lifespan=lifespan,
+        # Disable the CDN-backed defaults; we serve Swagger UI / ReDoc from vendored assets
+        # (see the /docs and /redoc routes) so interactive docs work fully offline.
+        docs_url=None,
+        redoc_url=None,
     )
     app.state.db_path = str(db_path) if db_path is not None else config.db_path()
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins(),
