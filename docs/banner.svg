@@ -1,0 +1,19 @@
+<svg width="1280" height="320" viewBox="0 0 1280 320" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Concord — Scripture, served locally.</title>
+  <desc>Banner for Concord. The wordmark "Concord" set in a warm indigo serif on a warm cream background, with a small stylized green leaf ornament centered above and the italic tagline "Scripture, served locally." centered below.</desc>
+
+  <rect width="1280" height="320" fill="#F5ECDB"/>
+
+  <g transform="translate(640, 65)">
+    <path d="M 0 -18 Q -15 0 0 22 Q 15 0 0 -18 Z" fill="#4A6B3C"/>
+    <line x1="0" y1="22" x2="0" y2="30" stroke="#4A6B3C" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <text x="640" y="220" text-anchor="middle"
+        font-family="'EB Garamond', 'Cormorant Garamond', Garamond, Georgia, 'Times New Roman', serif"
+        font-size="130" fill="#2A4A6B" font-weight="500" letter-spacing="3">Concord</text>
+
+  <text x="640" y="266" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="22" fill="#4F6A85" font-style="italic" letter-spacing="3">Scripture, served locally.</text>
+</svg>
