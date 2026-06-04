@@ -26,6 +26,12 @@ COPY bible-core/ bible-core/
 COPY bible-api/ bible-api/
 RUN uv sync --frozen --no-dev
 
+# Bake bible.db from the committed public-domain translations. The API refuses to start
+# without it (Slice 4). data/private is gitignored, so only the 13 PD load here.
+# (Prod multi-stage build + offline Swagger assets remain Slice 8.)
+COPY data/ data/
+RUN uv run python -m bible_core.loader
+
 # Container always listens on 8000; the host port is the configurable knob (compose).
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "bible_api.app:app", "--host", "0.0.0.0", "--port", "8000"]
