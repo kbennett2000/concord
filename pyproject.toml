@@ -1,0 +1,58 @@
+# Concord — workspace root.
+#
+# This is a *virtual* uv workspace root: it builds nothing itself (package = false),
+# it only coordinates the two real packages and holds the shared dev tooling + config.
+# See docs/SPEC.md §2 for why the two packages are physically separate.
+
+[tool.uv.workspace]
+members = ["bible-core", "bible-api"]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+# Dev/test tooling lives at the root so a single shared .venv serves both packages and
+# every check is one command from the repo root. httpx is required by Starlette's
+# TestClient — it is a *root dev* dependency only, never a bible-core dependency.
+dev = [
+    "ruff>=0.10",
+    "pyright>=1.1.390",
+    "pytest>=8",
+    "httpx>=0.27",
+]
+
+# --- Ruff: lint + format -----------------------------------------------------
+# Configured once here. Per-package pyproject.toml files deliberately carry no
+# [tool.ruff] section, so Ruff's ancestor-walk discovery applies this config to both.
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# A defensible default, not the everything-set: pycodestyle (E/W), pyflakes (F),
+# import sorting (I), pyupgrade (UP), bugbear (B), and simplify (SIM).
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+# --- Pytest ------------------------------------------------------------------
+# One `pytest` run from the repo root covers both packages' test suites.
+[tool.pytest.ini_options]
+testpaths = ["bible-core/tests", "bible-api/tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: slow/integration tests, excluded from the default run (CLAUDE.md)",
+]
+
+# --- Pyright (strict) --------------------------------------------------------
+# Strict typing across both packages. The explicit include list points at both src
+# trees and both test trees; the shared workspace .venv supplies resolved imports.
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+include = [
+    "bible-core/src",
+    "bible-core/tests",
+    "bible-api/src",
+    "bible-api/tests",
+]
