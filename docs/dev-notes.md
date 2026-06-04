@@ -456,3 +456,38 @@ in the README.
 - **v1 is shipped.** Concord's first milestone: a complete, feature-frozen, deployable,
   documented, offline-first Scripture API — exactly the read surface designed in SPEC §6, no
   more and no less.
+
+## v2 — Semantic search
+
+### Slice S0 — Semantic package & inference core
+- **Date:** 2026-06-04. **PR:** #12 (`slice/v2-s0-semantic-core`).
+- **What landed:** new `bible-semantic` package (third in the workspace), web-free and
+  ML-bearing (`onnxruntime` + `tokenizers` + `numpy`); `model.py`'s `embed_query` (one text →
+  768-dim L2-normalized float32 vector) with no PyTorch; `scripts/fetch_model.py`; fast +
+  integration tests; CLAUDE.md + `docs/v2/SPEC.md` updates.
+- **Model & acquisition:** `ibm-granite/granite-embedding-311m-multilingual-r2` (Apache 2.0,
+  ModernBERT, 768-dim). Fetched by `scripts/fetch_model.py` via **stdlib `urllib`** (zero new
+  deps), **pinned to revision `44399559930365213510b1ee2eb15ded83374f0e`** (HF `main` as of
+  2026-05-18) so fetches are byte-identical and don't drift. Files: `onnx/model.onnx` (fp32,
+  ~1.25 GB), `tokenizer.json`, `config.json` → gitignored `models/`. **fp32 for S0**
+  correctness; int8 (`onnx/model_quint8_avx2.onnx`) is the S3 runtime target.
+- **Exact inference recipe used:** tokenize (`tokenizers`, special tokens on, no instruction
+  prefix) → ONNX infer (`input_ids` + `attention_mask` only; ModernBERT has no
+  `token_type_ids`; output 0 = last_hidden_state `(1, seq, 768)`) → **CLS pool** (token 0,
+  `out[0,0,:]`) → **L2-normalize**. **No dense projection.**
+- **The S0 finding:** the spec (and the slice prompt) assumed **mean-pooling**; the model card
+  says verbatim *"granite-embedding-311m-multilingual-r2 uses CLS Pooling"*. Code uses CLS;
+  `docs/v2/SPEC.md` §5/§8 corrected to match. Catching the wrong recipe before embedding the
+  corpus is the entire reason S0 exists.
+- **Observed sanity cosines** (unit-norm vectors, so cosine = dot product): related pair
+  ("Do not be anxious about anything" / "Cast your cares on him") = **0.839**; each vs the
+  unrelated "a genealogy of the kings of Israel" = **0.750** / **0.760**. Related > both →
+  recipe correct, not merely well-shaped. (Absolute cosines run high for this model; the
+  *ordering* is the signal.)
+- **ONNX / tokenizers gotchas:** `onnxruntime` ships no type stubs → a file-scoped pyright
+  pragma in `model.py` only (rest stays strict). Test files need unique basenames under
+  pytest's prepend-import mode (no `__init__.py` in `tests/`) → `test_semantic_*` prefix to
+  avoid colliding with `bible-core`'s `test_import.py`. `tokenizers` pulls `huggingface-hub`
+  transitively — not a direct dep, not in the forbidden ML set. Integration tests are marked
+  `@pytest.mark.integration` and skip cleanly when `models/` is absent, keeping the default
+  suite fast/offline (343 passed, 7 deselected).
