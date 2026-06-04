@@ -46,11 +46,12 @@ def _configure_logging() -> None:
 
 
 class HealthResponse(BaseModel):
-    """Liveness payload with real loaded-translation and verse counts."""
+    """Liveness payload with real loaded-translation, verse, and cross-ref counts."""
 
     status: Literal["ok"] = "ok"
     translation_count: int = 0
     verse_count: int = 0
+    cross_ref_count: int = 0
 
 
 def _verify_and_cache(app: FastAPI) -> None:
@@ -66,6 +67,7 @@ def _verify_and_cache(app: FastAPI) -> None:
         try:
             translation_count = conn.execute("SELECT COUNT(*) FROM translations").fetchone()[0]
             verse_count = conn.execute("SELECT COUNT(*) FROM verses").fetchone()[0]
+            cross_ref_count = conn.execute("SELECT COUNT(*) FROM cross_references").fetchone()[0]
             loaded = {row[0] for row in conn.execute("SELECT id FROM translations")}
         except sqlite3.OperationalError as exc:
             raise RuntimeError(
@@ -86,6 +88,7 @@ def _verify_and_cache(app: FastAPI) -> None:
     app.state.default_translation = default
     app.state.translation_count = translation_count
     app.state.verse_count = verse_count
+    app.state.cross_ref_count = cross_ref_count
 
 
 @asynccontextmanager
@@ -111,6 +114,7 @@ def healthz(request: Request) -> HealthResponse:
     return HealthResponse(
         translation_count=state.translation_count,
         verse_count=state.verse_count,
+        cross_ref_count=state.cross_ref_count,
     )
 
 
