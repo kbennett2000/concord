@@ -1,0 +1,36 @@
+# Keep the build context minimal and — critically — keep non-distributable data and
+# host build artifacts OUT of the image.
+
+# Non-distributable translations (gitignored, local-only). MUST NOT be baked into a
+# shippable image: only the committed public-domain translations belong there.
+data/private/
+
+# Host virtualenv (wrong arch + huge) — the builder runs its own `uv sync`.
+.venv/
+
+# VCS, caches, and local state
+.git/
+.gitignore
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.mypy_cache/
+.claude/
+
+# Build artifacts
+bible.db
+*.db-journal
+*.db-wal
+*.db-shm
+build/
+dist/
+*.egg-info/
+
+# Local env + editor
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/

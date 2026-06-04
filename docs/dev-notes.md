@@ -386,9 +386,27 @@ in the README.
   source, data, loader, or build tools). `HEALTHCHECK` uses stdlib `urllib` (slim has no
   curl) and is healthy only when `translation_count > 0`. `bible.db` is baked, not mounted
   (reproducible per Slice 2).
-- **Image size:** _TBD — fill in from Kris's `docker images concord:latest` after build._
-- **Over-the-wire verification notes:** _TBD — record anything from Kris's Docker-host run
-  (build success, healthy transition, `--network none` /docs render, surprises)._
+- **Image size:** **528 MB** (`python:3.12-slim` + venv + the ~180 MB baked `bible.db`
+  incl. 344,799 cross-refs). Loader runs in-image in ~6s; consistent across rebuilds.
+- **Over-the-wire verification (done — Docker installed via snap mid-session):** build ✓;
+  `docker compose up` → **healthy in ~8s**; `/healthz` shows 13/404889/344799/66; `/v1/random`
+  → a verse; `BIBLE_API_PORT` remap ✓. **Air-gap proof:** `docker run --network none`
+  (confirmed zero outbound network) still serves `/healthz` and renders `/docs` with **no CDN
+  refs** — `swagger-ui-bundle.js` + `redoc.standalone.js` both 200, healthcheck `healthy`.
+- **Two bugs the build/run caught (fixed in this slice):**
+  1. **No `.dockerignore` → `data/private/` leaked into the image** (`COPY data/` swept in
+     ESV/NET/NKJV/NLT; the baked db had 17 translations). Added `.dockerignore` excluding
+     `data/private/` (+ host `.venv`/VCS/caches); image now bakes exactly the 13 PD
+     translations. *Licensing-critical — only caught by building.*
+  2. **`uv run … loader` re-synced the env editable** (re-added dev deps, reinstalled the
+     workspace editable), undoing `--no-editable`; the source-less runtime then died with
+     `ModuleNotFoundError: bible_api`. Fixed by running the loader via `/app/.venv/bin/python`.
+  Both reinforce the lesson: a green pytest/pyright/`compose config` does **not** prove the
+  image runs — build + run it.
+- **snap-docker gotcha (operator):** snap's Docker leaves `/var/run/docker.sock` `root:root`
+  and doesn't honor the host `docker` group, so non-root `docker` fails even after
+  `usermod -aG docker`. Use `sudo docker …`, or (single-user box) `sudo chmod a+rw
+  /var/run/docker.sock` (resets on `snap restart docker`). Not a repo issue; noted for deploy.
 - **For Slice 9 (Documentation) future-you:** Concord is now **feature-complete and
   deployable**. The functional operator README this slice produced is the *skeleton* —
   Slice 9 warms it into a welcoming guide (the "what/why" narrative, a committed banner

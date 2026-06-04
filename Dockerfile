@@ -29,8 +29,10 @@ COPY bible-api/ bible-api/
 RUN uv sync --frozen --no-dev --no-editable
 
 # Bake bible.db from the committed translations + cross-references. Reproducible (Slice 2).
+# Use the venv python directly — `uv run` would re-sync the env (editable + dev deps),
+# undoing the --no-editable install and leaving the runtime unable to import the packages.
 COPY data/ data/
-RUN uv run python -m bible_core.loader --output /app/bible.db
+RUN /app/.venv/bin/python -m bible_core.loader --output /app/bible.db
 
 # --- runtime ----------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
