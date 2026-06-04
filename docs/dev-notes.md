@@ -405,7 +405,7 @@ in the README.
   image runs — build + run it.
 - **snap-docker gotcha (operator):** snap's Docker leaves `/var/run/docker.sock` `root:root`
   and doesn't honor the host `docker` group, so non-root `docker` fails even after
-  `usermod -aG docker`. Use `sudo docker …`, or (single-user box) `sudo chmod 666
+  `usermod -aG docker`. Use `sudo docker …`, or (single-user box) `sudo chmod a+rw
   /var/run/docker.sock` (resets on `snap restart docker`). Not a repo issue; noted for deploy.
 - **For Slice 9 (Documentation) future-you:** Concord is now **feature-complete and
   deployable**. The functional operator README this slice produced is the *skeleton* —
