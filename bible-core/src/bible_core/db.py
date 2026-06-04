@@ -33,3 +33,15 @@ def apply_load_pragmas(conn: sqlite3.Connection) -> None:
     """Enable bulk-load performance pragmas on ``conn`` (loader use only)."""
     for pragma in _LOAD_PRAGMAS:
         conn.execute(pragma)
+
+
+def connect_readonly(database: str | Path) -> sqlite3.Connection:
+    """Open a read-only connection to an existing database (URI ``mode=ro``).
+
+    Used by the API: the corpus is immutable, so reads never mutate. Fails if the file
+    does not exist, which is the desired fail-fast behavior. ``Row`` factory for
+    name-based access.
+    """
+    conn = sqlite3.connect(f"file:{Path(database)}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn

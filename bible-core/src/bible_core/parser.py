@@ -27,6 +27,15 @@ class ParseError(Exception):
     """Raised when a reference string is not valid per the SPEC §5 grammar."""
 
 
+class UnknownBookError(ParseError):
+    """The grammar is well-formed but the book token resolves to no known book.
+
+    A subclass of :class:`ParseError` (so existing ``except ParseError`` callers still
+    catch it) that lets the HTTP layer distinguish "unparseable" (400) from "unknown
+    book" (404) per SPEC §7.
+    """
+
+
 @dataclass(frozen=True)
 class Span:
     """A contiguous selection within one book.
@@ -66,7 +75,7 @@ def parse_reference(text: str, resolver: BookResolver) -> Reference:
     book_token, spec = _split_book_and_spec(raw.translate(_DASH_TABLE))
     info = resolver.resolve(book_token)
     if info is None:
-        raise ParseError(f"unrecognised book {book_token!r}")
+        raise UnknownBookError(f"unrecognised book {book_token!r}")
 
     spans = _parse_spec(spec, raw)
     return Reference(
