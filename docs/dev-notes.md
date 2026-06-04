@@ -274,3 +274,46 @@ in the README.
   `{ref}` via the Slice 3 parser (like `/verses`) and may hydrate target text via a
   single `?translation=` (reuse `resolve_translation`). `min_votes`/`limit` are plain
   validated query params (422 on bad values, as here).
+
+### Slice 6 — Cross-references
+- 2026-06-04 — PR: https://github.com/kbennett2000/concord/pull/7. Dataset load +
+  `GET /v1/cross-references/{ref}` + `cross_ref_count` in healthz. Pure reuse of Slice 4/5
+  (only new cross-ref handlers/route + a `by_alias=True` no-op on the shared caching
+  helper). 310 default + 4 integration tests green. Full build (translations + 344,799
+  cross-refs) byte-identical across runs (~6.4s).
+- **Implemented input contract** (reference for future readers / soap-journal): OpenBible.info
+  TSV `cross_references.txt`, **CC-BY**, 344,799 rows. Columns `From Verse` · `To Verse` ·
+  `Votes`; header line's 4th field is the attribution. Verse format `Book.Chapter.Verse`
+  (`1Cor.8.6`); book token = text before the first `.`, resolved via `normalize()` →
+  `book_aliases` (all 66 openbible abbreviations resolve). **From** always a single verse;
+  **To** single or `A-B` range (full ref both sides). Votes integer.
+- **Attribution (verbatim — for Slice 9 README):** *Cross-reference data courtesy of
+  OpenBible.info (https://www.openbible.info/labs/cross-references/), licensed under a
+  Creative Commons Attribution (CC BY) license.* Recorded in `data/SOURCES.md`; the 8.3 MB
+  file is committed (CC-BY redistributable; `data/cross-references/` not gitignored).
+- **Q1 contract** above. **Q2** queries in `bible_core.queries`. **Q3 response** — sketch,
+  but `translation`/`text` **always present** (null when `include_text=false`; under a
+  non-null `translation`, null `text` = target missing in that translation); `from` is a
+  Pydantic `serialization_alias` (Python keyword) → `cached_json_response` now serializes
+  `by_alias=True` (no-op for alias-free models). **Q4 pagination** = N total across the
+  range (votes desc + canonical tiebreak). **Q5 `min_votes` default 0** (ge=0). **Q6 404
+  bounds-check** via shared `_span_predicate` + `reference_exists` → `NoVersesFoundError`.
+  **Q7 `include_text`** hydrates the **target start verse** only.
+- **Dataset quirks:** **655 To-ranges (0.19%)** cross a chapter (637) or book (18) — the
+  schema's single `to_chapter` can't hold them, so they're **clamped to the start verse**
+  (`to_verse_end = NULL`), cross-ref preserved, loader logs the count. `to_verse_end`
+  convention: NULL for single-verse *and* clamped targets; the end verse only for genuine
+  same-book/same-chapter ranges. **3,512 rows have votes ≤ 0** (downvoted/disputed) —
+  stored but never surfaced (`min_votes` constrained ≥0). `1 John 4:9-10` (a range target,
+  votes 684) is the visible proof the range rendering + clamping logic both work.
+- **Refactor:** `_span_predicate(span, chapter_col, verse_col)` extracted from `_query_span`
+  and reused by cross-ref queries (`from_chapter`/`from_verse`) and `reference_exists`
+  (`chapter`/`verse`, no translation filter) — one definition of the
+  chapter/same-chapter/cross-chapter range logic.
+- **For Slice 7 (utility endpoints) future-you:** the patterns are fully locked in —
+  `/random`, `/books`, `/translations` should be small and almost mechanical. `/books`
+  and `/translations` are plain `SELECT … ORDER BY canonical_order` / metadata reads
+  shaped into Pydantic models + `cached_json_response`; `/random` picks a random verse
+  (optionally constrained by `?book=`/`?testament=`) in `?translation=` — and is the one
+  response that is **not** cacheable, so it should send `Cache-Control: no-store` rather
+  than the immutable ETag treatment (the only place to deviate from the caching pattern).
