@@ -24,7 +24,9 @@ install.
 - pytest — tests
 - Ruff — lint + format
 - Docker + docker-compose — deploy
-- Two packages: `bible-api` depends on `bible-core` via a local path dependency
+- ONNX Runtime + `tokenizers` + `numpy` — local embeddings (`bible-semantic` only; v2)
+- Three packages: `bible-core` (pure) ← `bible-semantic` (ML, v2) ← `bible-api` (web),
+  wired by local path dependencies
 
 ## Architecture
 
@@ -32,17 +34,30 @@ install.
   `loader` (directory-scanning JSON→SQLite ETL), `parser` (pure, HTTP-free reference
   parser), `resolver` (BookResolver), `queries` (get_verses, get_chapter, search,
   cross_refs), `models` (internal dataclasses, not Pydantic).
+- `bible-semantic/` (import `bible_semantic`) — **ML, web-free** (v2). Holds: `model`
+  (ONNX query-embedding: tokenize → infer → CLS-pool → L2-normalize), and in later slices
+  `store`/`search`/`build` for semantic search. Reads verse text through `bible-core`;
+  never modifies it. Carries `onnxruntime`/`tokenizers`/`numpy` but **no** web framework
+  and **no** `torch`/`transformers`/`sentence-transformers`/`optimum`.
 - `bible-api/` (import `bible_api`) — FastAPI app/routers, Pydantic `schemas`, response
-  `shaping` (parallel/grouped), `errors` (envelope + handlers).
+  `shaping` (parallel/grouped), `errors` (envelope + handlers). The only web layer; in v2
+  it also depends on `bible-semantic`.
+- `models/` — baked ONNX embedding weights (v2): a large build artifact, **gitignored**,
+  fetched at build/test, never committed (like `bible.db`).
 - `data/translations/` — committed public-domain JSON (loader input).
   `data/private/` — **gitignored**, non-distributable JSON, local only.
   `data/cross-references/` — cross-ref dataset. `data/SOURCES.md` — provenance.
 - `docs/` — `SPEC.md` (design), `canonical-books.md` (book seed), `dev-notes.md` (log).
 - `bible.db` is a build artifact, baked into the image at Docker build — **never committed**.
 
-> **Hard invariant: never import a web framework (FastAPI, Starlette, Uvicorn, …) into
-> `bible-core`.** The entire architecture depends on the core staying web-free so
-> `soap-journal` can later link it in-process.
+> **Hard invariants (the layering — keep it clean):**
+> - **Never import a web framework (FastAPI, Starlette, Uvicorn, …) into `bible-core` or
+>   `bible-semantic`.** Both are embeddable libraries, not services; this is what lets
+>   `soap-journal` later link them in-process without dragging in a web stack. The only
+>   web layer is `bible-api`.
+> - **`bible-core` stays pure and tiny — no web framework and no heavy ML** (stdlib
+>   `sqlite3` only), so anything can embed it cheaply. ML weight lives in `bible-semantic`.
+> - Layering: `bible-core` = pure/tiny · `bible-semantic` = ML/web-free · `bible-api` = web.
 
 ## Conventions
 
@@ -71,6 +86,11 @@ install.
   operator README (build / run / deploy).
 
 ## Out of scope for v1
+
+**v2 is now in progress: semantic search.** Meaning-based retrieval over Scripture is no
+longer deferred — it is the active milestone, designed in `docs/v2/SPEC.md` and built in
+the new `bible-semantic` package. The items below remain out of scope unless explicitly
+expanded.
 
 Do not build these without an explicit decision to expand scope:
 
@@ -102,8 +122,8 @@ clean / feature works), do the following without being asked:
    `test(core): cover cross-chapter range parsing`,
    `fix(loader): tolerate trailing whitespace in book aliases`,
    `docs(spec): clarify missing-verse semantics`).
-   Scopes: `core`, `api`, `loader`, `docs`, `data`, `infra`, `deps`. Omit scope only
-   for repo-wide changes (`chore:`).
+   Scopes: `core`, `semantic`, `api`, `loader`, `docs`, `data`, `infra`, `deps`. Omit
+   scope only for repo-wide changes (`chore:`).
 3. `git push` the slice branch
 
 Commit at logical checkpoints — a complete sub-step, a passing suite, a refactor —
