@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from bible_core.parser import ParseError, UnknownBookError
+from bible_core.queries import SearchQueryError
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -33,6 +34,13 @@ class UnknownTranslationError(Exception):
 
 class NoVersesFoundError(Exception):
     """A well-formed reference matched no verse in any requested translation."""
+
+
+class BookFilterError(Exception):
+    """A ``?book=`` *filter* value (a query param) did not resolve to a known book.
+
+    Maps to 400 — distinct from ``/verses`` where the book is a path resource (404).
+    """
 
 
 def _envelope(code: str, message: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -68,6 +76,16 @@ async def _handle_validation(_request: Request, exc: Exception) -> Response:
     return _error_response(422, "invalid_parameter", "Invalid request parameters.", detail)
 
 
+async def _handle_book_filter(_request: Request, exc: Exception) -> Response:
+    return _error_response(400, "unknown_book", str(exc))
+
+
+async def _handle_search_query(_request: Request, exc: Exception) -> Response:
+    return _error_response(
+        400, "invalid_search_query", "Malformed search query.", {"fts5_error": str(exc)}
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Map domain + validation exceptions to the envelope.
 
@@ -79,4 +97,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ParseError, _handle_parse_error)
     app.add_exception_handler(UnknownTranslationError, _handle_unknown_translation)
     app.add_exception_handler(NoVersesFoundError, _handle_no_verses)
+    app.add_exception_handler(BookFilterError, _handle_book_filter)
+    app.add_exception_handler(SearchQueryError, _handle_search_query)
     app.add_exception_handler(RequestValidationError, _handle_validation)
