@@ -840,3 +840,42 @@ in the README.
   existing table checks); the local repo-root `bible.db` artifact had to be rebuilt for the v2
   semantic real tests to pass. (c) Real settlement count is **843** (844 ancient minus the one
   excluded `not_a_place` that carried a settlement type).
+
+### Slice V3-S2 — Documentation & ship
+- **Date:** 2026-06-05. **PR:** #23 (`slice/v3-s2-docs`). **v3 is shipped.**
+- **What landed:** geography woven into the existing `README.md` (intro clause, a curious-reader
+  line in "What is this, really?", the developer decision-tree path, the endpoint tour Nine →
+  **Thirteen**, a new "Geography" subsection parallel to "Semantic search", the OpenBible CC-BY
+  4.0 attribution in the data + license sections, an honest upgrade/rebuild note in Deployment,
+  a Requirements line, and journeys/routes promoted to the named next frontier); the four
+  geography endpoints in `docs/API.md` (TOC, Errors table, the `/healthz` `place_count`, and a
+  status table making the honesty model visible). Docs only; the README's voice matched to the
+  surrounding v1/v2 prose. Every curl/JSON captured from a running instance (public `/healthz`
+  counts kept; place data is identical across the 13- and 17-translation builds).
+- **Doc choices:** geography sits with cross-references in `API.md` (reference-linked data); the
+  `/v1/places/{id}` entry documents the honesty model with a status table **and** an unknown
+  place (Nod) returning null coordinates, so the "never a fabricated pin" promise is visible in
+  the reference, not just the prose. Acts 17 → its six places (Athens, Berea, Thessalonica, …)
+  is the bi-directional showcase. No changelog/version convention exists (pkg versions `0.0.0`),
+  so this dev-notes marker is the ship record.
+
+#### Retrospective — v3, three slices
+- **The shape:** S0 baked the `places` + `place_verses` tables and the disciplined-subset geo
+  loader (1340 places); S1 added the four read-only endpoints over them, reusing v1's machinery
+  whole; S2 documented it and shipped. The calmest version of the three — no new package, no ML,
+  no runtime model, just data tables and endpoints riding the existing build.
+- **What data-grounding caught (the recurring lesson, again):** the spec's field labels didn't
+  survive contact with the real OpenBible data — top-level `name`/`type` are **null** (derive
+  from `friendly_id`/`types[]`), `lonlat` is **longitude,latitude** (a hemisphere-flip trap
+  closed by surfacing named `latitude`/`longitude` at the API), a sixth `recursive` special kind
+  exists, and scores run −87..1169 not 0–1000. The precedence refinement — `recursive` is a path
+  artifact that must **not** void a strong association, while the *semantic* specials
+  (unknown/nonspecific/multiple) suppress coordinates — was found by inspecting the dual-flagged
+  records, and it restored the spec's own Garden-of-Eden example (Eden → unknown). The two-axis
+  model (confidence = evidence strength; status = resolution kind, never collapsed) came from
+  review feedback and is what keeps a modestly-attested place honestly `identified`/`low` rather
+  than falsely `disputed`.
+- **The foundation laid:** stable external-safe place ids and real disambiguation (the several
+  Antiochs/Bethlehems are distinct), plus the bi-directional place↔verse link — exactly what a
+  future journeys/routes layer needs to reference rather than rebuild. The `bible-core` web-free
+  boundary held throughout (the place queries are pure SQL over the link table). **v3 is shipped.**
