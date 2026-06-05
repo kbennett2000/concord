@@ -1,11 +1,15 @@
-# Concord — production image (multi-stage).
+# Concord — production image (multi-stage), with semantic search (v2).
 #
-# Builder: install deps non-editably into a venv and bake bible.db from the committed
-# public-domain data. Runtime: a slim image carrying ONLY the venv + the baked database +
-# the vendored offline docs assets (which ship inside the installed bible_api package) —
-# no source, no data files, no loader, no build tools. A fresh container on a host with no
-# internet serves the whole API, including /docs (SPEC §3). Build-time internet is fine;
-# none leaks into runtime.
+# Builder: install deps non-editably into a venv, bake bible.db from the committed
+# public-domain data, fetch the int8 embedding model (pinned revision), and bake the int8
+# embeddings.db. Runtime: a slim image carrying ONLY the venv + the baked databases + the
+# baked int8 model + the vendored offline docs assets — no source, no loader, no build
+# tools. A fresh container on a host with no internet serves the whole API, including
+# /v1/semantic-search and /docs (SPEC §3-§8). Build-time internet is fine (the model is
+# fetched then baked); none leaks into runtime.
+#
+# int8 only: the 1.25 GB fp32 weights never enter the image (S3a). The model + embeddings.db
+# are baked, so the precision/model guard (S3a) catches a stale artifact at boot.
 
 # --- builder ----------------------------------------------------------------------------
 FROM python:3.12-slim AS builder
@@ -16,43 +20,66 @@ ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1
 WORKDIR /app
 
-# Resolve dependencies first (cached layer) from manifests + lockfile only.
+# The packages install --no-editable into the venv (site-packages), so bible_semantic's
+# repo-relative path defaults can't resolve — pin every artifact path explicitly, exactly
+# as v1 pins BIBLE_DB_PATH. fetch_model.py / build_embeddings.py honor these envs.
+ENV BIBLE_DB_PATH=/app/bible.db \
+    CONCORD_MODEL_PATH=/app/model \
+    CONCORD_EMBEDDINGS_PATH=/app/embeddings.db
+
+# Resolve dependencies first (cached layer) from manifests + lockfile only. Every workspace
+# member's pyproject is needed for `uv sync --frozen` to resolve the workspace.
 COPY pyproject.toml uv.lock ./
 COPY bible-core/pyproject.toml bible-core/
 COPY bible-api/pyproject.toml bible-api/
+COPY bible-semantic/pyproject.toml bible-semantic/
 RUN uv sync --frozen --no-dev --no-install-workspace
 
 # Sources, then install the workspace packages *non-editably* (code + vendored docs assets
-# are copied into .venv, so the runtime stage needs no source tree).
+# are copied into .venv, so the runtime stage needs no source tree). This installs
+# bible-semantic + onnxruntime/tokenizers/numpy — the ONNX runtime baked into the image.
 COPY bible-core/ bible-core/
 COPY bible-api/ bible-api/
+COPY bible-semantic/ bible-semantic/
 RUN uv sync --frozen --no-dev --no-editable
 
 # Bake bible.db from the committed translations + cross-references. Reproducible (Slice 2).
-# Use the venv python directly — `uv run` would re-sync the env (editable + dev deps),
-# undoing the --no-editable install and leaving the runtime unable to import the packages.
+# Use the venv python directly — `uv run` would re-sync (editable + dev deps), undoing the
+# --no-editable install and leaving the runtime unable to import the packages.
 COPY data/ data/
 RUN /app/.venv/bin/python -m bible_core.loader --output /app/bible.db
+
+# Fetch the int8 model (pinned revision; ~313 MB) then bake the int8 embeddings.db from the
+# WEB corpus. Late layers: the ~21-min embed re-runs only when the model, data, or semantic
+# code change. The model is baked into the image; runtime never downloads it.
+COPY scripts/ scripts/
+RUN /app/.venv/bin/python scripts/fetch_model.py
+RUN /app/.venv/bin/python scripts/build_embeddings.py
 
 # --- runtime ----------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
-    BIBLE_DB_PATH=/app/bible.db
+    BIBLE_DB_PATH=/app/bible.db \
+    CONCORD_MODEL_PATH=/app/model \
+    CONCORD_EMBEDDINGS_PATH=/app/embeddings.db
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/bible.db /app/bible.db
+COPY --from=builder /app/embeddings.db /app/embeddings.db
+COPY --from=builder /app/model /app/model
 
 # Container always listens on 8000; the host port is remapped via compose.
 EXPOSE 8000
 
-# Healthy once /healthz returns 200 with a loaded corpus. Uses stdlib urllib (slim has no
-# curl) and the venv python on PATH.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+# Healthy once /healthz returns 200 with a loaded corpus AND semantic search primed. Uses
+# stdlib urllib (slim has no curl) and the venv python on PATH. The long start-period covers
+# the embedding-model warm-up at boot (slower on a no-AVX2 CPU).
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
     CMD python -c "import sys,json,urllib.request; \
 d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)); \
-sys.exit(0 if d.get('translation_count', 0) > 0 else 1)"
+sys.exit(0 if d.get('translation_count', 0) > 0 and (d.get('semantic') or {}).get('enabled') else 1)"
 
 CMD ["uvicorn", "bible_api.app:app", "--host", "0.0.0.0", "--port", "8000"]

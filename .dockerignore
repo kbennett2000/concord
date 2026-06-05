@@ -19,8 +19,11 @@ data/private/
 .mypy_cache/
 .claude/
 
-# Build artifacts
+# Build artifacts (the model + embeddings are fetched/built inside the builder stage, never
+# copied from the host — keep the big host-side copies out of the build context).
 bible.db
+embeddings.db
+models/
 *.db-journal
 *.db-wal
 *.db-shm
