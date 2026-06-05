@@ -13,14 +13,21 @@ from typing import Annotated, Literal
 from bible_core.parser import UnknownBookError, parse_reference
 from bible_core.queries import (
     CrossRefRow,
+    PlaceRow,
     QueryResult,
+    count_place_verses,
+    distinct_place_types,
     get_books,
     get_chapter,
     get_cross_references,
+    get_place,
+    get_place_verses,
+    get_places_for_reference,
     get_random_verse,
     get_translations,
     get_verse_text,
     get_verses,
+    list_places,
     reference_exists,
     search_verses,
 )
@@ -37,7 +44,14 @@ from .dependencies import (
     resolve_translation,
     resolve_translations,
 )
-from .errors import BookFilterError, NoMatchError, NoVersesFoundError, SemanticUnavailableError
+from .errors import (
+    BookFilterError,
+    NoMatchError,
+    NoVersesFoundError,
+    PlaceFilterError,
+    SemanticUnavailableError,
+    UnknownPlaceError,
+)
 from .schemas import (
     Book,
     BooksResponse,
@@ -45,6 +59,11 @@ from .schemas import (
     CrossRefResponse,
     CrossRefSource,
     CrossRefTarget,
+    PlaceDetail,
+    PlacesResponse,
+    PlaceSummary,
+    PlaceVerse,
+    PlaceVersesResponse,
     RandomResponse,
     RandomVerse,
     SearchHit,
@@ -53,6 +72,7 @@ from .schemas import (
     SemanticSearchResponse,
     Translation,
     TranslationsResponse,
+    VersePlacesResponse,
 )
 from .shaping import shape_grouped, shape_parallel
 
@@ -315,3 +335,144 @@ def random_endpoint(
     )
     # /random must NOT use the immutable-ETag cache — a fresh verse every call.
     return no_store_json_response(response)
+
+
+# --- geography (v3): places + the bi-directional place↔verse link ---------------------
+
+# The fixed status enum (mirrors the places.status CHECK in the schema).
+PLACE_STATUSES = ("identified", "disputed", "unknown", "symbolic", "multiple")
+
+
+def _place_summary(place: PlaceRow) -> PlaceSummary:
+    """Project a PlaceRow to the summary shape (coords surfaced as named lat/lon)."""
+    return PlaceSummary(
+        id=place.id,
+        friendly_id=place.friendly_id,
+        name=place.name,
+        type=place.type,
+        latitude=place.latitude,
+        longitude=place.longitude,
+        confidence=place.confidence,
+        confidence_score=place.confidence_score,
+        status=place.status,
+    )
+
+
+@router.get("/places")
+def places_endpoint(
+    request: Request,
+    conn: Conn,
+    type: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    type_filter = type.strip() if type and type.strip() else None
+    if type_filter is not None:
+        available = distinct_place_types(conn)
+        if type_filter not in available:
+            raise PlaceFilterError(
+                "unknown_type",
+                f"unknown place type {type_filter!r}",
+                {"type": type_filter, "available": available},
+            )
+
+    status_filter = status.strip() if status and status.strip() else None
+    if status_filter is not None and status_filter not in PLACE_STATUSES:
+        raise PlaceFilterError(
+            "unknown_status",
+            f"unknown place status {status_filter!r}",
+            {"status": status_filter, "available": list(PLACE_STATUSES)},
+        )
+
+    q_filter = q.strip() if q and q.strip() else None
+    page = list_places(conn, type_filter, status_filter, q_filter, limit, offset)
+    response = PlacesResponse(
+        type=type_filter,
+        status=status_filter,
+        q=q_filter,
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        places=[_place_summary(p) for p in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/places/{place_id}")
+def place_detail_endpoint(place_id: str, request: Request, conn: Conn) -> Response:
+    place = get_place(conn, place_id)
+    if place is None:
+        raise UnknownPlaceError(place_id)
+    response = PlaceDetail(
+        id=place.id,
+        friendly_id=place.friendly_id,
+        name=place.name,
+        url_slug=place.url_slug,
+        type=place.type,
+        preceding_article=place.preceding_article,
+        latitude=place.latitude,
+        longitude=place.longitude,
+        confidence=place.confidence,
+        confidence_score=place.confidence_score,
+        status=place.status,
+        modern_name=place.modern_name,
+        verse_count=count_place_verses(conn, place.id),
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/places/{place_id}/verses")
+def place_verses_endpoint(
+    place_id: str,
+    request: Request,
+    conn: Conn,
+    translation: str | None = None,
+    include_text: bool = True,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    if get_place(conn, place_id) is None:
+        raise UnknownPlaceError(place_id)
+
+    translation_id = resolve_translation(request, translation) if include_text else None
+    rows, total = get_place_verses(conn, place_id, limit, offset)
+    verses = [
+        PlaceVerse(
+            book=row.book_id,
+            chapter=row.chapter,
+            verse=row.verse,
+            reference=f"{row.book_name} {row.chapter}:{row.verse}",
+            text=(
+                get_verse_text(conn, translation_id, row.book_id, row.chapter, row.verse)
+                if translation_id is not None
+                else None
+            ),
+        )
+        for row in rows
+    ]
+    response = PlaceVersesResponse(
+        id=place_id,
+        translation=translation_id,
+        include_text=include_text,
+        limit=limit,
+        offset=offset,
+        total=total,
+        verses=verses,
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/verses/{ref}/places")
+def verse_places_endpoint(ref: str, request: Request, conn: Conn) -> Response:
+    # parse_reference raises ParseError (400) / UnknownBookError (404), already wired. A valid
+    # ref naming no place returns 200 with an empty list (SPEC v3 §7).
+    reference = parse_reference(ref, SqliteBookResolver(conn))
+    page = get_places_for_reference(conn, reference)
+    response = VersePlacesResponse(
+        reference=reference.echo,
+        total=page.total,
+        places=[_place_summary(p) for p in page.rows],
+    )
+    return cached_json_response(response, request)

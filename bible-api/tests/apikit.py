@@ -92,5 +92,74 @@ def build_corpus(path: Path) -> None:
         "to_verse_start, to_verse_end, votes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         cross_refs,
     )
+
+    # Deterministic geography for the places endpoints:
+    #  - Jerusalem: identified, coords (named lat/lon), linked to JHN 3:16 + GEN 1:1-2
+    #  - Nod: unknown, NULL coords/confidence (the honesty model)
+    #  - two Antiochs sharing name "Antioch": disambiguation, one disputed
+    # (id, friendly_id, name, url_slug, type, article, lat, lon, conf, score, status, modern)
+    places = [
+        (
+            "p_jeru",
+            "Jerusalem",
+            "Jerusalem",
+            "jerusalem",
+            "settlement",
+            "",
+            31.78,
+            35.23,
+            "high",
+            1000,
+            "identified",
+            "Jerusalem",
+        ),
+        ("p_nod", "Nod", "Nod", "nod", "region", "", None, None, None, None, "unknown", None),
+        (
+            "p_ant1",
+            "Antioch 1",
+            "Antioch",
+            "antioch-1",
+            "settlement",
+            "",
+            36.20,
+            36.16,
+            "high",
+            900,
+            "identified",
+            "Antakya",
+        ),
+        (
+            "p_ant2",
+            "Antioch 2",
+            "Antioch",
+            "antioch-2",
+            "settlement",
+            "",
+            38.30,
+            31.18,
+            "medium",
+            300,
+            "disputed",
+            "Yalvaç",
+        ),
+    ]
+    place_verses = [
+        ("p_jeru", "JHN", 3, 16),  # WEB omits this verse → include_text null path
+        ("p_jeru", "GEN", 1, 1),
+        ("p_jeru", "GEN", 1, 2),
+        ("p_nod", "JHN", 4, 1),
+        ("p_ant1", "1JN", 1, 1),
+        ("p_ant2", "1JN", 1, 2),
+    ]
+    conn.executemany(
+        "INSERT INTO places (id, friendly_id, name, url_slug, type, preceding_article, "
+        "latitude, longitude, confidence, confidence_score, status, modern_name) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        places,
+    )
+    conn.executemany(
+        "INSERT INTO place_verses (place_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)",
+        place_verses,
+    )
     conn.commit()
     conn.close()

@@ -419,3 +419,166 @@ def get_random_verse(
         params,
     ).fetchone()
     return None if row is None else RandomVerse(row[0], row[1], row[2], row[3], row[4])
+
+
+# --- geography (v3): places + the bi-directional place↔verse link ---------------------
+
+
+@dataclass(frozen=True)
+class PlaceRow:
+    """One biblical place. Coordinates/confidence are ``None`` for places with no confident
+    location (unknown/symbolic/multiple) — the honesty model (SPEC v3 §6)."""
+
+    id: str
+    friendly_id: str
+    name: str
+    url_slug: str
+    type: str
+    preceding_article: str
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    confidence_score: int | None
+    status: str
+    modern_name: str | None
+
+
+@dataclass(frozen=True)
+class PlacePage:
+    """A page of places plus the total match count."""
+
+    rows: tuple[PlaceRow, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class PlaceVerseRef:
+    """One verse a place is mentioned in (book id + name for reference formatting)."""
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+
+
+# The places columns, in schema order; bare and ``p.``-prefixed (for the join query).
+_PLACE_COLS = (
+    "id",
+    "friendly_id",
+    "name",
+    "url_slug",
+    "type",
+    "preceding_article",
+    "latitude",
+    "longitude",
+    "confidence",
+    "confidence_score",
+    "status",
+    "modern_name",
+)
+_PLACE_SELECT = ", ".join(_PLACE_COLS)
+
+
+def _row_to_place(r: sqlite3.Row) -> PlaceRow:
+    return PlaceRow(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11])
+
+
+def list_places(
+    conn: sqlite3.Connection,
+    type_filter: str | None,
+    status_filter: str | None,
+    q: str | None,
+    limit: int,
+    offset: int,
+) -> PlacePage:
+    """Browse places, optionally filtered by ``type``/``status``/name substring (``q``).
+
+    Ordered ``name, id`` (a stable tiebreak so same-named places paginate deterministically);
+    ``total`` is a separate count over the same filter.
+    """
+    clauses: list[str] = []
+    params: list[str] = []
+    if type_filter is not None:
+        clauses.append("type = ?")
+        params.append(type_filter)
+    if status_filter is not None:
+        clauses.append("status = ?")
+        params.append(status_filter)
+    if q is not None and q.strip():
+        clauses.append("name LIKE '%' || ? || '%'")  # case-insensitive for ASCII names
+        params.append(q.strip())
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    rows = tuple(
+        _row_to_place(r)
+        for r in conn.execute(
+            f"SELECT {_PLACE_SELECT} FROM places{where} ORDER BY name, id LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+    )
+    total = conn.execute(f"SELECT COUNT(*) FROM places{where}", params).fetchone()[0]
+    return PlacePage(rows=rows, total=total)
+
+
+def get_place(conn: sqlite3.Connection, place_id: str) -> PlaceRow | None:
+    """One place by its stable id, or ``None`` if no such place."""
+    row = conn.execute(f"SELECT {_PLACE_SELECT} FROM places WHERE id = ?", (place_id,)).fetchone()
+    return None if row is None else _row_to_place(row)
+
+
+def count_place_verses(conn: sqlite3.Connection, place_id: str) -> int:
+    """How many verses mention this place."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM place_verses WHERE place_id = ?", (place_id,)
+    ).fetchone()[0]
+
+
+def get_place_verses(
+    conn: sqlite3.Connection, place_id: str, limit: int, offset: int
+) -> tuple[tuple[PlaceVerseRef, ...], int]:
+    """The verses mentioning ``place_id``, in canonical order, plus the total count."""
+    rows = tuple(
+        PlaceVerseRef(r[0], r[1], r[2], r[3])
+        for r in conn.execute(
+            "SELECT pv.book_id, b.name, pv.chapter, pv.verse "
+            "FROM place_verses pv JOIN books b ON b.id = pv.book_id "
+            "WHERE pv.place_id = ? "
+            "ORDER BY b.canonical_order, pv.chapter, pv.verse "
+            "LIMIT ? OFFSET ?",
+            (place_id, limit, offset),
+        )
+    )
+    total = count_place_verses(conn, place_id)
+    return rows, total
+
+
+def get_places_for_reference(conn: sqlite3.Connection, reference: Reference) -> PlacePage:
+    """The distinct places mentioned anywhere in ``reference`` (the union across its spans).
+
+    The inverse of ``get_place_verses``. ``SELECT DISTINCT`` dedups a place named in several
+    verses of the range; ordered ``name, id``. No pagination (a reference spans few places).
+    """
+    clauses: list[str] = []
+    params: list[str | int] = [reference.book_id]
+    for span in reference.spans:
+        predicate, span_params = _span_predicate(span, "pv.chapter", "pv.verse")
+        clauses.append(f"({predicate})")
+        params += span_params
+    where = f"pv.book_id = ? AND ({' OR '.join(clauses)})"
+
+    cols = ", ".join(f"p.{c}" for c in _PLACE_COLS)
+    rows = tuple(
+        _row_to_place(r)
+        for r in conn.execute(
+            f"SELECT DISTINCT {cols} "
+            "FROM places p JOIN place_verses pv ON pv.place_id = p.id "
+            f"WHERE {where} ORDER BY p.name, p.id",
+            params,
+        )
+    )
+    return PlacePage(rows=rows, total=len(rows))
+
+
+def distinct_place_types(conn: sqlite3.Connection) -> list[str]:
+    """The set of place ``type`` values present, sorted — for validating a ``?type=`` filter."""
+    return [r[0] for r in conn.execute("SELECT DISTINCT type FROM places ORDER BY type")]
