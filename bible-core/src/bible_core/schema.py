@@ -1,6 +1,6 @@
 """SQLite schema for Concord (SPEC §4).
 
-All six tables are created as one cohesive unit even though most stay empty until later
+All tables are created as one cohesive unit even though most stay empty until later
 slices — this locks the schema shape early so future slices don't drift it. The schema
 carries its future-proofing now: ``translations.versification`` / ``direction``, a
 ``DC`` testament value (reserved for Catholic data; unused in the v1 seed), and the
@@ -66,10 +66,46 @@ _TABLES: tuple[str, ...] = (
         votes          INTEGER
     )
     """,
+    # Geography (v3, additive). `id` is OpenBible's ancient id ('a…') — the stable,
+    # external-safe PK (SPEC v3 §1). Coordinates / confidence are NULL for places with no
+    # confident location (unknown / symbolic / multiple) — the honesty model (v3 §6).
+    # `confidence` (evidence strength) and `status` (resolution kind) are independent axes.
+    """
+    CREATE TABLE IF NOT EXISTS places (
+        id                TEXT PRIMARY KEY,
+        friendly_id       TEXT NOT NULL,
+        name              TEXT NOT NULL,
+        url_slug          TEXT NOT NULL,
+        type              TEXT NOT NULL,
+        preceding_article TEXT NOT NULL DEFAULT '',
+        latitude          REAL,
+        longitude         REAL,
+        confidence        TEXT CHECK (confidence IN ('high', 'medium', 'low')),
+        confidence_score  INTEGER,
+        status            TEXT NOT NULL CHECK (
+            status IN ('identified', 'disputed', 'unknown', 'symbolic', 'multiple')
+        ),
+        modern_name       TEXT
+    )
+    """,
+    # One row per (place, verse). The composite PK dedups verse links for free and serves
+    # BOTH directions: place→verses (WHERE place_id = ?) and verse→places (the index below),
+    # exactly as cross_references serves both directions.
+    """
+    CREATE TABLE IF NOT EXISTS place_verses (
+        place_id TEXT NOT NULL REFERENCES places (id),
+        book_id  TEXT NOT NULL REFERENCES books (id),
+        chapter  INTEGER NOT NULL,
+        verse    INTEGER NOT NULL,
+        PRIMARY KEY (place_id, book_id, chapter, verse)
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
     "ON cross_references (from_book_id, from_chapter, from_verse)",
+    # Supports the verse→places direction (mirrors idx_xref_from).
+    "CREATE INDEX IF NOT EXISTS idx_place_verses_bcv ON place_verses (book_id, chapter, verse)",
 )
 
 # FTS5 virtual table over verse text, external-content linked to verses.id.

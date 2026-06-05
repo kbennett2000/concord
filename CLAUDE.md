@@ -87,10 +87,13 @@ install.
 
 ## Out of scope for v1
 
-**v2 is now in progress: semantic search.** Meaning-based retrieval over Scripture is no
-longer deferred — it is the active milestone, designed in `docs/v2/SPEC.md` and built in
-the new `bible-semantic` package. The items below remain out of scope unless explicitly
-expanded.
+**v2 (semantic search) is shipped. v3 is now in progress: biblical geography.** v2's
+meaning-based retrieval landed in the `bible-semantic` package. v3 is the active milestone,
+designed in `docs/v3/SPEC.md`: place data + the bi-directional place↔verse link, served
+read-only and offline. It is **purely additive** — no new package, no ML — just the `places`
++ `place_verses` tables in `bible.db` (owned by `bible-core`) and new `/v1/places*`
+endpoints in `bible-api`, baked via the existing build like v1's cross-references. The items
+below remain out of scope unless explicitly expanded.
 
 Do not build these without an explicit decision to expand scope:
 
@@ -102,6 +105,11 @@ Do not build these without an explicit decision to expand scope:
 - Semicolon-joined multi-reference strings in the parser (e.g. `John 3:16; Rom 8:1`).
 - Committing non-distributable translations — they stay local-only in `data/private/`.
 - Any internet dependency at runtime.
+- **Journeys / routes** (Paul's missionary journeys, the Exodus path) — ordered sequences,
+  competing proposed routes, segment-level links, and dating debates. **The named next
+  frontier after v3**, deliberately deferred; it will *reference* v3's place data (hence
+  v3's stable-id + disambiguation foundation), not rebuild it. Region grouping/containment
+  and the dataset's full scholarly apparatus are deferred with it.
 
 ## Git Workflow
 
@@ -122,8 +130,9 @@ clean / feature works), do the following without being asked:
    `test(core): cover cross-chapter range parsing`,
    `fix(loader): tolerate trailing whitespace in book aliases`,
    `docs(spec): clarify missing-verse semantics`).
-   Scopes: `core`, `semantic`, `api`, `loader`, `docs`, `data`, `infra`, `deps`. Omit
-   scope only for repo-wide changes (`chore:`).
+   Scopes: `core`, `semantic`, `api`, `loader`, `geo`, `docs`, `data`, `infra`, `deps`. Omit
+   scope only for repo-wide changes (`chore:`). (`geo` for geography-specific work; the v3
+   loader landed under `core`/`data`.)
 3. `git push` the slice branch
 
 Commit at logical checkpoints — a complete sub-step, a passing suite, a refactor —
