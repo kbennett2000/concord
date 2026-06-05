@@ -142,11 +142,28 @@ Changing the port is one line:
 BIBLE_API_PORT=9001 docker compose up -d   # now on localhost:9001
 ```
 
+## Requirements
+
+Concord runs on modest, owned hardware. There are two tiers, depending on whether semantic
+search is on — measured, not guessed:
+
+| | Core API | + Semantic search |
+|---|---|---|
+| **Query latency** | instant (in-memory SQLite) | ~92 ms on a 2012 no-AVX2 desktop, ~42 ms on a modern machine — interactive |
+| **RAM** | ~256 MB | ~662 MB |
+| **To deploy** | <100 MB image | ~450 MB compressed to transfer, ~1.4 GB on disk once loaded |
+| **CPU** | anything (even a Raspberry Pi) | x86-64 with AVX (2011+) or Apple Silicon; AVX2 is faster but not required |
+| **GPU** | none | none |
+| **Network** | none at runtime | none at runtime |
+
+Tested on a 2012 Dell Optiplex 9010 — a $50 used desktop: semantic Scripture search in under
+a tenth of a second, fully offline. If it runs there, it runs on whatever you've got.
+
 ## Deployment
 
-The database is **baked into the image** at build time — no volumes, no separate data step.
-A fresh container is immediately ready and identical to every other container built from the
-same source.
+The database, the embedding model, and the precomputed verse vectors are all **baked into
+the image** at build time — no volumes, no separate data step. A fresh container is
+immediately ready and identical to every other container built from the same source.
 
 Deploy to a LAN host (replace `192.168.1.62` with yours):
 
@@ -156,6 +173,21 @@ ssh user@192.168.1.62 'cd ~/concord && docker compose up -d'
 ```
 
 Then from any LAN client: `curl http://192.168.1.62:8000/healthz`.
+
+**Build on a capable machine, run on a modest one.** Embedding the corpus happens once at
+image-build time and takes ~20–30 minutes — fast on a recent CPU, but slow on an old one
+(an AVX2-less box could take an hour or more). So build the image where it's quick, then ship
+the built image to the modest box rather than building there:
+
+```bash
+docker save concord:latest | gzip > concord.tar.gz          # on the capable machine (~450 MB)
+scp concord.tar.gz user@192.168.1.62:~/                      # to the LAN box
+ssh user@192.168.1.62 'gunzip -c concord.tar.gz | docker load && docker compose up -d'
+```
+
+The modest box only ever runs the fast query-time path. Querying works fully offline —
+verified with the network physically off (`docker run --network none …` still serves
+`/v1/semantic-search` and `/healthz`).
 
 **Verifying it's truly offline.** The image carries every asset it needs, including the
 Swagger UI bundle, so `/docs` renders with no internet at all:
@@ -186,6 +218,12 @@ through a gitignored `data/private/` directory: drop a non-distributable transla
 there and the loader picks it up automatically on a local build, while it never enters the
 public repo or a shared image. The pattern lets an operator run translations they're licensed
 for without ever committing them.
+
+Semantic search uses IBM's
+[`granite-embedding-311m-multilingual-r2`](https://huggingface.co/ibm-granite/granite-embedding-311m-multilingual-r2)
+embedding model — **Apache 2.0 licensed**, pinned to a fixed revision and baked into the
+image (the int8 build, ~313 MB). It's downloaded once at build time and never contacted at
+runtime.
 
 ## What Concord doesn't do (yet)
 
@@ -225,3 +263,5 @@ The `/v1` prefix means today's responses are a contract. Build against them with
 - **Bundled translations:** public domain — see [`data/SOURCES.md`](data/SOURCES.md).
 - **Cross-references:** [OpenBible.info](https://www.openbible.info/labs/cross-references/),
   licensed under Creative Commons Attribution (CC BY).
+- **Embedding model:** [`ibm-granite/granite-embedding-311m-multilingual-r2`](https://huggingface.co/ibm-granite/granite-embedding-311m-multilingual-r2),
+  Apache 2.0 © IBM.
