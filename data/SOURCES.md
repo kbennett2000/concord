@@ -43,3 +43,18 @@ attribution line **must appear in the README** (Slice 9).
 
 If the cross-reference dataset's license does not permit redistribution, it must move to
 `data/private/` (gitignored) and be loaded locally only.
+
+## Geography / places (`data/geography/`)
+
+| Field | Value |
+|---|---|
+| Files | `ancient.jsonl` (biblical places, with verse links and confidence) + `modern.jsonl` (modern locations with coordinates) |
+| Source | OpenBible.info Bible-Geocoding-Data — <https://github.com/openbibleinfo/Bible-Geocoding-Data> |
+| License | Creative Commons Attribution 4.0 International (CC BY 4.0) |
+| Attribution | **Place data courtesy of [OpenBible.info](https://github.com/openbibleinfo/Bible-Geocoding-Data), licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.** |
+
+This dataset is redistributable under CC BY 4.0, so the source `.jsonl` files are committed
+to the repo with the attribution above. The geography loader (`bible_core.geo`) ingests a
+**disciplined subset** of these files into the `places` + `place_verses` tables (SPEC v3
+§4); the bulk of the dataset's scholarly apparatus is deliberately not used. The attribution
+line **must appear in the README** (Slice V3-S2).
