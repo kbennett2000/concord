@@ -1,6 +1,6 @@
-# Concord — production compose. Builds the runtime image and serves bible-api.
-# Every operator knob is env-configurable via ${VAR:-default} (host env or .env). The
-# database is baked into the image at /app/bible.db; nothing is mounted.
+# Concord — production compose. Builds the runtime image and serves bible-api with
+# semantic search (v2). Every operator knob is env-configurable via ${VAR:-default} (host
+# env or .env). The databases + int8 model are baked into the image; nothing is mounted.
 
 services:
   api:
@@ -15,9 +15,15 @@ services:
       CONCORD_CORS_ORIGINS: "${CONCORD_CORS_ORIGINS:-*}"
       CONCORD_DEFAULT_TRANSLATION: "${CONCORD_DEFAULT_TRANSLATION:-KJV}"
       BIBLE_DB_PATH: "${BIBLE_DB_PATH:-/app/bible.db}"
+      # Semantic search: model + vectors are baked at these paths; on by default.
+      CONCORD_MODEL_PATH: "${CONCORD_MODEL_PATH:-/app/model}"
+      CONCORD_EMBEDDINGS_PATH: "${CONCORD_EMBEDDINGS_PATH:-/app/embeddings.db}"
+      CONCORD_SEMANTIC_SEARCH: "${CONCORD_SEMANTIC_SEARCH:-1}"
     restart: unless-stopped
     healthcheck:
       # Mirrors the Dockerfile HEALTHCHECK; uses the venv python (no curl in the slim image).
+      # Semantic-aware: requires a loaded corpus AND semantic search primed. The long
+      # start_period covers the embedding-model warm-up at boot (slower on a no-AVX2 CPU).
       test:
         - CMD
         - python
@@ -25,13 +31,14 @@ services:
         - >-
           import sys,json,urllib.request;
           d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2));
-          sys.exit(0 if d.get('translation_count', 0) > 0 else 1)
+          sys.exit(0 if d.get('translation_count', 0) > 0 and (d.get('semantic') or {}).get('enabled') else 1)
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 60s
     deploy:
       resources:
         limits:
-          # A generous rail for a LAN service (SQLite + ~530k verses). Tune for your host.
-          memory: 512M
+          # Rail for the semantic footprint (SPEC §4 target ~1.5-2 GB: the ~95 MB vector
+          # matrix + the int8 model in RAM + ONNX Runtime arena + Python). Tune to measured RSS.
+          memory: 2g

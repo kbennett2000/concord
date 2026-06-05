@@ -636,3 +636,43 @@ in the README.
   / `build.py` INSERT — kept in sync (after `dim`). Hand-built test embeddings.dbs
   (`test_semantic_store`, bible-api `test_semantic_boot_guard`) + the schema column-list test
   were updated for the new column. **int8 is now standard; S3b does the Docker packaging.**
+
+### Slice S3b — Docker & deploy
+- **Date:** 2026-06-05. **PR:** #17 (`slice/v2-s3b-docker`). Second half of the split S3.
+  Authored by cc; **Docker build + offline check + measurements are Kris's** (no Docker on
+  G434), mirroring v1 Slice 8.
+- **Embeddings: built IN the builder stage** (not COPYed from a host pre-build) — a clean
+  clone `docker build`s everything, fetching the int8 model at build time and baking the int8
+  `embeddings.db`, exactly as v1 bakes `bible.db` via the loader in-builder. Self-contained;
+  the ~21-min embed runs on the capable build machine.
+- **Image structure (extends v1's multi-stage):** builder adds `bible-semantic` to the
+  workspace COPY/sync (so `uv sync --no-editable` installs it + onnxruntime/tokenizers/numpy),
+  copies `scripts/`, runs the loader → `fetch_model.py` (int8, pinned `44399559…`) →
+  `build_embeddings.py`. Runtime additionally copies `/app/embeddings.db` + `/app/model`.
+  fp32 (1.25 GB) never enters the image; the model is baked so **runtime needs no network**.
+- **Explicit artifact paths:** packages install `--no-editable`, so bible_semantic's
+  `__file__`-relative path defaults don't resolve in `.venv` — both stages set
+  `BIBLE_DB_PATH=/app/bible.db`, `CONCORD_MODEL_PATH=/app/model`,
+  `CONCORD_EMBEDDINGS_PATH=/app/embeddings.db` (same pattern v1 uses for `BIBLE_DB_PATH`).
+  No Python changes — the env drives the existing scripts/store.
+- **Hardening:** healthcheck (Dockerfile + compose) is now **semantic-aware** —
+  `translation_count > 0` AND `semantic.enabled` — with `start_period` raised to 60s for the
+  boot-time model warm-up (slower on a no-AVX2 box). compose memory rail raised **512M → 2g**
+  (the §4 footprint); `make docker-verify` adds a `/v1/semantic-search` ranked-results check
+  alongside the offline `/docs` no-CDN check. `.dockerignore` now excludes `models/` +
+  `embeddings.db` (host copies kept out of the build context).
+- **Deploy guidance (build-on-fast-machine):** build the image on a capable machine (G434),
+  then `docker save concord:latest | gzip > concord.tar.gz` → copy to the Optiplex →
+  `docker load`. The modest box only ever runs the fast query path; it never builds (a
+  no-AVX2 in-Docker embed could be 1–2 hr). Full README treatment is S4.
+- **Verification + measurement sequence for Kris** (also in the PR body):
+  `docker compose build`; `docker run --rm --network none -p 8000:8000 concord:latest` then
+  `curl /v1/semantic-search?q=do+not+be+anxious` (ranked) + `curl /healthz`
+  (`semantic.enabled:true`, `embedding_count:31054`) — the **offline proof**; then
+  `docker images` (size), `docker stats` (RSS), and timed queries on G434 + Optiplex.
+- **PENDING (Kris's measured numbers → land in SPEC §4 + here):**
+  - Image size (int8 `concord:latest`): _pending_
+  - Runtime RAM (in-container RSS, primed): _pending_
+  - Query latency — G434 (AVX2): _pending_
+  - Query latency — Optiplex (AVX-only, int8 via ORT fallback — the one real unknown): _pending_
+  - `--network none` semantic search + healthz: _pending verification_
