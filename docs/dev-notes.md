@@ -737,3 +737,66 @@ in the README.
 - **The measured close:** semantic Scripture search in **~92 ms on a $50 2012 desktop** (~42 ms
   modern), ~662 MB RAM, **fully offline** (`--network none` verified), in a ~450 MB image. The
   `bible-core` web-free boundary is intact; `bible-semantic` is web-free too. **v2 is shipped.**
+
+## v3 — Geography
+
+### Slice V3-S0 — Places schema & geo ingestion
+- **Date:** 2026-06-05. **PR:** #21 (`slice/v3-s0-places-ingest`).
+- **What landed:** the additive `places` + `place_verses` tables in `bible.db` (owned by
+  `bible-core`, existing tables untouched), the build-time `bible_core.geo` loader ingesting
+  the disciplined subset of OpenBible's `ancient.jsonl` + `modern.jsonl`, the ref mapping and
+  two-axis confidence/status derivation, the committed CC-BY-4.0 source data + attribution,
+  the `docs/v3/SPEC.md` commit, and the CLAUDE.md scope update. No endpoints (V3-S1), no
+  README prose (V3-S2). The geo data bakes into `bible.db` via the existing build flow (the
+  cross-references precedent) — **no Dockerfile change** (`COPY data/ data/` + a default
+  `geo_dir` in `main()` carry it in).
+- **Place count:** **1340 places** (1342 ancient records − 2 pure non-places), **8738
+  place-verse links** (8742 verse entries − 4 same-verse dedups). Stable across rebuilds
+  (byte-identical). Status split: **identified 1264 · disputed 66 · unknown 5 · symbolic 3 ·
+  multiple 2**; confidence (coord-bearing only): high 749 · medium 545 · low 36.
+- **Subset extracted (SPEC §4):** `id` (the stable PK), `friendly_id`, derived `name` +
+  `url_slug`, `type`, `preceding_article`, best coordinates, `confidence`/`confidence_score`,
+  `status`, `modern_name`, and the verse links. **Deliberately ignored:** time-weighted
+  scores, resolution `paths`/`best_path_score`, all geometry (geojson/kml/isobands), images,
+  `linked_data`, the 400+ sources, `epsg_28191`, and the per-translation spelling apparatus.
+- **Field reality vs the spec's labels (the S0 finding):** the live data's `name` and `type`
+  (singular) are **`null` for all 1342 records** — display `name` is derived from
+  `friendly_id` (trailing " N" stripped: "Eden 1"→"Eden") and `type` from the `types` array
+  (100% populated). `modern.jsonl`'s `lonlat` is **"longitude,latitude"** order (longitude
+  first) — Jerusalem stores lat 31.777 / lon 35.234. The `special` marker lives at
+  `identifications[].resolutions[].special` and carries a **6th kind, `recursive`**, absent
+  from SPEC §6. Adjusted scores run **−87..1169**, not the upstream "0–1000". `docs/v3/SPEC.md`
+  §4/§5/§6 were amended to this reality.
+- **Two-axis honesty model (per Kris):** `confidence` (evidence strength) and `status`
+  (resolution kind) are independent. **Confidence buckets:** high ≥ 500 · medium 100–499 ·
+  low < 100 (negatives included as low) — calibrated against the real distribution (median
+  577). **Status from the resolution kind**, never collapsed from the bucket.
+- **Status-precedence refinement (discovered at impl — the planned "inspect the dual-flagged
+  records" check earned its keep):** a naive "semantic special always wins" would null
+  well-attested places, because **`recursive` co-occurs with strong associations** (Chesalon
+  recursive@702, Beth-biri@625). So `recursive` is treated as a resolution-path *artifact*,
+  not a semantic claim — it never voids a real association; a recursive-only place with no
+  association is honestly `unknown`. The **semantic** specials (`unknown_place`,
+  `nonspecific_place`, `multiple_locations`) *do* suppress coordinates and take precedence
+  over a tentative association (honesty-first). **Competing** = a runner-up association ≥ 0.8×
+  the top score with both ≥ 100 → `disputed`. **Net-negative best score → `disputed`, never
+  `identified`** (coordinates kept but hedged via low confidence).
+- **Eden vs Nod (the spec-example deviation, resolved):** an early ma-first scan suggested
+  Eden wasn't marked unknown; the correct **semantic-special-first** precedence classifies
+  **"Eden 1" (slug `eden-1`, Gen 2:8) as `unknown` with null coordinates** — vindicating the
+  spec's original Garden-of-Eden example. **Nod** (Gen 4:16) is the other clean unknown. Both
+  are asserted in the integration test; Eden's tentative associations are honestly suppressed.
+- **Open-question answers:** (1) `not_a_place`/`not_a_proper_name` → **excluded** only when
+  the place has no coordinate-bearing association (net **2** excluded). (3) `alternate_verses`
+  → **ignored**; primary `sort` only. (4) association selection → **highest score**,
+  deterministic tie-break (then lowest modern id). (5) **footprint:** committed whole —
+  `ancient.jsonl` 11 MB + `modern.jsonl` 3.1 MB (~14 MB), comparable to the 8.3 MB
+  cross-references; no trimming/gzip.
+- **Ref mapping:** `sort` (BBCCCVVV) → USFM via `canonical_order`, `osis` fallback, `readable`
+  never parsed. All 8742 verse entries had valid in-canon sorts, so the out-of-canon
+  skip-and-count path is defensive (0 skipped on real data). `place_verses.book_id` FK to
+  `books` held for every row.
+- **Gotchas:** the loader↔geo import cycle (geo imports `LoaderError` from `loader`) is broken
+  by a **local import** of `geo` inside `build_database`. `symbolic` is rare (3 rows) and
+  every `nonspecific_place` also carried a tentative association, so the honesty-first rule is
+  what makes those rows appear at all.
