@@ -41,10 +41,12 @@ docker-down:       ## Stop the service
 
 docker-verify:     ## Post-deploy checks against the running container
 	@PORT=$${BIBLE_API_PORT:-8000}; \
-	echo "healthz:"; \
-	curl -fsS "http://localhost:$$PORT/healthz" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['translation_count']>0 and d['verse_count']>0, d; print('  ok', d)"; \
+	echo "healthz (corpus + semantic ready):"; \
+	curl -fsS "http://localhost:$$PORT/healthz" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['translation_count']>0 and d['verse_count']>0, d; assert (d.get('semantic') or {}).get('enabled'), d; print('  ok', d)"; \
 	echo "random:"; \
 	curl -fsS "http://localhost:$$PORT/v1/random" >/dev/null && echo "  ok"; \
+	echo "semantic-search (ranked results):"; \
+	curl -fsS "http://localhost:$$PORT/v1/semantic-search?q=do+not+be+anxious&limit=3" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['count']>0 and d['results'], d; print('  ok', [r['reference'] for r in d['results']])"; \
 	echo "offline /docs (no CDN):"; \
 	if curl -fsS "http://localhost:$$PORT/docs" | grep -Eq "jsdelivr|unpkg|fonts.googleapis"; then \
 	  echo "  FAIL: /docs reaches a CDN"; exit 1; else echo "  ok (no CDN URLs)"; fi
