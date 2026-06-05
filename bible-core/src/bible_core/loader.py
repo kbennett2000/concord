@@ -72,6 +72,10 @@ class BuildStats:
     books_with_verses: int
     cross_references: int
     cross_refs_clamped: int
+    places: int
+    place_verses: int
+    places_excluded: int
+    place_verse_links_skipped: int
     elapsed_seconds: float
 
 
@@ -317,10 +321,14 @@ def _update_chapter_counts(conn: sqlite3.Connection) -> None:
 
 
 def build_database(
-    db_path: Path, data_dirs: list[Path], cross_ref_dirs: list[Path] | None = None
+    db_path: Path,
+    data_dirs: list[Path],
+    cross_ref_dirs: list[Path] | None = None,
+    geo_dir: Path | None = None,
 ) -> BuildStats:
-    """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations) and
-    ``cross_ref_dirs`` (cross-reference TSV). Idempotent — same inputs, byte-identical db."""
+    """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
+    ``cross_ref_dirs`` (cross-reference TSV), and ``geo_dir`` (geography JSONL). Idempotent —
+    same inputs, byte-identical db."""
     start = time.perf_counter()
     cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
@@ -373,6 +381,15 @@ def build_database(
             cross_ref_count, cross_refs_clamped = load_cross_references(
                 conn, cross_ref_dirs, alias_to_book
             )
+            # Local import breaks the loader↔geo import cycle: geo.py imports LoaderError from
+            # this module, so this module must not import geo at top level.
+            from .geo import GeoStats, load_places
+
+            geo_stats = (
+                load_places(conn, geo_dir, order_to_book, alias_to_book)
+                if geo_dir is not None
+                else GeoStats(0, 0, 0, 0, {})
+            )
 
         books_with_verses = conn.execute(
             "SELECT COUNT(*) FROM books WHERE chapter_count IS NOT NULL"
@@ -386,6 +403,10 @@ def build_database(
         books_with_verses=books_with_verses,
         cross_references=cross_ref_count,
         cross_refs_clamped=cross_refs_clamped,
+        places=geo_stats.places,
+        place_verses=geo_stats.place_verses,
+        places_excluded=geo_stats.places_excluded,
+        place_verse_links_skipped=geo_stats.verse_links_skipped,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -421,8 +442,9 @@ def main(argv: list[str] | None = None) -> int:
     base = Path(args.data_dir)
     data_dirs = _default_data_dirs(base)
     cross_ref_dirs = [base / "cross-references"]
+    geo_dir = base / "geography"
     try:
-        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs)
+        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs, geo_dir)
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -436,7 +458,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Built {args.output}: {stats.translations} translations, "
             f"{stats.verses} verses, {stats.books_with_verses} books, "
-            f"{stats.cross_references} cross-references{clamped} "
+            f"{stats.cross_references} cross-references{clamped}, "
+            f"{stats.places} places, {stats.place_verses} place-verse links "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0
