@@ -272,18 +272,20 @@ runtime.
 
 ## What Concord doesn't do (yet)
 
-Concord is deliberately scoped. Semantic search landed in v2; a few things still haven't made
-a release, on purpose:
+Concord is deliberately scoped. Semantic search landed in v2 and geography in v3; a few things
+still haven't made a release, on purpose:
 
+- **Journeys and routes.** The named next frontier — ordered sequences like Paul's missionary
+  journeys or the Exodus, with the competing routes scholars propose for each. It's a distinct
+  data-and-modeling problem, and it *builds on* v3's geography (the stable place ids and
+  disambiguation exist precisely so a journeys layer can reference this place data rather than
+  rebuild it). A future version.
 - **Catholic and deuterocanonical books.** The schema is ready for them, but the data, naming
   conventions, and Vulgate psalm-numbering mapping are all distinct work that didn't belong in
   a clean release. Future work.
 - **Multi-translation search.** Search hits a single translation at a time. Cross-translation
   search introduces noise (near-duplicate hits) that's worth solving carefully when the time
   comes.
-- **Biblical geography.** The named next frontier — place coordinates and place-to-verse links
-  (the v3 candidate). Place-name datasets exist; integrating them cleanly is its own slice of
-  work.
 
 If any of these would unblock a project of yours, open an issue and say so — it shapes what
 gets built next.
