@@ -5,15 +5,18 @@ description = "Concord's thin FastAPI HTTP face over bible-core."
 requires-python = ">=3.11"
 dependencies = [
     "bible-core",
+    "bible-semantic",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2",
     "structlog>=24",
 ]
 
-# Local path-dependency wiring: bible-core is resolved from this workspace, not PyPI.
+# Local path-dependency wiring: bible-core / bible-semantic are resolved from this
+# workspace, not PyPI. bible-semantic stays web-free; bible-api is the only web layer.
 [tool.uv.sources]
 bible-core = { workspace = true }
+bible-semantic = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

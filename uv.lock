@@ -54,6 +54,7 @@ version = "0.0.0"
 source = { editable = "bible-api" }
 dependencies = [
     { name = "bible-core" },
+    { name = "bible-semantic" },
     { name = "fastapi" },
     { name = "pydantic" },
     { name = "structlog" },
@@ -63,6 +64,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "bible-core", editable = "bible-core" },
+    { name = "bible-semantic", editable = "bible-semantic" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pydantic", specifier = ">=2" },
     { name = "structlog", specifier = ">=24" },

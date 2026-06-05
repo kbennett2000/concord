@@ -13,6 +13,7 @@ DEFAULT_PORT = 8000
 DEFAULT_CORS_ORIGINS = "*"
 DEFAULT_DB_PATH = "bible.db"
 DEFAULT_TRANSLATION = "KJV"
+_FALSEY = {"0", "false", "no", "off"}
 
 
 def port() -> int:
@@ -48,3 +49,13 @@ def default_translation() -> str:
     Verified to be loaded at startup; the app refuses to start otherwise.
     """
     return os.environ.get("CONCORD_DEFAULT_TRANSLATION", DEFAULT_TRANSLATION).strip().upper()
+
+
+def semantic_enabled() -> bool:
+    """Whether semantic search is served. ``CONCORD_SEMANTIC_SEARCH`` (default on).
+
+    When on, the app primes the embedding store + model at startup (and refuses to start on
+    a model/vectors mismatch). Set it to ``0``/``false``/``no``/``off`` to disable — the
+    endpoint then returns 503 and no model is loaded (used by the fast test suite).
+    """
+    return os.environ.get("CONCORD_SEMANTIC_SEARCH", "1").strip().lower() not in _FALSEY
