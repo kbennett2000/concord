@@ -5,12 +5,14 @@
 A self-hosted, LAN-first, read-only Scripture API. It serves multiple public-domain Bible
 translations — aligned by book, chapter, and verse — from one canonical SQLite source. It
 also does semantic search: ask for verses by idea, not just keyword, and the right passages
-come back even when they don't share a word. Once built, it runs entirely offline: no CDNs,
-no telemetry, no phone-home.
+come back even when they don't share a word. And it knows where Scripture happened: ask where
+a place is, or which places a passage names, and the coordinates come back — honestly marked
+when a location is genuinely unknown. Once built, it runs entirely offline: no CDNs, no
+telemetry, no phone-home.
 
 ### Where to next?
 
-- **A developer who wants to get hands-on?** → [Quick start](#quick-start), including the new [semantic search](#semantic-search) endpoint.
+- **A developer who wants to get hands-on?** → [Quick start](#quick-start), including [semantic search](#semantic-search) and the new [geography](#geography) endpoints.
 - **Here because Scripture matters to you, and you're curious what this is?** → [What is this, really?](#what-is-this-really)
 - **Looking for a polished Bible app to actually use?** → [soap-journal](https://github.com/kbennett2000/soap-journal) (desktop) or [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone).
 
@@ -22,7 +24,9 @@ Concord is a small piece of software that serves Bible verses. It runs on a comp
 (or your church, or your office) controls — not on someone else's cloud. Once it's set up,
 it works offline, forever, without phoning home to anyone. It can also find verses by
 *meaning* — ask for "verses about anxiety" and it surfaces the passages that fit, even the
-ones that never use the word.
+ones that never use the word. And it can tell you *where* — where Capernaum is, or which
+places Paul passed through in a chapter — and it stays honest when a location is lost to
+history rather than guessing at one.
 
 But here's the thing: **Concord isn't an app you use directly.** It's the foundation that
 other apps are built on. Think of it like the foundation of a house — essential, but you
@@ -85,7 +89,7 @@ rest are below.
 
 ## What's in the box
 
-Nine endpoints. Each is documented in full — with real request/response examples — in
+Thirteen endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -95,6 +99,10 @@ Nine endpoints. Each is documented in full — with real request/response exampl
 | `GET /v1/search` | Full-text search within a single translation. |
 | `GET /v1/semantic-search` | Meaning-based search — find verses by idea, rendered in any translation. |
 | `GET /v1/cross-references/{ref}` | Cross-references for a verse, optionally with target text. |
+| `GET /v1/places` | Browse places, filtered by type, status, or name. |
+| `GET /v1/places/{id}` | One place's detail — coordinates, confidence, and how honestly it's located. |
+| `GET /v1/places/{id}/verses` | The verses that mention a place. |
+| `GET /v1/verses/{ref}/places` | The places a verse or passage names. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -122,6 +130,29 @@ curl 'localhost:8000/v1/semantic-search?q=the+good+shepherd&translation=KJV'
 ```
 
 The full parameters — `limit`, `min_score`, `include_text` — are in [`docs/API.md`](docs/API.md).
+
+### Geography
+
+`GET /v1/places` and its companions answer *where*. Every place has a stable id and is properly
+disambiguated — the several Antiochs and Bethlehems are distinct entries, not one fuzzy point —
+and the link runs **both ways**: ask a place for its verses, or ask a verse (or a whole chapter)
+for the places it names.
+
+```bash
+curl 'localhost:8000/v1/verses/Acts+17/places'   # Athens, Berea, Thessalonica, Amphipolis, ...
+```
+
+What gives it character is honesty about uncertainty. **Concord never invents a pin.** A place it
+can locate is `identified`, with coordinates (Jerusalem, 31.78°N 35.23°E). A place scholars place
+differently is `disputed` — a best-guess coordinate, flagged as contested. A place whose location
+is genuinely lost is `unknown`, with no coordinates at all rather than a fabricated one: the land
+of Nod, east of Eden, comes back honestly marked unknown. (Two more statuses round it out:
+`symbolic` for a name used non-literally, `multiple` for something itinerant like the tabernacle.)
+Coordinates are always named `latitude`/`longitude` fields — never a bare pair you could read
+backwards.
+
+The data is OpenBible.info's, **1,340 places** linked across the canon. The full parameters — the
+filters, pagination, and the honest null-coordinate response — are in [`docs/API.md`](docs/API.md).
 
 ## Configuration
 
