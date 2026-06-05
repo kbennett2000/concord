@@ -670,12 +670,27 @@ in the README.
   `curl /v1/semantic-search?q=do+not+be+anxious` (ranked) + `curl /healthz`
   (`semantic.enabled:true`, `embedding_count:31054`) — the **offline proof**; then
   `docker images` (size), `docker stats` (RSS), and timed queries on G434 + Optiplex.
-- **PENDING (Kris's measured numbers → land in SPEC §4 + here):**
-  - Image size (int8 `concord:latest`): _pending_
-  - Runtime RAM (in-container RSS, primed): _pending_
-  - Query latency — G434 (AVX2): _pending_
-  - Query latency — Optiplex (AVX-only, int8 via ORT fallback — the one real unknown): _pending_
-  - `--network none` semantic search + healthz: _pending verification_
+- **Measured (2026-06-05, built on G434, verified on G434 + the Optiplex).** Docker turned
+  out to be available on G434 after all, so cc ran the whole verification rather than
+  leaving it to a separate host pass:
+  - **Image size:** 1.42 GB on-disk / **446 MB compressed** (the ship size). On-disk exceeds
+    the original "well under 1 GB" estimate — breakdown: model 347 MB + venv/ONNX 228 MB +
+    `bible.db` 139 MB + `embeddings.db` 128 MB + base ~130 MB. A future trim (slimmer ORT,
+    fewer baked translations) is a possible follow-up, not S3b.
+  - **Runtime RAM:** ~662 MiB RSS (both boxes) — well under the 2 GB rail and the §4 estimate.
+  - **Query latency (warm median):** G434 (AVX2) **42 ms** (32–59); Optiplex (AVX-only, int8
+    via ORT fallback) **92 ms** (59–109). Optiplex cold-start→ready 6.0 s. The AVX-fallback
+    worry was overblown — sub-100 ms on the $50 box; no non-AVX2 variant needed.
+  - **Offline (`--network none`):** ✅ verified on **both** boxes — ranked semantic results +
+    `/healthz` semantic-ready, no Hugging Face reach. The model baked correctly.
+  - **Deploy path validated:** `docker save | gzip` (446 MB) → `scp` (~2 min) → `docker load`
+    (~36 s) on the Optiplex; the modest box never builds.
+  - **Build time:** ~22 min on G434 (the in-builder int8 embed dominates).
+- **Bug found by this verification:** the Optiplex offline run surfaced an intermittent 500
+  from a cross-thread SQLite `close()` (`check_same_thread`) on every sync endpoint — latent
+  in v1, tripped by the Optiplex's thread scheduling. Fixed in **PR #18** (see the fix entry
+  below); the image was rebuilt on the fix and the numbers above are post-fix (25/25 queries
+  200 on both boxes).
 
 ### Fix — cross-thread SQLite close (found during S3b verification)
 - **Date:** 2026-06-05. **PR:** #18 (`fix/sqlite-cross-thread-close`), off `main`.
