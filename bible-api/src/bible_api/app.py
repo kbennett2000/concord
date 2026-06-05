@@ -74,6 +74,7 @@ class HealthResponse(BaseModel):
     verse_count: int = 0
     cross_ref_count: int = 0
     book_count: int = 0
+    place_count: int = 0
     semantic: SemanticHealth | None = None
 
 
@@ -92,6 +93,7 @@ def _verify_and_cache(app: FastAPI) -> None:
             verse_count = conn.execute("SELECT COUNT(*) FROM verses").fetchone()[0]
             cross_ref_count = conn.execute("SELECT COUNT(*) FROM cross_references").fetchone()[0]
             book_count = conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]
+            place_count = conn.execute("SELECT COUNT(*) FROM places").fetchone()[0]
             loaded = {row[0] for row in conn.execute("SELECT id FROM translations")}
             book_names = {row[0]: row[1] for row in conn.execute("SELECT id, name FROM books")}
         except sqlite3.OperationalError as exc:
@@ -115,6 +117,7 @@ def _verify_and_cache(app: FastAPI) -> None:
     app.state.verse_count = verse_count
     app.state.cross_ref_count = cross_ref_count
     app.state.book_count = book_count
+    app.state.place_count = place_count
     app.state.book_names = book_names
 
 
@@ -216,6 +219,7 @@ def healthz(request: Request) -> HealthResponse:
         verse_count=state.verse_count,
         cross_ref_count=state.cross_ref_count,
         book_count=state.book_count,
+        place_count=state.place_count,
         semantic=semantic,
     )
 
