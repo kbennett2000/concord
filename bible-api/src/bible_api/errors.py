@@ -51,6 +51,31 @@ class SemanticUnavailableError(Exception):
     """Semantic search was requested but is disabled / not primed on this instance."""
 
 
+class UnknownPlaceError(Exception):
+    """A requested place id (a path resource) is not in the places table → 404."""
+
+    def __init__(self, place_id: str) -> None:
+        super().__init__(f"unknown place {place_id!r}")
+        self.place_id = place_id
+
+    @property
+    def detail(self) -> dict[str, Any]:
+        return {"place_id": self.place_id}
+
+
+class PlaceFilterError(Exception):
+    """A ``?type=``/``?status=`` *filter* value did not match a known value.
+
+    Maps to 400 (a query-param filter), distinct from the 404 place-id path resource.
+    Carries its own ``code`` so type and status filters report distinctly.
+    """
+
+    def __init__(self, code: str, message: str, detail: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.code = code
+        self.detail = detail
+
+
 def _envelope(code: str, message: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "detail": detail or {}}}
 
@@ -102,6 +127,15 @@ async def _handle_semantic_unavailable(_request: Request, exc: Exception) -> Res
     return _error_response(503, "semantic_unavailable", str(exc))
 
 
+async def _handle_unknown_place(_request: Request, exc: Exception) -> Response:
+    return _error_response(404, "unknown_place", str(exc), cast(UnknownPlaceError, exc).detail)
+
+
+async def _handle_place_filter(_request: Request, exc: Exception) -> Response:
+    place_exc = cast(PlaceFilterError, exc)
+    return _error_response(400, place_exc.code, str(exc), place_exc.detail)
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Map domain + validation exceptions to the envelope.
 
@@ -117,4 +151,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(NoMatchError, _handle_no_match)
     app.add_exception_handler(SearchQueryError, _handle_search_query)
     app.add_exception_handler(SemanticUnavailableError, _handle_semantic_unavailable)
+    app.add_exception_handler(UnknownPlaceError, _handle_unknown_place)
+    app.add_exception_handler(PlaceFilterError, _handle_place_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)

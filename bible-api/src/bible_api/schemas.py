@@ -184,3 +184,81 @@ class SemanticSearchResponse(BaseModel):
     translation: str
     count: int
     results: list[SemanticSearchHit]
+
+
+class PlaceSummary(BaseModel):
+    """A place's summary (SPEC v3 §7). Coordinates are surfaced as named ``latitude`` /
+    ``longitude`` — never an ordered pair — and are ``null`` (with ``confidence`` null) for
+    unknown/symbolic/multiple places: the honesty model, surfaced rather than hidden."""
+
+    id: str
+    friendly_id: str
+    name: str
+    type: str
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    confidence_score: int | None
+    status: str
+
+
+class PlacesResponse(BaseModel):
+    """A page of places: the echoed filter/pagination state, total count, and summaries."""
+
+    type: str | None
+    status: str | None
+    q: str | None
+    limit: int
+    offset: int
+    total: int
+    places: list[PlaceSummary]
+
+
+class PlaceDetail(BaseModel):
+    """A single place's full detail: every column plus its verse count."""
+
+    id: str
+    friendly_id: str
+    name: str
+    url_slug: str
+    type: str
+    preceding_article: str
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    confidence_score: int | None
+    status: str
+    modern_name: str | None
+    verse_count: int
+
+
+class PlaceVerse(BaseModel):
+    """One verse a place is mentioned in. ``text`` is null when not requested or absent."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    text: str | None
+
+
+class PlaceVersesResponse(BaseModel):
+    """A page of the verses mentioning a place, echoing the request state.
+
+    ``translation`` is null unless ``include_text=true``."""
+
+    id: str
+    translation: str | None
+    include_text: bool
+    limit: int
+    offset: int
+    total: int
+    verses: list[PlaceVerse]
+
+
+class VersePlacesResponse(BaseModel):
+    """The places named in a verse or range (the inverse lookup): the full deduped union."""
+
+    reference: str
+    total: int
+    places: list[PlaceSummary]
