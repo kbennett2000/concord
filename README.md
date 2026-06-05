@@ -227,18 +227,18 @@ runtime.
 
 ## What Concord doesn't do (yet)
 
-Concord v1 is deliberately scoped. A few things didn't make this release on purpose:
+Concord is deliberately scoped. Semantic search landed in v2; a few things still haven't made
+a release, on purpose:
 
 - **Catholic and deuterocanonical books.** The schema is ready for them, but the data, naming
   conventions, and Vulgate psalm-numbering mapping are all distinct work that didn't belong in
-  a clean v1. Future work.
+  a clean release. Future work.
 - **Multi-translation search.** Search hits a single translation at a time. Cross-translation
   search introduces noise (near-duplicate hits) that's worth solving carefully when the time
   comes.
-- **Semantic search via embeddings.** The single highest-leverage addition on the v2 roadmap.
-  Lets you ask *"find verses about anxiety"* and get relevant passages without keyword
-  overlap. Runs offline, like everything else.
-- **Biblical geography.** Place-name datasets exist; integrating them is its own slice of work.
+- **Biblical geography.** The named next frontier — place coordinates and place-to-verse links
+  (the v3 candidate). Place-name datasets exist; integrating them cleanly is its own slice of
+  work.
 
 If any of these would unblock a project of yours, open an issue and say so — it shapes what
 gets built next.
