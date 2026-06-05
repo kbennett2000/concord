@@ -245,14 +245,15 @@ Primary key `(book_id, chapter, verse)`. One row per WEB verse (~31,100 rows, ~9
 | `model` | TEXT | `ibm-granite/granite-embedding-311m-multilingual-r2` |
 | `model_revision` | TEXT | pinned Hugging Face commit SHA the vectors were built with (added in S1) |
 | `dim` | INTEGER | 768 |
+| `precision` | TEXT | inference precision the corpus was built at — `int8` (the standard) or `fp32` (added in S3a). Query + corpus must match; the guard refuses a mismatch |
 | `translation` | TEXT | `WEB` |
 | `normalized` | INTEGER | 1 (vectors are unit-normalized) |
 | `built_at` | TEXT | ISO timestamp |
 
 At startup, `store.py` reads all rows into a contiguous `numpy` float32 matrix `(N, 768)`
 plus a parallel list of `(book_id, chapter, verse)` refs, and **asserts the running query
-model (id + revision) and dim match `embedding_meta`** — refusing to serve mismatched
-vectors rather than returning garbage similarities.
+model (id + revision), dim, and precision match `embedding_meta`** — refusing to serve
+mismatched vectors rather than returning garbage similarities.
 
 ---
 
