@@ -561,3 +561,44 @@ in the README.
   than a file pragma. `pytest.approx` is loosely typed too → used plain tolerances (matches
   S0). Test files keep the `test_semantic_*` prefix to avoid basename collisions (bible-core
   already has `test_search.py`).
+
+### Slice S2b — Semantic search endpoint
+- **Date:** 2026-06-05. **PR:** #15 (`slice/v2-s2b-endpoint`). **S2 (S2a + S2b) complete.**
+- **What landed:** `GET /v1/semantic-search` in `bible-api`, the cross-translation text
+  hydrate, body-hash ETag caching (reused `cached_json_response`), FastAPI-lifespan priming
+  (store load + guard + model warm-up), `/healthz` semantic readiness, and a `bible-api →
+  bible-semantic` workspace dependency. `bible-core` and `bible-semantic` untouched.
+- **Default display translation = `WEB`** (the embedded translation): a new
+  `resolve_display_translation` mirrors `resolve_translation` but defaults to the store's
+  embedded translation. Search always runs in WEB space; `translation` only chooses
+  displayed text.
+- **Unknown translation → 404, not 400:** SPEC §7 said `400 "consistent with /v1/search"`,
+  but v1 actually returns **404** for an unknown translation (`UnknownTranslationError`;
+  400 is the unknown-*book* filter). Reused that path → 404 `unknown_translation`, and
+  **corrected SPEC §7 400→404** (Kris-confirmed).
+- **Hydrate:** per-ref `bible_core.queries.get_verse_text(conn, translation, b, c, v)` →
+  `str | None`; a verse absent in the requested translation yields `text: null` (the match
+  still ranks). `reference` ("Philippians 4:6") from a `book_id→name` map cached on
+  `app.state` at startup. `score` rounded to **4 dp**.
+- **Priming vs test speed:** config flag `CONCORD_SEMANTIC_SEARCH` (default on) +
+  `create_app(enable_semantic=..., embeddings_path=...)`. The API holds its own
+  `app.state.semantic_store` (from `load_store` at lifespan) and composes `embed_query` +
+  `cosine_top_k` — *not* the `get_store()` singleton — so the store path is injectable. The
+  shared fast-test `client` fixture passes `enable_semantic=False`; the endpoint then 503s
+  (`semantic_unavailable`) and **no model loads**, keeping the fast suite ~0.6 s. Real
+  results are integration-marked against the repo's `bible.db` + `embeddings.db`.
+- **Boot guard:** lifespan runs `load_store` (the model-vs-vectors guard); a mismatch raises
+  `RuntimeError` → the app **refuses to start**. Tested fast by pointing at a tiny
+  mismatched `embeddings.db` (fails at the guard, before any model load).
+- **`/healthz` shape:** adds a nested `semantic` object —
+  `{enabled, translation, embedding_count, model, dim}` (or `{enabled: false}` when off).
+- **Observed (primed, live uvicorn on the dev box):** first real query ~**54 ms** (model
+  pre-warmed at startup, so no ~3 s first-hit penalty); ETag 200→304 round-trip confirmed;
+  `/healthz` reports `embedding_count: 31054`, `translation: WEB`, `dim: 768`.
+- **Gotchas:** `bible-api` now depends on `bible-semantic` (workspace path dep) — importing
+  `routers` pulls `onnxruntime` at import time, but the *model* loads only on prime, so fast
+  tests stay model-free. bible-api endpoint tests need the existing file-level pyright pragma
+  for the untyped `TestClient`/httpx surface. The endpoint integration test is
+  `test_semantic_endpoint_real.py` (not `..._search_real.py`) to avoid colliding with
+  bible-semantic's S2a test of that name. Integration validated for `bible-api` (9 passed);
+  `bible-semantic` is untouched so its suite (incl. S1's ~23-min build) is unaffected.
