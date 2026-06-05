@@ -105,8 +105,7 @@ _TABLES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
     "ON cross_references (from_book_id, from_chapter, from_verse)",
     # Supports the verse→places direction (mirrors idx_xref_from).
-    "CREATE INDEX IF NOT EXISTS idx_place_verses_bcv "
-    "ON place_verses (book_id, chapter, verse)",
+    "CREATE INDEX IF NOT EXISTS idx_place_verses_bcv ON place_verses (book_id, chapter, verse)",
 )
 
 # FTS5 virtual table over verse text, external-content linked to verses.id.
