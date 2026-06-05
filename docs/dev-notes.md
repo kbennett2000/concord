@@ -676,3 +676,21 @@ in the README.
   - Query latency — G434 (AVX2): _pending_
   - Query latency — Optiplex (AVX-only, int8 via ORT fallback — the one real unknown): _pending_
   - `--network none` semantic search + healthz: _pending verification_
+
+### Fix — cross-thread SQLite close (found during S3b verification)
+- **Date:** 2026-06-05. **PR:** #18 (`fix/sqlite-cross-thread-close`), off `main`.
+- **Bug:** `bible_core.db.connect_readonly` opened the connection with the default
+  `check_same_thread=True`. Under uvicorn, FastAPI runs a sync endpoint in a threadpool and
+  a generator dependency's `finally: conn.close()` (`bible_api.dependencies.get_conn`) can
+  run on a *different* worker thread than the one that opened the connection → intermittent
+  `sqlite3.ProgrammingError` surfaced as **HTTP 500** on any sync endpoint (all of v1 +
+  semantic-search). Latent and timing-dependent (tests/TestClient + G434 reused the thread
+  and never tripped it); the **Optiplex's thread scheduling tripped it on the 2nd request**
+  during S3b's offline run.
+- **Fix:** `check_same_thread=False` in `connect_readonly`. Each request gets its own
+  read-only connection, so access is never concurrent — only the cross-thread `close()` —
+  making the check safe to disable (the standard FastAPI + sqlite remedy). Shipped with a
+  regression test (`test_readonly_connection_usable_across_threads`) that reproduces the
+  cross-thread close and failed before the fix.
+- **Note:** unblocks the S3b Optiplex latency measurement — after this merges, rebuild the
+  image, re-run the Optiplex warm-latency, and land the S3b numbers in PR #17.
