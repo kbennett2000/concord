@@ -47,6 +47,10 @@ class NoMatchError(Exception):
     """A /random request's filters (book/testament) matched no verse."""
 
 
+class SemanticUnavailableError(Exception):
+    """Semantic search was requested but is disabled / not primed on this instance."""
+
+
 def _envelope(code: str, message: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "detail": detail or {}}}
 
@@ -94,6 +98,10 @@ async def _handle_search_query(_request: Request, exc: Exception) -> Response:
     )
 
 
+async def _handle_semantic_unavailable(_request: Request, exc: Exception) -> Response:
+    return _error_response(503, "semantic_unavailable", str(exc))
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Map domain + validation exceptions to the envelope.
 
@@ -108,4 +116,5 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(BookFilterError, _handle_book_filter)
     app.add_exception_handler(NoMatchError, _handle_no_match)
     app.add_exception_handler(SearchQueryError, _handle_search_query)
+    app.add_exception_handler(SemanticUnavailableError, _handle_semantic_unavailable)
     app.add_exception_handler(RequestValidationError, _handle_validation)

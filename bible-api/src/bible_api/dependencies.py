@@ -63,3 +63,24 @@ def resolve_translation(request: Request, translation: str | None) -> str:
     if tid not in loaded:
         raise UnknownTranslationError(tid, list(loaded))
     return tid
+
+
+def resolve_display_translation(request: Request, translation: str | None) -> str:
+    """Resolve ``?translation=`` for /v1/semantic-search's *displayed* text.
+
+    Search always runs in WEB space; this only chooses which translation's text is
+    hydrated. Omitted/blank → the embedded translation (WEB) when the semantic store is
+    primed, else the configured default. Anything not loaded → 404 (``UnknownTranslationError``).
+    """
+    loaded: set[str] = request.app.state.translations
+
+    if translation is None or not translation.strip():
+        store = request.app.state.semantic_store
+        return (
+            store.meta.translation if store is not None else request.app.state.default_translation
+        )
+
+    tid = translation.strip().upper()
+    if tid not in loaded:
+        raise UnknownTranslationError(tid, list(loaded))
+    return tid
