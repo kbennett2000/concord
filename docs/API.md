@@ -15,6 +15,7 @@ running instance loaded with the 13 bundled public-domain translations.
 - [`GET /v1/verses/{ref}`](#get-v1versesref)
 - [`GET /v1/chapters/{book}/{chapter}`](#get-v1chaptersbookchapter)
 - [`GET /v1/search`](#get-v1search)
+- [`GET /v1/semantic-search`](#get-v1semantic-search)
 - [`GET /v1/cross-references/{ref}`](#get-v1cross-referencesref)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
@@ -195,6 +196,70 @@ match count, independent of the page.
 carries the SQLite message) · `404 unknown_translation` · `400 unknown_book` (filter).
 **Caching:** immutable.
 
+## `GET /v1/semantic-search`
+
+Meaning-based search: find verses by idea, not keyword. The query is embedded with a local
+model and compared against precomputed verse vectors by cosine similarity; the closest verses
+come back ranked. Runs fully offline — the model is baked into the image.
+
+Search runs over **one embedded translation, the World English Bible (WEB)**, in meaning-space.
+The matches are verse *references*, so `?translation=` controls which translation's **text** is
+returned without changing the ranking (see "search in WEB, read in any translation" below).
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `q` | string | — (required) | Natural-language query, e.g. `verses about anxiety`. |
+| `limit` | int | `20` | 1–100. Number of results. |
+| `translation` | string | `WEB` | Which translation's **text** to return. Search always runs in WEB space. |
+| `min_score` | float | — | Optional cosine floor in `[-1, 1]`; drops weaker matches. |
+| `include_text` | bool | `true` | When `false`, results carry refs + scores and `text` is `null`. |
+
+```bash
+$ curl -s 'localhost:8000/v1/semantic-search?q=do+not+be+anxious&limit=3'
+```
+```json
+{
+  "query": "do not be anxious", "translation": "WEB", "count": 3,
+  "results": [
+    { "book": "DEU", "chapter": 1, "verse": 29, "reference": "Deuteronomy 1:29", "score": 0.9174,
+      "text": "Then I said to you, “Don’t dread, neither be afraid of them." },
+    { "book": "HAG", "chapter": 2, "verse": 5, "reference": "Haggai 2:5", "score": 0.8967,
+      "text": "This is the word that I covenanted with you when you came out of Egypt, ..." },
+    { "book": "1TH", "chapter": 5, "verse": 20, "reference": "1 Thessalonians 5:20", "score": 0.8952,
+      "text": "Don’t despise prophesies." }
+  ]
+}
+```
+
+`score` is cosine similarity in `[-1, 1]` (higher is closer), rounded to 4 places; results are
+ranked descending.
+
+**Search in WEB, read in any translation.** The matched references are hydrated in the
+requested `translation`. A verse absent there (a versification gap) comes back with
+`text: null` — the match still ranks; only its text in that translation is missing. Searching
+`the good shepherd` matches John 10 in WEB space and renders it in the KJV:
+
+```bash
+$ curl -s 'localhost:8000/v1/semantic-search?q=the+good+shepherd&translation=KJV&limit=2'
+```
+```json
+{
+  "query": "the good shepherd", "translation": "KJV", "count": 2,
+  "results": [
+    { "book": "JHN", "chapter": 10, "verse": 11, "reference": "John 10:11", "score": 0.9421,
+      "text": "I am the good shepherd: the good shepherd giveth his life for the sheep." },
+    { "book": "JHN", "chapter": 10, "verse": 14, "reference": "John 10:14", "score": 0.9111,
+      "text": "I am the good shepherd, and know my [sheep], and am known of mine." }
+  ]
+}
+```
+
+**Empty results** return `200` with `"count": 0` and `"results": []` — never a 404.
+
+**Errors:** `422 invalid_parameter` (missing/empty `q`, `limit` out of 1–100, `min_score`
+outside `[-1, 1]`) · `404 unknown_translation`. **Caching:** immutable (body-hash ETag, like
+`/v1/search`).
+
 ## `GET /v1/cross-references/{ref}`
 
 Cross-references whose *source* falls within `{ref}`, ordered by community votes
@@ -325,11 +390,20 @@ Liveness plus row counts. Not under `/v1`; no caching headers.
 $ curl -s 'localhost:8000/healthz'
 ```
 ```json
-{ "status": "ok", "translation_count": 13, "verse_count": 404889, "cross_ref_count": 344799, "book_count": 66 }
+{
+  "status": "ok",
+  "translation_count": 13, "verse_count": 404889, "cross_ref_count": 344799, "book_count": 66,
+  "semantic": {
+    "enabled": true, "translation": "WEB", "embedding_count": 31054,
+    "model": "ibm-granite/granite-embedding-311m-multilingual-r2", "dim": 768
+  }
+}
 ```
 
-The Docker healthcheck treats the container as healthy when this returns 200 with
-`translation_count > 0`.
+The `semantic` block reports semantic-search readiness: the embedded translation, the vector
+count, and the model. When semantic search is disabled (`CONCORD_SEMANTIC_SEARCH=0`) it is
+`{ "enabled": false }`. The Docker healthcheck treats the container as healthy when this
+returns 200 with `translation_count > 0` and semantic search ready.
 
 ## Reference grammar
 

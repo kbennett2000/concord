@@ -3,12 +3,14 @@
 # Concord
 
 A self-hosted, LAN-first, read-only Scripture API. It serves multiple public-domain Bible
-translations — aligned by book, chapter, and verse — from one canonical SQLite source. Once
-built, it runs entirely offline: no CDNs, no telemetry, no phone-home.
+translations — aligned by book, chapter, and verse — from one canonical SQLite source. It
+also does semantic search: ask for verses by idea, not just keyword, and the right passages
+come back even when they don't share a word. Once built, it runs entirely offline: no CDNs,
+no telemetry, no phone-home.
 
 ### Where to next?
 
-- **A developer who wants to get hands-on?** → [Quick start](#quick-start)
+- **A developer who wants to get hands-on?** → [Quick start](#quick-start), including the new [semantic search](#semantic-search) endpoint.
 - **Here because Scripture matters to you, and you're curious what this is?** → [What is this, really?](#what-is-this-really)
 - **Looking for a polished Bible app to actually use?** → [soap-journal](https://github.com/kbennett2000/soap-journal) (desktop) or [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone).
 
@@ -18,7 +20,9 @@ Hi. You found Concord, and you might be wondering what you're looking at.
 
 Concord is a small piece of software that serves Bible verses. It runs on a computer you
 (or your church, or your office) controls — not on someone else's cloud. Once it's set up,
-it works offline, forever, without phoning home to anyone.
+it works offline, forever, without phoning home to anyone. It can also find verses by
+*meaning* — ask for "verses about anxiety" and it surfaces the passages that fit, even the
+ones that never use the word.
 
 But here's the thing: **Concord isn't an app you use directly.** It's the foundation that
 other apps are built on. Think of it like the foundation of a house — essential, but you
@@ -70,12 +74,18 @@ Want a verse?
 curl 'localhost:8000/v1/verses/John%203:16'
 ```
 
+Or find verses by meaning:
+
+```bash
+curl 'localhost:8000/v1/semantic-search?q=do+not+be+anxious'
+```
+
 The full API reference is in [`docs/API.md`](docs/API.md). Configuration, deployment, and the
 rest are below.
 
 ## What's in the box
 
-Eight endpoints. Each is documented in full — with real request/response examples — in
+Nine endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -83,6 +93,7 @@ Eight endpoints. Each is documented in full — with real request/response examp
 | `GET /v1/verses/{ref}` | Fetch a verse, range, list, or chapter across one or more translations. |
 | `GET /v1/chapters/{book}/{chapter}` | Fetch a whole chapter, multi-translation aware. |
 | `GET /v1/search` | Full-text search within a single translation. |
+| `GET /v1/semantic-search` | Meaning-based search — find verses by idea, rendered in any translation. |
 | `GET /v1/cross-references/{ref}` | Cross-references for a verse, optionally with target text. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
@@ -92,7 +103,25 @@ Eight endpoints. Each is documented in full — with real request/response examp
 Under the hood, Concord is two packages. `bible-core` is the engine — schema, loader,
 reference parser, and queries — with **zero web dependencies**, so a Python app can embed it
 in-process and skip HTTP entirely. `bible-api` is the thin FastAPI layer that wraps it. The
-`/v1` prefix is a promise: encode against this surface with confidence.
+`/v1` prefix is a promise: encode against this surface with confidence. (Semantic search adds
+a third package, `bible-semantic` — the embedding engine, also web-free.)
+
+### Semantic search
+
+`GET /v1/semantic-search` finds verses by meaning. Ask for `verses about anxiety` and you get
+the passages that fit — even ones that never use the word — ranked by closeness.
+
+The search runs over one embedded translation, the **World English Bible (WEB)**, in
+meaning-space. What it finds are verse *references*, so you can read them in whatever
+translation you want: add `?translation=KJV` and the same hits come back as KJV text. It runs
+fully offline like everything else — the embedding model is baked into the image, and nothing
+is ever sent anywhere.
+
+```bash
+curl 'localhost:8000/v1/semantic-search?q=the+good+shepherd&translation=KJV'
+```
+
+The full parameters — `limit`, `min_score`, `include_text` — are in [`docs/API.md`](docs/API.md).
 
 ## Configuration
 
@@ -105,6 +134,7 @@ in a `.env` file (`docker compose` reads both). See [`.env.example`](.env.exampl
 | `CONCORD_CORS_ORIGINS` | `*` | Comma-separated allowed CORS origins. `*` suits a trusted LAN. |
 | `CONCORD_DEFAULT_TRANSLATION` | `KJV` | Translation used when `?translation(s)=` is omitted. Must be one that's loaded, or the API refuses to start. |
 | `BIBLE_DB_PATH` | `/app/bible.db` | Path to the database inside the container. |
+| `CONCORD_SEMANTIC_SEARCH` | `1` | Whether `/v1/semantic-search` is served. Set it to `0` to disable (skips loading the embedding model). |
 
 Changing the port is one line:
 
@@ -112,11 +142,28 @@ Changing the port is one line:
 BIBLE_API_PORT=9001 docker compose up -d   # now on localhost:9001
 ```
 
+## Requirements
+
+Concord runs on modest, owned hardware. There are two tiers, depending on whether semantic
+search is on — measured, not guessed:
+
+| | Core API | + Semantic search |
+|---|---|---|
+| **Query latency** | instant (in-memory SQLite) | ~92 ms on a 2012 no-AVX2 desktop, ~42 ms on a modern machine — interactive |
+| **RAM** | ~256 MB | ~662 MB |
+| **To deploy** | <100 MB image | ~450 MB compressed to transfer, ~1.4 GB on disk once loaded |
+| **CPU** | anything (even a Raspberry Pi) | x86-64 with AVX (2011+) or Apple Silicon; AVX2 is faster but not required |
+| **GPU** | none | none |
+| **Network** | none at runtime | none at runtime |
+
+Tested on a 2012 Dell Optiplex 9010 — a $50 used desktop: semantic Scripture search in under
+a tenth of a second, fully offline. If it runs there, it runs on whatever you've got.
+
 ## Deployment
 
-The database is **baked into the image** at build time — no volumes, no separate data step.
-A fresh container is immediately ready and identical to every other container built from the
-same source.
+The database, the embedding model, and the precomputed verse vectors are all **baked into
+the image** at build time — no volumes, no separate data step. A fresh container is
+immediately ready and identical to every other container built from the same source.
 
 Deploy to a LAN host (replace `192.168.1.62` with yours):
 
@@ -126,6 +173,21 @@ ssh user@192.168.1.62 'cd ~/concord && docker compose up -d'
 ```
 
 Then from any LAN client: `curl http://192.168.1.62:8000/healthz`.
+
+**Build on a capable machine, run on a modest one.** Embedding the corpus happens once at
+image-build time and takes ~20–30 minutes — fast on a recent CPU, but slow on an old one
+(an AVX2-less box could take an hour or more). So build the image where it's quick, then ship
+the built image to the modest box rather than building there:
+
+```bash
+docker save concord:latest | gzip > concord.tar.gz          # on the capable machine (~450 MB)
+scp concord.tar.gz user@192.168.1.62:~/                      # to the LAN box
+ssh user@192.168.1.62 'gunzip -c concord.tar.gz | docker load && docker compose up -d'
+```
+
+The modest box only ever runs the fast query-time path. Querying works fully offline —
+verified with the network physically off (`docker run --network none …` still serves
+`/v1/semantic-search` and `/healthz`).
 
 **Verifying it's truly offline.** The image carries every asset it needs, including the
 Swagger UI bundle, so `/docs` renders with no internet at all:
@@ -157,20 +219,26 @@ there and the loader picks it up automatically on a local build, while it never 
 public repo or a shared image. The pattern lets an operator run translations they're licensed
 for without ever committing them.
 
+Semantic search uses IBM's
+[`granite-embedding-311m-multilingual-r2`](https://huggingface.co/ibm-granite/granite-embedding-311m-multilingual-r2)
+embedding model — **Apache 2.0 licensed**, pinned to a fixed revision and baked into the
+image (the int8 build, ~313 MB). It's downloaded once at build time and never contacted at
+runtime.
+
 ## What Concord doesn't do (yet)
 
-Concord v1 is deliberately scoped. A few things didn't make this release on purpose:
+Concord is deliberately scoped. Semantic search landed in v2; a few things still haven't made
+a release, on purpose:
 
 - **Catholic and deuterocanonical books.** The schema is ready for them, but the data, naming
   conventions, and Vulgate psalm-numbering mapping are all distinct work that didn't belong in
-  a clean v1. Future work.
+  a clean release. Future work.
 - **Multi-translation search.** Search hits a single translation at a time. Cross-translation
   search introduces noise (near-duplicate hits) that's worth solving carefully when the time
   comes.
-- **Semantic search via embeddings.** The single highest-leverage addition on the v2 roadmap.
-  Lets you ask *"find verses about anxiety"* and get relevant passages without keyword
-  overlap. Runs offline, like everything else.
-- **Biblical geography.** Place-name datasets exist; integrating them is its own slice of work.
+- **Biblical geography.** The named next frontier — place coordinates and place-to-verse links
+  (the v3 candidate). Place-name datasets exist; integrating them cleanly is its own slice of
+  work.
 
 If any of these would unblock a project of yours, open an issue and say so — it shapes what
 gets built next.
@@ -195,3 +263,5 @@ The `/v1` prefix means today's responses are a contract. Build against them with
 - **Bundled translations:** public domain — see [`data/SOURCES.md`](data/SOURCES.md).
 - **Cross-references:** [OpenBible.info](https://www.openbible.info/labs/cross-references/),
   licensed under Creative Commons Attribution (CC BY).
+- **Embedding model:** [`ibm-granite/granite-embedding-311m-multilingual-r2`](https://huggingface.co/ibm-granite/granite-embedding-311m-multilingual-r2),
+  Apache 2.0 © IBM.
