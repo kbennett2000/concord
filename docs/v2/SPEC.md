@@ -243,6 +243,7 @@ Primary key `(book_id, chapter, verse)`. One row per WEB verse (~31,100 rows, ~9
 | column | type | notes |
 |---|---|---|
 | `model` | TEXT | `ibm-granite/granite-embedding-311m-multilingual-r2` |
+| `model_revision` | TEXT | pinned Hugging Face commit SHA the vectors were built with (added in S1) |
 | `dim` | INTEGER | 768 |
 | `translation` | TEXT | `WEB` |
 | `normalized` | INTEGER | 1 (vectors are unit-normalized) |
@@ -250,8 +251,8 @@ Primary key `(book_id, chapter, verse)`. One row per WEB verse (~31,100 rows, ~9
 
 At startup, `store.py` reads all rows into a contiguous `numpy` float32 matrix `(N, 768)`
 plus a parallel list of `(book_id, chapter, verse)` refs, and **asserts the running query
-model and dim match `embedding_meta`** — refusing to serve mismatched vectors rather than
-returning garbage similarities.
+model (id + revision) and dim match `embedding_meta`** — refusing to serve mismatched
+vectors rather than returning garbage similarities.
 
 ---
 

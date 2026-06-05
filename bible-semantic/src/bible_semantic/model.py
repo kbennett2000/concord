@@ -72,16 +72,27 @@ def _load() -> tuple[Tokenizer, ort.InferenceSession]:
     return tokenizer, session
 
 
-def embed_query(text: str) -> NDArray[np.float32]:
-    """Embed ``text`` into a 768-dim, L2-normalized float32 vector.
+def embed_texts(texts: list[str]) -> NDArray[np.float32]:
+    """Embed a batch of texts into an ``(N, 768)`` array of L2-normalized float32 vectors.
 
-    Pipeline: tokenize -> ONNX inference -> CLS pool (first token) -> L2-normalize.
+    Same recipe as a single query, batched: tokenize -> ONNX inference -> CLS pool ->
+    L2-normalize. Sequences are right-padded to the batch's longest length; CLS pooling
+    reads token 0, which is always a real token (never padding), and padded positions are
+    masked out by the attention mask — so a batched result matches the single-input result.
     Raises ``FileNotFoundError`` if the model has not been fetched.
     """
+    if not texts:
+        return np.empty((0, EMBEDDING_DIM), dtype=np.float32)
+
     tokenizer, session = _load()
-    encoding = tokenizer.encode(text)
-    input_ids: NDArray[np.int64] = np.asarray([encoding.ids], dtype=np.int64)
-    attention_mask: NDArray[np.int64] = np.asarray([encoding.attention_mask], dtype=np.int64)
+    encodings = tokenizer.encode_batch(texts)
+    max_len = max(len(enc.ids) for enc in encodings)
+    input_ids = np.zeros((len(encodings), max_len), dtype=np.int64)
+    attention_mask = np.zeros((len(encodings), max_len), dtype=np.int64)
+    for i, enc in enumerate(encodings):
+        length = len(enc.ids)
+        input_ids[i, :length] = enc.ids
+        attention_mask[i, :length] = enc.attention_mask
 
     # Feed only the inputs the graph declares. ModernBERT takes input_ids + attention_mask;
     # this stays correct if a variant export also wants token_type_ids.
@@ -102,5 +113,18 @@ def embed_query(text: str) -> NDArray[np.float32]:
             f"expected (batch, seq_len, {EMBEDDING_DIM})"
         )
 
-    cls_vector = last_hidden_state[0, 0, :]  # CLS pooling: the first token's hidden state
-    return l2_normalize(cls_vector)
+    cls = last_hidden_state[:, 0, :]  # CLS pooling: each row's first-token hidden state
+    norms = np.linalg.norm(cls, axis=1, keepdims=True)
+    if np.any(norms == 0.0):
+        raise ValueError("cannot L2-normalize a zero vector")
+    return (cls / norms).astype(np.float32)
+
+
+def embed_query(text: str) -> NDArray[np.float32]:
+    """Embed ``text`` into a 768-dim, L2-normalized float32 vector.
+
+    Pipeline: tokenize -> ONNX inference -> CLS pool (first token) -> L2-normalize. Thin
+    wrapper over :func:`embed_texts` (a one-row batch needs no padding) so there is a single
+    inference code path. Raises ``FileNotFoundError`` if the model has not been fetched.
+    """
+    return embed_texts([text])[0]

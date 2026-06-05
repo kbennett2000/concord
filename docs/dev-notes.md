@@ -491,3 +491,39 @@ in the README.
   transitively — not a direct dep, not in the forbidden ML set. Integration tests are marked
   `@pytest.mark.integration` and skip cleanly when `models/` is absent, keeping the default
   suite fast/offline (343 passed, 7 deselected).
+
+### Slice S1 — Embeddings store & corpus build
+- **Date:** 2026-06-04. **PR:** #13 (`slice/v2-s1-corpus-build`).
+- **What landed:** the `embeddings.db` schema (`bible_semantic/schema.py`:
+  `verse_embeddings` + `embedding_meta`), a batched `embed_texts` in `model.py` (with
+  `embed_query` now delegating to it), the build-time generator `build.py`, the
+  `scripts/build_embeddings.py` CLI, and one additive read-only `bible-core` helper.
+- **WEB corpus:** **31,054** verses, 0 empty/whitespace (verified against `bible.db`). One
+  row per verse → `embeddings.db` is **~128 MB** (31,054 × 3,072-byte vectors ≈ 95 MB plus
+  SQLite page + primary-key index overhead; SPEC §6's ~95 MB was vectors-only).
+- **Observed build time (this machine, fp32, AVX2):** **1,376 s ≈ 22m56s** wall at batch
+  size **64** (CPU `onnxruntime`, all cores). Slower than first guessed — granite-311M fp32
+  is hefty. The slow AVX2-less Optiplex figure is **deferred to the deploy slice (S3)**,
+  the same way v1 deferred its Docker-host check; int8 (also S3) should cut both size and
+  time.
+- **Bulk-access decision:** `bible-core` had no whole-translation reader (only
+  reference-scoped `get_verses`/`get_chapter`), so added one additive, read-only generator
+  `bible_core.queries.iter_verses(conn, translation_id)` — yields the existing `VerseRow`
+  ordered by `books.canonical_order, chapter, verse`. `bible-semantic` reads `bible.db`
+  only through `connect_readonly` + `iter_verses`, never directly; writes its own
+  `embeddings.db` with stdlib `sqlite3`. No other `bible-core` change.
+- **Metadata columns:** `model`, **`model_revision`** (new — the pinned S0 SHA, so S2's
+  guard can catch "built with X, runtime loaded Y"), `dim`, `translation`, `normalized`,
+  `built_at`. SPEC §6 updated to match.
+- **Idempotency:** rebuilds from scratch (`unlink(missing_ok=True)`). fp32 CPU inference is
+  deterministic and ordering + batch size are fixed, so a given verse's vector is
+  byte-identical across runs — the test proves this with two `limit=256` builds (fast)
+  rather than embedding 31k verses twice. `built_at` is the only thing that varies between
+  builds (a wall-clock timestamp), so the whole-file bytes differ even though vectors don't.
+- **Batching / CLS:** `tokenizer.encode_batch` + numpy right-pad (pad id 0,
+  `attention_mask=0` on pads); CLS pooling reads token 0 (always real, never padding), so
+  padded positions are masked out and a batched result matches the single-input result —
+  no attention-mask gymnastics that mean-pool would have needed.
+- **Config:** output via `CONCORD_EMBEDDINGS_PATH` (default repo-root `embeddings.db`);
+  input `bible.db` via v1's existing `BIBLE_DB_PATH` (default `bible.db`). `embeddings.db`
+  is gitignored (added in S0).
