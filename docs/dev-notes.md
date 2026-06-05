@@ -709,3 +709,31 @@ in the README.
   cross-thread close and failed before the fix.
 - **Note:** unblocks the S3b Optiplex latency measurement — after this merges, rebuild the
   image, re-run the Optiplex warm-latency, and land the S3b numbers in PR #17.
+
+### Slice S4 — Documentation & ship
+- **Date:** 2026-06-05. **PR:** #20 (`slice/v2-s4-docs`). **v2 is shipped.**
+- **What landed:** semantic search woven into the existing README (decision tree, intro,
+  Quick start, a Nine-endpoint tour, a "Semantic search" subsection, a two-tier Requirements
+  table, build-on-a-capable-machine deploy guidance, the Granite Apache-2.0 attribution, and
+  geography promoted to the named next frontier); the `/v1/semantic-search` reference in
+  `docs/API.md` (+ the now-accurate `/healthz` example with the `semantic` block). Docs only;
+  every curl/JSON captured from the running int8 image.
+- **Doc choices:** the v1 README had no hardware table, so the measured numbers went into a
+  new compact two-tier Requirements table in the README's table style; `docs/API.md` keeps the
+  two search endpoints adjacent. No changelog/version convention exists (pkg versions `0.0.0`),
+  so this dev-notes marker is the ship record.
+
+#### Retrospective — v2, seven slices
+- **The shape:** S0 stood up `bible-semantic` + proved the ONNX embedding (CLS-pool, not
+  mean-pool — the model card corrected the spec on slice one). S1 baked the WEB corpus
+  (`embeddings.db`, ~31k vectors, the `model_revision` guard). S2a/S2b were the split search
+  core then the `/v1/semantic-search` endpoint (search-in-WEB / display-in-any-translation,
+  the lifespan guard). S3a standardized on int8 and proved quality held (313 MB vs 1.25 GB,
+  canonical top-1 results preserved). S3b shipped the offline image; S4 documented it.
+- **What real-hardware verification earned:** two bugs the fast path missed — the CLS-vs-mean
+  pooling recipe (caught by reading the model card in S0) and the cross-thread SQLite `close()`
+  500 (caught only on the Optiplex in S3b, latent in v1 too). The spec was corrected three
+  times when reality disagreed (mean→CLS, 400→404 unknown_translation, the §6 metadata).
+- **The measured close:** semantic Scripture search in **~92 ms on a $50 2012 desktop** (~42 ms
+  modern), ~662 MB RAM, **fully offline** (`--network none` verified), in a ~450 MB image. The
+  `bible-core` web-free boundary is intact; `bible-semantic` is web-free too. **v2 is shipped.**
