@@ -12,7 +12,7 @@ Each :class:`~bible_core.parser.Span` maps to **one** SQL query; ranges are expr
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 from .parser import Reference, Span
@@ -72,6 +72,30 @@ def get_chapter(
         translations=ids,
         rows=rows,
     )
+
+
+def iter_verses(conn: sqlite3.Connection, translation_id: str) -> Iterator[VerseRow]:
+    """Yield every verse of ``translation_id`` in canonical order (book, chapter, verse).
+
+    A read-only bulk reader for whole-translation passes (e.g. building the semantic
+    embeddings). Streams rows from the cursor, so callers iterate without holding the whole
+    corpus in memory unless they choose to materialize it.
+    """
+    cursor = conn.execute(
+        "SELECT v.book_id, v.chapter, v.verse, v.translation_id, v.text "
+        "FROM verses v JOIN books b ON b.id = v.book_id "
+        "WHERE v.translation_id = ? "
+        "ORDER BY b.canonical_order, v.chapter, v.verse",
+        (translation_id,),
+    )
+    for row in cursor:
+        yield VerseRow(
+            book_id=row["book_id"],
+            chapter=row["chapter"],
+            verse=row["verse"],
+            translation_id=row["translation_id"],
+            text=row["text"],
+        )
 
 
 def _collect(
