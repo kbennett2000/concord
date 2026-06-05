@@ -19,7 +19,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .build import default_embeddings_path
-from .model import EMBEDDING_DIM, MODEL_ID, MODEL_REVISION, embed_query
+from .model import EMBEDDING_DIM, MODEL_ID, MODEL_REVISION, embed_query, model_precision
 from .schema import EMBEDDING_META_TABLE, VERSE_EMBEDDINGS_TABLE
 from .search import cosine_top_k
 
@@ -44,6 +44,7 @@ class EmbeddingMeta:
     model: str
     model_revision: str
     dim: int
+    precision: str
     translation: str
     normalized: int
     built_at: str
@@ -60,7 +61,7 @@ class VectorStore:
 
 def _read_meta(conn: sqlite3.Connection) -> EmbeddingMeta:
     row = conn.execute(
-        f"SELECT model, model_revision, dim, translation, normalized, built_at "
+        f"SELECT model, model_revision, dim, precision, translation, normalized, built_at "
         f"FROM {EMBEDDING_META_TABLE}"
     ).fetchone()
     if row is None:
@@ -77,6 +78,9 @@ def _check_guard(meta: EmbeddingMeta) -> None:
         mismatches.append(f"model_revision {meta.model_revision!r} != running {MODEL_REVISION!r}")
     if meta.dim != EMBEDDING_DIM:
         mismatches.append(f"dim {meta.dim} != running {EMBEDDING_DIM}")
+    running_precision = model_precision()
+    if meta.precision != running_precision:
+        mismatches.append(f"precision {meta.precision!r} != running {running_precision!r}")
     if meta.normalized != 1:
         mismatches.append(f"normalized {meta.normalized} != 1 (search assumes unit vectors)")
     if mismatches:
