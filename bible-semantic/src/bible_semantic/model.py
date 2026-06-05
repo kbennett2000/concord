@@ -32,6 +32,13 @@ MODEL_ID = "ibm-granite/granite-embedding-311m-multilingual-r2"
 MODEL_REVISION = "44399559930365213510b1ee2eb15ded83374f0e"
 EMBEDDING_DIM = 768
 
+# int8 is the project standard (IBM's official dynamic-quantized uint8 weights) — fp32
+# weights (~1.25 GB) blow the deploy size target (SPEC §4). fp32 stays selectable for dev /
+# re-deriving the quality baseline via CONCORD_MODEL_PRECISION=fp32. Precision is the
+# inference path, not the stored-vector dtype (vectors are always float32).
+DEFAULT_PRECISION = "int8"
+_ONNX_FILENAMES = {"int8": "model_quint8_avx2.onnx", "fp32": "model.onnx"}
+
 # Default location of the fetched weights, under the gitignored repo-root models/ directory.
 # parents: model.py -> bible_semantic -> src -> bible-semantic -> <repo root>.
 _DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[3] / "models" / MODEL_ID.split("/")[-1]
@@ -47,6 +54,21 @@ def model_dir() -> Path:
     return Path(override) if override else _DEFAULT_MODEL_DIR
 
 
+def model_precision() -> str:
+    """The model precision to load — ``CONCORD_MODEL_PRECISION`` (default ``int8``).
+
+    The corpus is embedded and queried at the *same* precision; ``store`` records it in
+    ``embedding_meta`` and refuses a mismatch. ``fp32`` is for dev / baseline only.
+    """
+    precision = os.environ.get("CONCORD_MODEL_PRECISION", DEFAULT_PRECISION).strip().lower()
+    if precision not in _ONNX_FILENAMES:
+        raise ValueError(
+            f"CONCORD_MODEL_PRECISION={precision!r} is invalid; expected one of "
+            f"{sorted(_ONNX_FILENAMES)}."
+        )
+    return precision
+
+
 def l2_normalize(vec: NDArray[np.float32]) -> NDArray[np.float32]:
     """L2-normalize a 1-D vector to unit length. Pure — testable without the model."""
     norm = float(np.linalg.norm(vec))
@@ -55,15 +77,15 @@ def l2_normalize(vec: NDArray[np.float32]) -> NDArray[np.float32]:
     return (vec / norm).astype(np.float32)
 
 
-@lru_cache(maxsize=1)
-def _load() -> tuple[Tokenizer, ort.InferenceSession]:
-    """Load (and cache) the tokenizer + ONNX session. Sessions are expensive to build."""
+@lru_cache(maxsize=2)
+def _load(precision: str) -> tuple[Tokenizer, ort.InferenceSession]:
+    """Load (and cache) the tokenizer + ONNX session for ``precision``. Sessions are costly."""
     directory = model_dir()
     tok_path = directory / "tokenizer.json"
-    onnx_path = directory / "onnx" / "model.onnx"
+    onnx_path = directory / "onnx" / _ONNX_FILENAMES[precision]
     if not tok_path.is_file() or not onnx_path.is_file():
         raise FileNotFoundError(
-            f"Embedding model not found under {directory}. "
+            f"Embedding model ({precision}) not found under {directory}. "
             f"Run `python scripts/fetch_model.py` (or set CONCORD_MODEL_PATH). "
             f"Expected {tok_path} and {onnx_path}."
         )
@@ -84,7 +106,7 @@ def embed_texts(texts: list[str]) -> NDArray[np.float32]:
     if not texts:
         return np.empty((0, EMBEDDING_DIM), dtype=np.float32)
 
-    tokenizer, session = _load()
+    tokenizer, session = _load(model_precision())
     encodings = tokenizer.encode_batch(texts)
     max_len = max(len(enc.ids) for enc in encodings)
     input_ids = np.zeros((len(encodings), max_len), dtype=np.int64)

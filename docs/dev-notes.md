@@ -602,3 +602,37 @@ in the README.
   `test_semantic_endpoint_real.py` (not `..._search_real.py`) to avoid colliding with
   bible-semantic's S2a test of that name. Integration validated for `bible-api` (9 passed);
   `bible-semantic` is untouched so its suite (incl. S1's ~23-min build) is unaffected.
+
+### Slice S3a — int8 standardization & quality validation
+- **Date:** 2026-06-05. **PR:** #16 (`slice/v2-s3a-int8`). S3 was split: **S3a (int8 + the
+  quality gate, this slice); S3b (Docker & deploy).**
+- **int8 obtained by FETCH, not quantize.** The granite repo publishes
+  `onnx/model_quint8_avx2.onnx` (IBM's official dynamic uint8 quantization) at the pinned
+  revision `44399559…` — fetched via the existing pinned-SHA `scripts/fetch_model.py` (no
+  `quantize_model.py`, no calibration; reproducible by construction). **313 MB vs fp32's
+  1.25 GB** (~4×) — the size relief SPEC §4 needs to stay under the deploy target.
+- **int8 is now the default everywhere** (`model_precision()`, env `CONCORD_MODEL_PRECISION`,
+  default `int8`, selecting the ONNX filename). fp32 stays selectable for dev/baseline only;
+  `fetch_model.py` gets fp32 only with `--fp32`. Stored vectors remain float32 — precision
+  is the inference path, not the vector dtype, so `verse_embeddings` is unchanged.
+- **Precision guard:** new `precision` column in `embedding_meta` (written by `build.py`);
+  `store._check_guard` refuses to load when the corpus precision differs from the running
+  model's — query and corpus must share precision to compare correctly. SPEC §6 updated.
+- **int8 build time:** **1267 s (~21m7s)** for 31,054 WEB verses, batch 64 — vs fp32's
+  ~22m56s (only ~8% faster on this AVX2 box; the win is size, not build speed). Meta records
+  `precision=int8`, 31,054 rows.
+- **int8-vs-fp32 quality (top-5; fp32 = S2a baseline):**
+  - `"love your enemies"` → **MAT 5:44 #1** (int8 0.928) — identical to fp32 #1.
+  - `"the good shepherd"` → **JHN 10:11 #1**, JHN 10:14 #2 — identical to fp32.
+  - `"do not be anxious"` → DEU 1:29 #1, HAG 2:5 #2; **MAT 6:34 moved #5→#7** but stays
+    comfortably in top-20 (LUK 12:29 #10). Verdict: **acceptable** — canonical top-1 results
+    preserved, only mild tail reordering (expected from quantization). The S2a/S2b
+    appear-in-top-k integration tests pass on the int8 corpus (7 passed). Bar met; no fp32
+    fallback needed.
+- **AVX2 note:** the file is IBM's `_avx2`-labeled quantization; ONNX Runtime falls back to
+  AVX kernels on the AVX2-less Optiplex (slower, still correct). **Optiplex timing +
+  `--network none` verification are S3b.**
+- **Gotchas:** the `precision` column is positional in `_read_meta`'s SELECT / `EmbeddingMeta`
+  / `build.py` INSERT — kept in sync (after `dim`). Hand-built test embeddings.dbs
+  (`test_semantic_store`, bible-api `test_semantic_boot_guard`) + the schema column-list test
+  were updated for the new column. **int8 is now standard; S3b does the Docker packaging.**

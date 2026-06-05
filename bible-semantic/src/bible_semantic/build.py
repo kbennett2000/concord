@@ -22,7 +22,7 @@ from pathlib import Path
 from bible_core.db import connect_readonly
 from bible_core.queries import VerseRow, iter_verses
 
-from .model import EMBEDDING_DIM, MODEL_ID, MODEL_REVISION, embed_texts
+from .model import EMBEDDING_DIM, MODEL_ID, MODEL_REVISION, embed_texts, model_precision
 from .schema import create_embeddings_schema
 
 DEFAULT_TRANSLATION = "WEB"
@@ -109,12 +109,13 @@ def build_embeddings(
                 )
             conn.execute(
                 "INSERT INTO embedding_meta "
-                "(model, model_revision, dim, translation, normalized, built_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "(model, model_revision, dim, precision, translation, normalized, built_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     MODEL_ID,
                     MODEL_REVISION,
                     EMBEDDING_DIM,
+                    model_precision(),
                     translation_id,
                     1,
                     datetime.now(UTC).isoformat(),

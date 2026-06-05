@@ -7,22 +7,27 @@ and reproducible (no silent drift from the upstream `main` branch).
 
 Run from the repo root:
 
-    uv run python scripts/fetch_model.py
+    uv run python scripts/fetch_model.py          # int8 (the project standard)
+    uv run python scripts/fetch_model.py --fp32   # also fetch fp32 (dev / baseline only)
 
 Files already present are left untouched (idempotent). Any HTTP error fails loudly.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 import urllib.error
 import urllib.request
 
 from bible_semantic.model import MODEL_ID, MODEL_REVISION, model_dir
 
-# Files needed for S0 inference: the fp32 ONNX graph, the self-contained tokenizer, and
-# config.json (metadata / future embedding_meta guard). int8 weights are an S3 concern.
-_FILES = ["onnx/model.onnx", "tokenizer.json", "config.json"]
+# int8 is the project standard (IBM's official dynamic-quantized uint8 weights); fp32 is
+# fetched only with --fp32, for dev / re-deriving the quality baseline. The tokenizer is
+# self-contained; config.json carries model metadata.
+_INT8_ONNX = "onnx/model_quint8_avx2.onnx"
+_FP32_ONNX = "onnx/model.onnx"
+_BASE_FILES = [_INT8_ONNX, "tokenizer.json", "config.json"]
 
 _BASE_URL = f"https://huggingface.co/{MODEL_ID}/resolve/{MODEL_REVISION}"
 
@@ -38,13 +43,23 @@ def _download(url: str, dest_path: str) -> None:
                 out.write(chunk)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python scripts/fetch_model.py",
+        description="Fetch the embedding model weights (int8 by default) at the pinned revision.",
+    )
+    parser.add_argument(
+        "--fp32", action="store_true", help="also fetch the fp32 weights (dev / baseline only)"
+    )
+    args = parser.parse_args(argv)
+
+    files = [*_BASE_FILES, _FP32_ONNX] if args.fp32 else _BASE_FILES
     target = model_dir()
     print(f"Model:    {MODEL_ID}")
     print(f"Revision: {MODEL_REVISION}")
     print(f"Target:   {target}")
 
-    for rel in _FILES:
+    for rel in files:
         dest = target / rel
         if dest.is_file():
             print(f"- {rel}: already present, skipping")

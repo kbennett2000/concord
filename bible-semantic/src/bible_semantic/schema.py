@@ -31,6 +31,7 @@ _TABLES: tuple[str, ...] = (
         model          TEXT    NOT NULL,
         model_revision TEXT    NOT NULL,
         dim            INTEGER NOT NULL,
+        precision      TEXT    NOT NULL,
         translation    TEXT    NOT NULL,
         normalized     INTEGER NOT NULL,
         built_at       TEXT    NOT NULL
