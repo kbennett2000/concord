@@ -41,7 +41,14 @@ def connect_readonly(database: str | Path) -> sqlite3.Connection:
     Used by the API: the corpus is immutable, so reads never mutate. Fails if the file
     does not exist, which is the desired fail-fast behavior. ``Row`` factory for
     name-based access.
+
+    ``check_same_thread=False``: under FastAPI a sync endpoint runs in a threadpool and a
+    generator dependency's ``finally: conn.close()`` can run on a *different* worker thread
+    than the one that opened the connection — raising ``sqlite3.ProgrammingError`` (an
+    intermittent HTTP 500) with the default thread check. Each request gets its own
+    read-only connection, so access is never concurrent, only cross-thread; disabling the
+    check is the standard, safe fix.
     """
-    conn = sqlite3.connect(f"file:{Path(database)}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{Path(database)}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
