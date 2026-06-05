@@ -36,8 +36,12 @@ don't live in the foundation. You live in the house.
 
 If you want a polished, end-user app that lets you read, journal, take notes, and reflect on
 Scripture — try [soap-journal](https://github.com/kbennett2000/soap-journal) (desktop) or
-[soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone). Both are
-built *on top of* Concord, and they're probably what you actually want.
+[soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone). They're
+probably what you actually want.
+
+soap-journal is the app Concord is *designed to build on* — that integration is the intended
+next step on the app side, not yet wired up. soap-journal-mobile is offline-first and goes
+anywhere, so it runs on its own and doesn't depend on Concord's LAN server at all.
 
 Concord itself is for the builders.
 
@@ -294,9 +298,9 @@ gets built next.
 
 Concord exists to be built on.
 
-- **Existing apps:** [soap-journal](https://github.com/kbennett2000/soap-journal) and
-  [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) are end-user
-  Bible apps that consume this surface.
+- **The app it's for:** [soap-journal](https://github.com/kbennett2000/soap-journal) is the
+  end-user Bible journaling app Concord is designed to build on — the intended next step on the
+  app side, not yet wired up.
 - **Embedding in-process:** because `bible-core` has no web dependencies, a Python project can
   import it directly and query Scripture without running the HTTP server at all.
 - **Coming:** beginner-friendly tutorial repos at `kbennett2000/concord-tutorial-*` — forward
