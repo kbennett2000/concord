@@ -190,6 +190,10 @@ search is on — measured, not guessed:
 Tested on a 2012 Dell Optiplex 9010 — a $50 used desktop: semantic Scripture search in under
 a tenth of a second, fully offline. If it runs there, it runs on whatever you've got.
 
+Geography doesn't move these numbers: it's a small set of data tables baked into `bible.db`,
+with no model and no new runtime — the place lookups are instant SQLite reads like the rest of
+the core API.
+
 ## Deployment
 
 The database, the embedding model, and the precomputed verse vectors are all **baked into
@@ -234,6 +238,11 @@ The container starts healthy (the built-in healthcheck polls `/healthz`), and
 `make docker-verify` runs the health, random-verse, and no-CDN checks against a running
 instance.
 
+**Upgrading from an older Concord?** Rebuild the database. The geography tables (v3) are now
+part of the required schema, so a `bible.db` built before v3 fails fast at startup with a
+rebuild hint — `make build-db`, or just rebuild the image, which bakes a fresh one. A clean
+`docker compose up --build` needs no thought here; only a hand-carried older database does.
+
 ## The data
 
 Concord bundles **13 public-domain translations** (KJV, WEB, ASV, YLT, BSB, and others — see
@@ -243,6 +252,11 @@ provenance is in [`data/SOURCES.md`](data/SOURCES.md).
 Cross-references come from the OpenBible.info dataset (344,799 of them):
 
 > Cross-reference data courtesy of [OpenBible.info](https://www.openbible.info/labs/cross-references/), licensed under a Creative Commons Attribution (CC BY) license.
+
+Place coordinates and the place↔verse links come from OpenBible.info's Bible-Geocoding dataset
+(1,340 places):
+
+> Place data courtesy of [OpenBible.info](https://github.com/openbibleinfo/Bible-Geocoding-Data), licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.
 
 Some translations aren't public-domain and can't be redistributed. Concord supports them
 through a gitignored `data/private/` directory: drop a non-distributable translation's JSON
@@ -294,5 +308,7 @@ The `/v1` prefix means today's responses are a contract. Build against them with
 - **Bundled translations:** public domain — see [`data/SOURCES.md`](data/SOURCES.md).
 - **Cross-references:** [OpenBible.info](https://www.openbible.info/labs/cross-references/),
   licensed under Creative Commons Attribution (CC BY).
+- **Place data:** [OpenBible.info Bible-Geocoding-Data](https://github.com/openbibleinfo/Bible-Geocoding-Data),
+  licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
 - **Embedding model:** [`ibm-granite/granite-embedding-311m-multilingual-r2`](https://huggingface.co/ibm-granite/granite-embedding-311m-multilingual-r2),
   Apache 2.0 © IBM.
