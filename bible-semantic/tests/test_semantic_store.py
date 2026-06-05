@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from bible_semantic.model import EMBEDDING_DIM, MODEL_ID, MODEL_REVISION
+from bible_semantic.model import DEFAULT_PRECISION, EMBEDDING_DIM, MODEL_ID, MODEL_REVISION
 from bible_semantic.schema import create_embeddings_schema
 from bible_semantic.store import StoreError, VerseRef, load_store
 
@@ -18,6 +18,7 @@ def _make_db(
     model: str = MODEL_ID,
     revision: str = MODEL_REVISION,
     dim: int = EMBEDDING_DIM,
+    precision: str = DEFAULT_PRECISION,
     normalized: int = 1,
     rows: list[tuple[str, int, int]] | None = None,
 ) -> Path:
@@ -26,8 +27,9 @@ def _make_db(
     create_embeddings_schema(conn)
     conn.execute(
         "INSERT INTO embedding_meta "
-        "(model, model_revision, dim, translation, normalized, built_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (model, revision, dim, "WEB", normalized, "2026-01-01T00:00:00+00:00"),
+        "(model, model_revision, dim, precision, translation, normalized, built_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (model, revision, dim, precision, "WEB", normalized, "2026-01-01T00:00:00+00:00"),
     )
     for book_id, chapter, verse in rows:
         vec = np.zeros(EMBEDDING_DIM, dtype=np.float32)
@@ -70,6 +72,13 @@ def test_guard_rejects_wrong_dim(tmp_path: Path) -> None:
 def test_guard_rejects_unnormalized(tmp_path: Path) -> None:
     with pytest.raises(StoreError, match="normalized"):
         load_store(_make_db(tmp_path / "e.db", normalized=0))
+
+
+def test_guard_rejects_precision_mismatch(tmp_path: Path) -> None:
+    # An fp32-built corpus under the default int8 query model → refuse (query and corpus
+    # must share precision to compare correctly).
+    with pytest.raises(StoreError, match="precision"):
+        load_store(_make_db(tmp_path / "e.db", precision="fp32"))
 
 
 def test_missing_file_raises(tmp_path: Path) -> None:

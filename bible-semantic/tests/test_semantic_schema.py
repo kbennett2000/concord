@@ -24,6 +24,7 @@ def test_creates_expected_tables_and_columns() -> None:
         "model",
         "model_revision",
         "dim",
+        "precision",
         "translation",
         "normalized",
         "built_at",

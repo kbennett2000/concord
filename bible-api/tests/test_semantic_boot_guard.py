@@ -21,8 +21,17 @@ def _mismatched_embeddings_db(path: Path) -> Path:
     create_embeddings_schema(conn)
     conn.execute(
         "INSERT INTO embedding_meta "
-        "(model, model_revision, dim, translation, normalized, built_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (MODEL_ID, "not-the-pinned-revision", EMBEDDING_DIM, "WEB", 1, "2026-01-01T00:00:00+00:00"),
+        "(model, model_revision, dim, precision, translation, normalized, built_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            MODEL_ID,
+            "not-the-pinned-revision",
+            EMBEDDING_DIM,
+            "int8",
+            "WEB",
+            1,
+            "2026-01-01T00:00:00+00:00",
+        ),
     )
     vec = np.zeros(EMBEDDING_DIM, dtype=np.float32)
     vec[0] = 1.0
