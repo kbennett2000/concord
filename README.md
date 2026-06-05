@@ -3,12 +3,14 @@
 # Concord
 
 A self-hosted, LAN-first, read-only Scripture API. It serves multiple public-domain Bible
-translations — aligned by book, chapter, and verse — from one canonical SQLite source. Once
-built, it runs entirely offline: no CDNs, no telemetry, no phone-home.
+translations — aligned by book, chapter, and verse — from one canonical SQLite source. It
+also does semantic search: ask for verses by idea, not just keyword, and the right passages
+come back even when they don't share a word. Once built, it runs entirely offline: no CDNs,
+no telemetry, no phone-home.
 
 ### Where to next?
 
-- **A developer who wants to get hands-on?** → [Quick start](#quick-start)
+- **A developer who wants to get hands-on?** → [Quick start](#quick-start), including the new [semantic search](#semantic-search) endpoint.
 - **Here because Scripture matters to you, and you're curious what this is?** → [What is this, really?](#what-is-this-really)
 - **Looking for a polished Bible app to actually use?** → [soap-journal](https://github.com/kbennett2000/soap-journal) (desktop) or [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone).
 
@@ -18,7 +20,9 @@ Hi. You found Concord, and you might be wondering what you're looking at.
 
 Concord is a small piece of software that serves Bible verses. It runs on a computer you
 (or your church, or your office) controls — not on someone else's cloud. Once it's set up,
-it works offline, forever, without phoning home to anyone.
+it works offline, forever, without phoning home to anyone. It can also find verses by
+*meaning* — ask for "verses about anxiety" and it surfaces the passages that fit, even the
+ones that never use the word.
 
 But here's the thing: **Concord isn't an app you use directly.** It's the foundation that
 other apps are built on. Think of it like the foundation of a house — essential, but you
@@ -70,12 +74,18 @@ Want a verse?
 curl 'localhost:8000/v1/verses/John%203:16'
 ```
 
+Or find verses by meaning:
+
+```bash
+curl 'localhost:8000/v1/semantic-search?q=do+not+be+anxious'
+```
+
 The full API reference is in [`docs/API.md`](docs/API.md). Configuration, deployment, and the
 rest are below.
 
 ## What's in the box
 
-Eight endpoints. Each is documented in full — with real request/response examples — in
+Nine endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -83,6 +93,7 @@ Eight endpoints. Each is documented in full — with real request/response examp
 | `GET /v1/verses/{ref}` | Fetch a verse, range, list, or chapter across one or more translations. |
 | `GET /v1/chapters/{book}/{chapter}` | Fetch a whole chapter, multi-translation aware. |
 | `GET /v1/search` | Full-text search within a single translation. |
+| `GET /v1/semantic-search` | Meaning-based search — find verses by idea, rendered in any translation. |
 | `GET /v1/cross-references/{ref}` | Cross-references for a verse, optionally with target text. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
@@ -92,7 +103,25 @@ Eight endpoints. Each is documented in full — with real request/response examp
 Under the hood, Concord is two packages. `bible-core` is the engine — schema, loader,
 reference parser, and queries — with **zero web dependencies**, so a Python app can embed it
 in-process and skip HTTP entirely. `bible-api` is the thin FastAPI layer that wraps it. The
-`/v1` prefix is a promise: encode against this surface with confidence.
+`/v1` prefix is a promise: encode against this surface with confidence. (Semantic search adds
+a third package, `bible-semantic` — the embedding engine, also web-free.)
+
+### Semantic search
+
+`GET /v1/semantic-search` finds verses by meaning. Ask for `verses about anxiety` and you get
+the passages that fit — even ones that never use the word — ranked by closeness.
+
+The search runs over one embedded translation, the **World English Bible (WEB)**, in
+meaning-space. What it finds are verse *references*, so you can read them in whatever
+translation you want: add `?translation=KJV` and the same hits come back as KJV text. It runs
+fully offline like everything else — the embedding model is baked into the image, and nothing
+is ever sent anywhere.
+
+```bash
+curl 'localhost:8000/v1/semantic-search?q=the+good+shepherd&translation=KJV'
+```
+
+The full parameters — `limit`, `min_score`, `include_text` — are in [`docs/API.md`](docs/API.md).
 
 ## Configuration
 
@@ -105,6 +134,7 @@ in a `.env` file (`docker compose` reads both). See [`.env.example`](.env.exampl
 | `CONCORD_CORS_ORIGINS` | `*` | Comma-separated allowed CORS origins. `*` suits a trusted LAN. |
 | `CONCORD_DEFAULT_TRANSLATION` | `KJV` | Translation used when `?translation(s)=` is omitted. Must be one that's loaded, or the API refuses to start. |
 | `BIBLE_DB_PATH` | `/app/bible.db` | Path to the database inside the container. |
+| `CONCORD_SEMANTIC_SEARCH` | `1` | Whether `/v1/semantic-search` is served. Set it to `0` to disable (skips loading the embedding model). |
 
 Changing the port is one line:
 
