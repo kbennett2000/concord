@@ -800,3 +800,43 @@ in the README.
   by a **local import** of `geo` inside `build_database`. `symbolic` is rare (3 rows) and
   every `nonspecific_place` also carried a tentative association, so the honesty-first rule is
   what makes those rows appear at all.
+
+### Slice V3-S1 — Places endpoints
+- **Date:** 2026-06-05. **PR:** #22 (`slice/v3-s1-places-endpoints`).
+- **What landed:** the four read-only geography endpoints in `bible-api`, reusing v1's
+  machinery throughout — `GET /v1/places` (browse: `type`/`status`/`q` filters + pagination),
+  `GET /v1/places/{id}` (detail + verse count), `GET /v1/places/{id}/verses` (verses, text
+  hydration), `GET /v1/verses/{ref}/places` (the inverse). Plus the supporting `bible-core`
+  read queries, the Pydantic models, the `unknown_place`/filter errors, and `place_count` in
+  `/healthz`. No schema/loader change; no new data; no README prose (V3-S2).
+- **`bible-core` queries (additive):** `list_places`, `get_place`, `count_place_verses`,
+  `get_place_verses`, `get_places_for_reference`, `distinct_place_types` in `queries.py`,
+  modeled on `get_cross_references` and **reusing `_span_predicate`** + `get_verse_text`. The
+  API writes no raw SQL — it calls these, exactly as the cross-references endpoint does.
+- **Open-question answers:** (1) **`{ref}/places` range semantics** — the deduped **union** of
+  places across the reference's spans (`SELECT DISTINCT … JOIN place_verses` with the OR of the
+  span predicates); a valid-but-placeless ref → 200 empty list; an unparsable ref → 400; an
+  unknown book → 404 (the parser's existing wiring). No pagination on this endpoint (a
+  reference spans few places; the corpus is 1340). (2) **`/v1/places` default ordering** —
+  `name ASC, id ASC` (a stable tiebreak so the disambiguated same-name places paginate
+  deterministically). (3) **`disputed` representation** — surfaced **with** best-guess
+  `latitude`/`longitude` + `status:"disputed"` + medium/low `confidence`; only
+  unknown/symbolic/multiple carry null coords. (4) **`/healthz`** — added `place_count`,
+  cached at startup like `cross_ref_count`.
+- **Honesty model in responses:** coordinates are surfaced as **named `latitude`/`longitude`**
+  fields (never an ordered `lonlat` pair a consumer could misread — the V3-S0 hemisphere-flip
+  trap, closed at the API boundary). Jerusalem (`a15257a`) → `31.776667, 35.234167`, high,
+  identified; Nod/Eden → null coords, `status:"unknown"`.
+- **Errors:** `UnknownPlaceError` → 404 `unknown_place` (path resource), `PlaceFilterError`
+  carrying its own `code` → 400 `unknown_type` (validated against `distinct_place_types`, with
+  the available list in `detail`) / `unknown_status` (the fixed 5-value enum) — mirroring
+  `BookFilterError`'s "filter is 400, path resource is 404" distinction. Bad pagination → the
+  existing 422 `invalid_parameter`.
+- **Gotchas:** (a) the new api test files needed the same per-file pyright suppression the
+  existing api tests carry (`reportUnknownMemberType=false`, …) — httpx's `TestClient` response
+  is untyped, so without it strict pyright flags every `.get(...).json()`. (b) The startup
+  `place_count` query makes `places` part of the **required schema** — a stale pre-V3-S0
+  `bible.db` now fails loudly at boot with the rebuild hint (correct, consistent with the
+  existing table checks); the local repo-root `bible.db` artifact had to be rebuilt for the v2
+  semantic real tests to pass. (c) Real settlement count is **843** (844 ancient minus the one
+  excluded `not_a_place` that carried a settlement type).
