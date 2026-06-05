@@ -527,3 +527,37 @@ in the README.
 - **Config:** output via `CONCORD_EMBEDDINGS_PATH` (default repo-root `embeddings.db`);
   input `bible.db` via v1's existing `BIBLE_DB_PATH` (default `bible.db`). `embeddings.db`
   is gitignored (added in S0).
+
+### Slice S2a — Search core
+- **Date:** 2026-06-05. **PR:** #14 (`slice/v2-s2a-search-core`).
+- **S2 split into S2a/S2b.** The v2 spec (§10) had S2 as one slice; we split it into **S2a
+  (search core, this slice — library function)** and **S2b (the HTTP endpoint)**. The core
+  is correctness-critical and cleanly testable in isolation; the endpoint is thin on top.
+- **What landed:** `search.py` (pure cosine top-k), `store.py` (vector-store loader +
+  model-vs-vectors guard + `semantic_search` orchestration). No HTTP, no hydration, no
+  caching (all S2b); `bible-core`/`bible-api` untouched.
+- **Lifecycle:** `load_store(path=None) -> VectorStore` (no global state — tests call it
+  directly) + a lazy module-level singleton `get_store()`. `semantic_search` uses
+  `get_store()`, so the ~95 MB matrix loads **once** per process; S2b's FastAPI lifespan can
+  prime it at startup.
+- **The guard (the point of S1's `model_revision`):** `load_store` reads `embedding_meta`
+  and refuses to load (`StoreError`) if `model` / `model_revision` / `dim` differ from the
+  running code's `MODEL_ID` / `MODEL_REVISION` / `EMBEDDING_DIM`, or if `normalized != 1`.
+  Detects "vectors built with revision X, code now pins Y" rather than serving garbage
+  similarities. `load_store` never invokes the model, so the guard tests are fast.
+- **Matrix construction:** `SELECT ... ORDER BY book_id, chapter, verse`, preallocate
+  `np.empty((N, 768), float32)`, fill per row via `np.frombuffer` (each blob asserted 3072 B).
+  **Observed load time 0.18 s** for 31,054 rows; footprint **95.4 MB** held once.
+- **`min_score`:** a cosine floor on `[-1, 1]`. Implemented as: sort all by score desc
+  (`np.lexsort`, ties by ascending index for determinism), then walk top-down, breaking when
+  a score drops below the floor or `k` is reached — equivalent to "score → filter → top-k".
+- **Real-corpus evidence (`semantic_search`, top-5):** `"do not be anxious"` → MAT 6:34,
+  LUK 12:29 surface (Matthew 6 "do not worry" passage); `"love your enemies"` → **MAT 5:44**
+  #1; `"the good shepherd"` → **JHN 10:11** #1. The integration test asserts a known anxiety
+  verse appears in the top-20. First query pays a one-time ONNX session warm-up (~3.3 s);
+  subsequent queries ~80–120 ms.
+- **Gotchas:** numpy fancy-indexing/`lexsort`/`tolist` return loosely-typed arrays under
+  pyright-strict — pinned with explicit `NDArray` annotations + a `list[int]` bind rather
+  than a file pragma. `pytest.approx` is loosely typed too → used plain tolerances (matches
+  S0). Test files keep the `test_semantic_*` prefix to avoid basename collisions (bible-core
+  already has `test_search.py`).
