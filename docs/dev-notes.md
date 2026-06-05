@@ -879,3 +879,16 @@ in the README.
   Antiochs/Bethlehems are distinct), plus the bi-directional place↔verse link — exactly what a
   future journeys/routes layer needs to reference rather than rebuild. The `bible-core` web-free
   boundary held throughout (the place queries are pure SQL over the link table). **v3 is shipped.**
+
+## Corrections
+
+### Docs — the soap-journal relationship (2026-06-05, PR #24)
+- **Correction:** the README claimed soap-journal *and* soap-journal-mobile "consume" / are
+  "built on top of" Concord's API surface. Both claims were false and are now fixed. **Why:**
+  soap-journal-mobile is offline-first and used anywhere, so a phone off the home LAN cannot
+  reach Concord's LAN-only self-hosted server — a categorical mismatch; it's removed as a
+  consumer entirely (noted only as independent of the LAN server). soap-journal (desktop) is the
+  app Concord is *designed to build on*, but that integration **is not yet built** — so the docs
+  now use intent language ("designed to build on"), not a finished "consumes this surface". The
+  curious-reader pointer toward soap-journal stays. (The `bible-core` in-process-linking mentions
+  in `docs/SPEC.md` / `docs/v2/SPEC.md` / `CLAUDE.md` were already future-framed and untouched.)
