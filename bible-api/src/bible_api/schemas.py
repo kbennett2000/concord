@@ -160,3 +160,27 @@ class RandomResponse(BaseModel):
     book: str | None
     testament: str | None
     verse: RandomVerse
+
+
+class SemanticSearchHit(BaseModel):
+    """One semantic match: its position, cosine score, and text in the display translation.
+
+    ``text`` is ``null`` when ``include_text=false`` or the verse is absent in the requested
+    translation (versification differences) — the match still ranks, only its text is null.
+    """
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    score: float
+    text: str | None
+
+
+class SemanticSearchResponse(BaseModel):
+    """Ranked semantic-search results, searched in WEB space, displayed in ``translation``."""
+
+    query: str
+    translation: str
+    count: int
+    results: list[SemanticSearchHit]

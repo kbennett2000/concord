@@ -56,6 +56,16 @@ def _configure_logging() -> None:
     )
 
 
+class SemanticHealth(BaseModel):
+    """Semantic-search readiness: the embedded translation, vector count, model, and dim."""
+
+    enabled: bool
+    translation: str | None = None
+    embedding_count: int | None = None
+    model: str | None = None
+    dim: int | None = None
+
+
 class HealthResponse(BaseModel):
     """Liveness payload with real loaded-translation, verse, and cross-ref counts."""
 
@@ -64,6 +74,7 @@ class HealthResponse(BaseModel):
     verse_count: int = 0
     cross_ref_count: int = 0
     book_count: int = 0
+    semantic: SemanticHealth | None = None
 
 
 def _verify_and_cache(app: FastAPI) -> None:
@@ -82,6 +93,7 @@ def _verify_and_cache(app: FastAPI) -> None:
             cross_ref_count = conn.execute("SELECT COUNT(*) FROM cross_references").fetchone()[0]
             book_count = conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]
             loaded = {row[0] for row in conn.execute("SELECT id FROM translations")}
+            book_names = {row[0]: row[1] for row in conn.execute("SELECT id, name FROM books")}
         except sqlite3.OperationalError as exc:
             raise RuntimeError(
                 f"bible.db at {db_path!r} is missing expected tables ({exc}); "
@@ -103,12 +115,41 @@ def _verify_and_cache(app: FastAPI) -> None:
     app.state.verse_count = verse_count
     app.state.cross_ref_count = cross_ref_count
     app.state.book_count = book_count
+    app.state.book_names = book_names
+
+
+def _prime_semantic(app: FastAPI) -> None:
+    """Load the embedding store (running the model-vs-vectors guard) and warm the model.
+
+    An unusable store or a model/vectors mismatch raises ``RuntimeError`` → the app refuses
+    to start, rather than failing on the first query. Warming the model with one forward
+    pass means the first real query doesn't pay the one-time ONNX session init (~3 s).
+    """
+    from bible_semantic.model import embed_query
+    from bible_semantic.store import StoreError, load_store
+
+    try:
+        store = load_store(app.state.embeddings_path)
+    except StoreError as exc:
+        raise RuntimeError(
+            f"semantic search is enabled but the embeddings store is unusable: {exc}"
+        ) from exc
+    if store.meta.translation not in app.state.translations:
+        raise RuntimeError(
+            f"embedded translation {store.meta.translation!r} is not loaded in bible.db "
+            f"(loaded: {sorted(app.state.translations)}); semantic results can't be hydrated."
+        )
+    embed_query("warm")  # one forward pass so the first real query is fast
+    app.state.semantic_store = store
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    """Verify the DB, cache state, and log one startup line (proves the core import too)."""
+    """Verify the DB, cache state, optionally prime semantic search, and log one line."""
     _verify_and_cache(app)
+    if app.state.semantic_enabled:
+        _prime_semantic(app)
+    store = app.state.semantic_store
     structlog.get_logger("bible_api").info(
         "concord.api.startup",
         api_version=__version__,
@@ -117,6 +158,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         translations=app.state.translation_count,
         verses=app.state.verse_count,
         default_translation=app.state.default_translation,
+        semantic=None
+        if store is None
+        else {"translation": store.meta.translation, "count": len(store.refs)},
         cors_origins=config.cors_origins(),
     )
     yield
@@ -155,16 +199,39 @@ def redoc_html(request: Request) -> HTMLResponse:
 @router.get("/healthz")
 def healthz(request: Request) -> HealthResponse:
     state = request.app.state
+    store = state.semantic_store
+    semantic = (
+        SemanticHealth(
+            enabled=True,
+            translation=store.meta.translation,
+            embedding_count=len(store.refs),
+            model=store.meta.model,
+            dim=store.meta.dim,
+        )
+        if store is not None
+        else SemanticHealth(enabled=False)
+    )
     return HealthResponse(
         translation_count=state.translation_count,
         verse_count=state.verse_count,
         cross_ref_count=state.cross_ref_count,
         book_count=state.book_count,
+        semantic=semantic,
     )
 
 
-def create_app(db_path: str | Path | None = None) -> FastAPI:
-    """Build the FastAPI application, pointed at ``db_path`` (default: config/env)."""
+def create_app(
+    db_path: str | Path | None = None,
+    *,
+    enable_semantic: bool | None = None,
+    embeddings_path: str | Path | None = None,
+) -> FastAPI:
+    """Build the FastAPI application, pointed at ``db_path`` (default: config/env).
+
+    ``enable_semantic`` overrides ``CONCORD_SEMANTIC_SEARCH`` (the fast test suite passes
+    ``False`` to skip the heavy model load). ``embeddings_path`` overrides where the vector
+    store is read from (default: the store's own ``CONCORD_EMBEDDINGS_PATH`` resolution).
+    """
     _configure_logging()
     app = FastAPI(
         title="Concord",
@@ -177,6 +244,11 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.db_path = str(db_path) if db_path is not None else config.db_path()
+    app.state.semantic_enabled = (
+        config.semantic_enabled() if enable_semantic is None else enable_semantic
+    )
+    app.state.embeddings_path = Path(embeddings_path) if embeddings_path is not None else None
+    app.state.semantic_store = None
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
     app.add_middleware(
         CORSMiddleware,

@@ -20,6 +20,9 @@ def db_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="session")
 def client(db_path: Path) -> Iterator[TestClient]:
-    app = create_app(db_path=db_path)
+    # Semantic search disabled here so the fast suite never loads the embedding model;
+    # endpoint validation (422/404) and the 503-when-disabled path need no model. Real
+    # semantic results are exercised by the integration-marked tests with their own app.
+    app = create_app(db_path=db_path, enable_semantic=False)
     with TestClient(app) as test_client:
         yield test_client

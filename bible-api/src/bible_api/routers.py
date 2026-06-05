@@ -25,12 +25,19 @@ from bible_core.queries import (
     search_verses,
 )
 from bible_core.resolver import SqliteBookResolver
+from bible_semantic.model import embed_query
+from bible_semantic.search import cosine_top_k
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import Response
 
 from .caching import cached_json_response, no_store_json_response
-from .dependencies import get_conn, resolve_translation, resolve_translations
-from .errors import BookFilterError, NoMatchError, NoVersesFoundError
+from .dependencies import (
+    get_conn,
+    resolve_display_translation,
+    resolve_translation,
+    resolve_translations,
+)
+from .errors import BookFilterError, NoMatchError, NoVersesFoundError, SemanticUnavailableError
 from .schemas import (
     Book,
     BooksResponse,
@@ -42,6 +49,8 @@ from .schemas import (
     RandomVerse,
     SearchHit,
     SearchResponse,
+    SemanticSearchHit,
+    SemanticSearchResponse,
     Translation,
     TranslationsResponse,
 )
@@ -130,6 +139,48 @@ def search_endpoint(
             )
             for hit in page.hits
         ],
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/semantic-search")
+def semantic_search_endpoint(
+    request: Request,
+    conn: Conn,
+    q: Annotated[str, Query(min_length=1)],
+    translation: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    min_score: Annotated[float | None, Query(ge=-1.0, le=1.0)] = None,
+    include_text: bool = True,
+) -> Response:
+    # Validate the display translation first (404 on unknown) — before the store check, so
+    # an unknown translation is a 404 even when semantic search is disabled.
+    display_translation = resolve_display_translation(request, translation)
+
+    store = request.app.state.semantic_store
+    if store is None:
+        raise SemanticUnavailableError("semantic search is not enabled on this server")
+
+    # Search always runs in WEB space; `translation` only controls the displayed text.
+    matches = cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
+    book_names: dict[str, str] = request.app.state.book_names
+    results = [
+        SemanticSearchHit(
+            book=ref.book_id,
+            chapter=ref.chapter,
+            verse=ref.verse,
+            reference=f"{book_names.get(ref.book_id, ref.book_id)} {ref.chapter}:{ref.verse}",
+            score=round(score, 4),
+            text=(
+                get_verse_text(conn, display_translation, ref.book_id, ref.chapter, ref.verse)
+                if include_text
+                else None
+            ),
+        )
+        for ref, score in matches
+    ]
+    response = SemanticSearchResponse(
+        query=q, translation=display_translation, count=len(results), results=results
     )
     return cached_json_response(response, request)
 
