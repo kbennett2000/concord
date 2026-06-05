@@ -17,6 +17,10 @@ running instance loaded with the 13 bundled public-domain translations.
 - [`GET /v1/search`](#get-v1search)
 - [`GET /v1/semantic-search`](#get-v1semantic-search)
 - [`GET /v1/cross-references/{ref}`](#get-v1cross-referencesref)
+- [`GET /v1/places`](#get-v1places)
+- [`GET /v1/places/{id}`](#get-v1placesid)
+- [`GET /v1/places/{id}/verses`](#get-v1placesidverses)
+- [`GET /v1/verses/{ref}/places`](#get-v1versesrefplaces)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
 - [`GET /v1/translations`](#get-v1translations)
@@ -63,6 +67,9 @@ Every error uses one envelope:
 | `unknown_translation` | 404 | A requested translation isn't loaded. |
 | `no_verses_found` | 404 | A well-formed reference matches no verse in any requested translation (e.g. `Genesis 999:1`). |
 | `no_match` | 404 | `/random` filters match nothing (e.g. `book=GEN&testament=NT`). |
+| `unknown_place` | 404 | A place id in a path resolves to no place (`/places/nope`). `detail.place_id` echoes it. |
+| `unknown_type` | 400 | A `/places?type=` filter value isn't a known place type; `detail.available` lists the valid types. |
+| `unknown_status` | 400 | A `/places?status=` filter value isn't one of identified / disputed / unknown / symbolic / multiple. |
 | `invalid_search_query` | 400 | Malformed FTS5 syntax; the SQLite message is in `detail.fts5_error`. |
 | `invalid_parameter` | 422 | A query/path parameter fails validation (bad `format`, `limit` out of range, `min_votes` < 0, non-integer chapter). |
 
@@ -314,6 +321,166 @@ cross-references is *not* a 404; only an out-of-range source is.
 (out-of-range source) · `404 unknown_translation` (with `include_text=true`) ·
 `422 invalid_parameter` (`min_votes` < 0, `limit` out of range). **Caching:** immutable.
 
+## `GET /v1/places`
+
+Browse and filter the geography dataset (1,340 places), ordered by name.
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `type` | string | — | Filter by place type (`settlement`, `region`, `mountain`, `river`, …). Unknown → `400 unknown_type`. |
+| `status` | string | — | Filter by status: `identified`, `disputed`, `unknown`, `symbolic`, `multiple`. |
+| `q` | string | — | Case-insensitive substring match on the display name. |
+| `limit` | int | `50` | 1–200. |
+| `offset` | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/places?type=settlement&limit=2'
+```
+```json
+{
+  "type": "settlement", "status": null, "q": null,
+  "limit": 2, "offset": 0, "total": 843,
+  "places": [
+    { "id": "a72a1ff", "friendly_id": "Abdon", "name": "Abdon", "type": "settlement",
+      "latitude": 33.047692, "longitude": 35.161916,
+      "confidence": "high", "confidence_score": 826, "status": "identified" },
+    { "id": "abffcaa", "friendly_id": "Abel-beth-maacah", "name": "Abel-beth-maacah", "type": "settlement",
+      "latitude": 33.258051, "longitude": 35.581007,
+      "confidence": "high", "confidence_score": 756, "status": "identified" }
+  ]
+}
+```
+
+Each place carries named **`latitude`/`longitude`** fields (never a bare ordered pair), a
+`confidence` (`high`/`medium`/`low`, or `null`), the raw `confidence_score`, and a `status`
+(see [`GET /v1/places/{id}`](#get-v1placesid) for what each status means). Results are ordered
+by `name` then `id`, so `limit`/`offset` pages don't overlap; `total` is the full filtered count.
+
+**Empty results** return `200` with `"total": 0` and `"places": []`.
+
+**Errors:** `400 unknown_type` (with `detail.available`) · `400 unknown_status` ·
+`422 invalid_parameter` (`limit` out of 1–200, negative `offset`). **Caching:** immutable.
+
+## `GET /v1/places/{id}`
+
+One place's full detail, by its stable id, plus how many verses mention it.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `id` | path | string | The OpenBible place id (e.g. `a15257a`). |
+
+```bash
+$ curl -s 'localhost:8000/v1/places/a15257a'
+```
+```json
+{
+  "id": "a15257a", "friendly_id": "Jerusalem", "name": "Jerusalem", "url_slug": "jerusalem",
+  "type": "settlement", "preceding_article": "",
+  "latitude": 31.776667, "longitude": 35.234167,
+  "confidence": "high", "confidence_score": 1000, "status": "identified",
+  "modern_name": "Jerusalem", "verse_count": 955
+}
+```
+
+**The honesty model.** `status` is how confidently the place is located, and Concord never
+fabricates coordinates:
+
+| `status` | Meaning | Coordinates |
+|---|---|---|
+| `identified` | A confident location. | present |
+| `disputed` | Scholars place it differently; a best guess is given but flagged. | present (hedged) |
+| `unknown` | The location is genuinely lost to history. | `null` |
+| `symbolic` | A name used non-literally (prophetic/figurative). | `null` |
+| `multiple` | Itinerant — refers to several places (e.g. the tabernacle). | `null` |
+
+An `unknown` place is honest about it — the land of Nod returns null coordinates rather than a
+fabricated pin:
+
+```bash
+$ curl -s 'localhost:8000/v1/places/a1ad8e1'
+```
+```json
+{
+  "id": "a1ad8e1", "friendly_id": "Nod", "name": "Nod", "url_slug": "nod",
+  "type": "region", "preceding_article": "",
+  "latitude": null, "longitude": null,
+  "confidence": null, "confidence_score": null, "status": "unknown",
+  "modern_name": null, "verse_count": 1
+}
+```
+
+Distinct places that share a name are distinct entries with distinct ids — the several Antiochs
+and Bethlehems each have their own id and `friendly_id` (`Antioch 1`, `Antioch 2`).
+
+**Errors:** `404 unknown_place` (`detail.place_id` echoes the id). **Caching:** immutable.
+
+## `GET /v1/places/{id}/verses`
+
+The verses that mention a place, in canonical order, optionally with text. This is one direction
+of the **bi-directional** link; the inverse is [`GET /v1/verses/{ref}/places`](#get-v1versesrefplaces).
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `id` | path · string | — | The place id. |
+| `translation` | string | default translation | Which translation's text to hydrate. Only consulted when `include_text=true`. |
+| `include_text` | bool | `true` | When `false`, `translation` is `null` and each `text` is `null`. |
+| `limit` | int | `50` | 1–200. |
+| `offset` | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/places/a15257a/verses?translation=KJV&limit=2'
+```
+```json
+{
+  "id": "a15257a", "translation": "KJV", "include_text": true,
+  "limit": 2, "offset": 0, "total": 955,
+  "verses": [
+    { "book": "JOS", "chapter": 10, "verse": 1, "reference": "Joshua 10:1",
+      "text": "Now it came to pass, when Adonizedek king of Jerusalem had heard how Joshua had taken Ai ..." },
+    { "book": "JOS", "chapter": 10, "verse": 2, "reference": "Joshua 10:2",
+      "text": "That they feared greatly, because Gibeon [was] a great city ..." }
+  ]
+}
+```
+
+A verse absent in the chosen translation comes back with `text: null`. With `include_text=false`,
+the response carries just the references — `translation` is `null` and every `text` is `null`.
+`total` is the place's full verse count, independent of the page.
+
+**Errors:** `404 unknown_place` · `404 unknown_translation` (with `include_text=true`) ·
+`422 invalid_parameter` (`limit` out of 1–200). **Caching:** immutable.
+
+## `GET /v1/verses/{ref}/places`
+
+The inverse lookup: the places named anywhere in `{ref}` — a verse, a range, or a whole chapter.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `ref` | path | string | A reference per the [grammar](#reference-grammar) (URL-encode spaces). |
+
+```bash
+$ curl -s 'localhost:8000/v1/verses/Acts%2017/places'
+```
+```json
+{
+  "reference": "Acts 17", "total": 6,
+  "places": [
+    { "id": "a4bdea7", "friendly_id": "Amphipolis", "name": "Amphipolis", "type": "settlement",
+      "latitude": 40.820159, "longitude": 23.847209,
+      "confidence": "high", "confidence_score": 1000, "status": "identified" },
+    { "id": "ab20df9", "friendly_id": "Apollonia", "name": "Apollonia", "type": "settlement",
+      "latitude": 40.623703, "longitude": 23.469685,
+      "confidence": "high", "confidence_score": 1000, "status": "identified" }
+  ]
+}
+```
+
+The result is the **deduped union** across the reference's range — a place named in several
+verses of the passage appears once — ordered by `name` then `id`. A reference that names no place
+returns `200` with `"total": 0` and `"places": []` (never a 404).
+
+**Errors:** `400 unparseable_reference` · `404 unknown_book`. **Caching:** immutable.
+
 ## `GET /v1/random`
 
 One random verse, optionally constrained. Handy for verse-of-the-day / projection.
@@ -393,6 +560,7 @@ $ curl -s 'localhost:8000/healthz'
 {
   "status": "ok",
   "translation_count": 13, "verse_count": 404889, "cross_ref_count": 344799, "book_count": 66,
+  "place_count": 1340,
   "semantic": {
     "enabled": true, "translation": "WEB", "embedding_count": 31054,
     "model": "ibm-granite/granite-embedding-311m-multilingual-r2", "dim": 768
