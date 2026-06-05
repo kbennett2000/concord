@@ -288,8 +288,9 @@ text directly.
 ```
 
 **Errors** reuse the v1 envelope: `q` missing/empty → `422`; unknown `translation` →
-`400 unknown_translation` (consistent with `/v1/search`). Empty result set → `200` with
-`count: 0`.
+`404 unknown_translation` (consistent with how `/v1/search` and `/v1/verses` actually treat
+an unknown translation — corrected from `400` in Slice S2b, which reuses v1's
+`UnknownTranslationError` path). Empty result set → `200` with `count: 0`.
 
 **Caching.** For a fixed model + vectors, the response to a given query+params is
 deterministic and immutable until a rebuild (which is a new image). Mirror `/v1/search`:
