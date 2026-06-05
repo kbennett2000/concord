@@ -178,7 +178,25 @@ the v1 "tested on real hardware" spirit):
 | **Disk** | <100 MB | +~500 MB (model + ONNX runtime + ~95 MB vectors), well under 1 GB |
 | **GPU** | None | None |
 | **Network** | None at runtime | None at runtime |
-| **Model** | — | `granite-embedding-311m-multilingual-r2` (Apache 2.0) |
+| **Model** | — | `granite-embedding-311m-multilingual-r2` (Apache 2.0), **int8** `model_quint8_avx2.onnx` (~313 MB) |
+
+**Measured (S3b — the deployable int8 image).** The design targets above are confirmed
+against the real image; numbers below replace the estimates once Kris runs the
+verification on the Docker host (G434 build machine + the Optiplex run target).
+
+| metric | value |
+|---|---|
+| Image size (`concord:latest`, int8) | **TBD (pending Kris's measurement)** |
+| Runtime RAM (in-container RSS, primed) | **TBD (pending Kris's measurement)** |
+| Query latency — G434 (AVX2) | **TBD (pending Kris's measurement)** |
+| Query latency — Optiplex (AVX only, int8 via ONNX Runtime fallback) | **TBD (pending Kris's measurement — the one real unknown)** |
+| Offline (`--network none`) semantic search | **TBD (pending Kris's verification)** |
+
+The Optiplex line is the unmeasured risk: the int8 weights are AVX2-optimized and ONNX
+Runtime falls back to AVX kernels on Ivy Bridge — correct, but speed is confirmed only by
+measurement. The escape hatch holds regardless: **build the image on a capable machine and
+ship it** (`docker save`/`load` or a registry), so the modest box only runs the fast
+query-time path, never the ~21-min build.
 
 Lean into the $50-machine fact as a trust signal in the docs: *"Developed and tested on a
 2012 Dell Optiplex 9010 — a $50 used desktop. If it runs there, it runs on whatever you've
