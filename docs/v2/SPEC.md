@@ -180,23 +180,28 @@ the v1 "tested on real hardware" spirit):
 | **Network** | None at runtime | None at runtime |
 | **Model** | — | `granite-embedding-311m-multilingual-r2` (Apache 2.0), **int8** `model_quint8_avx2.onnx` (~313 MB) |
 
-**Measured (S3b — the deployable int8 image).** The design targets above are confirmed
-against the real image; numbers below replace the estimates once Kris runs the
-verification on the Docker host (G434 build machine + the Optiplex run target).
+**Measured (S3b — the deployable int8 image).** Built on G434 and verified on both G434 and
+the reference Optiplex (Ivy Bridge i5-3540, **no AVX2**), 2026-06-05:
 
 | metric | value |
 |---|---|
-| Image size (`concord:latest`, int8) | **TBD (pending Kris's measurement)** |
-| Runtime RAM (in-container RSS, primed) | **TBD (pending Kris's measurement)** |
-| Query latency — G434 (AVX2) | **TBD (pending Kris's measurement)** |
-| Query latency — Optiplex (AVX only, int8 via ONNX Runtime fallback) | **TBD (pending Kris's measurement — the one real unknown)** |
-| Offline (`--network none`) semantic search | **TBD (pending Kris's verification)** |
+| Image size (`concord:latest`, int8) | **1.42 GB on-disk** / **446 MB compressed** (the `docker save`+gzip transfer) |
+| Runtime RAM (in-container RSS, primed) | **~662 MiB** (both boxes) — comfortably under the 2 GB compose rail |
+| Query latency — G434 (AVX2), warm median | **42 ms** (32–59 ms) |
+| Query latency — Optiplex (AVX only, int8 via ONNX Runtime fallback), warm median | **92 ms** (59–109 ms) |
+| Optiplex cold start → ready (model warm at boot) | **6.0 s** |
+| Offline (`--network none`) semantic search | **✅ verified on both boxes** — ranked results + `/healthz` semantic-ready, no Hugging Face reach |
 
-The Optiplex line is the unmeasured risk: the int8 weights are AVX2-optimized and ONNX
-Runtime falls back to AVX kernels on Ivy Bridge — correct, but speed is confirmed only by
-measurement. The escape hatch holds regardless: **build the image on a capable machine and
-ship it** (`docker save`/`load` or a registry), so the modest box only runs the fast
-query-time path, never the ~21-min build.
+Notes:
+- **On-disk 1.42 GB exceeds the original "well under 1 GB" estimate** (model 347 MB + venv/ONNX
+  Runtime 228 MB + `bible.db` 139 MB + `embeddings.db` 128 MB + base ~130 MB). The *download*
+  to ship is 446 MB compressed. RAM and latency both came in better than the design targets.
+- **The Optiplex AVX-fallback worry was overblown:** the AVX2-labeled int8 model runs via ONNX
+  Runtime's AVX kernels on Ivy Bridge at a **92 ms warm median** — ~2× G434 but still firmly
+  interactive. No second (non-AVX2) variant is needed.
+- The deploy escape hatch is validated: **build on a capable machine and ship the image**
+  (`docker save | gzip` → `scp` → `docker load`, ~2 min transfer + ~36 s load on the Optiplex),
+  so the modest box only ever runs the fast query path, never the ~22-min build.
 
 Lean into the $50-machine fact as a trust signal in the docs: *"Developed and tested on a
 2012 Dell Optiplex 9010 — a $50 used desktop. If it runs there, it runs on whatever you've
