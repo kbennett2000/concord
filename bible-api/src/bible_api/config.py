@@ -13,6 +13,7 @@ DEFAULT_PORT = 8000
 DEFAULT_CORS_ORIGINS = "*"
 DEFAULT_DB_PATH = "bible.db"
 DEFAULT_TRANSLATION = "KJV"
+DEFAULT_SEMANTIC_MAX_CONCURRENCY = 2
 _FALSEY = {"0", "false", "no", "off"}
 
 
@@ -59,3 +60,16 @@ def semantic_enabled() -> bool:
     endpoint then returns 503 and no model is loaded (used by the fast test suite).
     """
     return os.environ.get("CONCORD_SEMANTIC_SEARCH", "1").strip().lower() not in _FALSEY
+
+
+def semantic_max_concurrency() -> int:
+    """Max concurrent semantic-search inferences. ``CONCORD_SEMANTIC_MAX_CONCURRENCY``.
+
+    Default 2, sized to a weak ~2-core non-AVX2 box (≈ one in-flight inference per core);
+    excess requests are shed with 503 + Retry-After. Raise it on beefier / AVX2 hardware.
+    ``0`` (or any non-positive value) disables the cap entirely. See docs/adr/ADR-0001.
+    """
+    value = int(
+        os.environ.get("CONCORD_SEMANTIC_MAX_CONCURRENCY", DEFAULT_SEMANTIC_MAX_CONCURRENCY)
+    )
+    return value if value > 0 else 0

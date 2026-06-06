@@ -19,6 +19,10 @@ services:
       CONCORD_MODEL_PATH: "${CONCORD_MODEL_PATH:-/app/model}"
       CONCORD_EMBEDDINGS_PATH: "${CONCORD_EMBEDDINGS_PATH:-/app/embeddings.db}"
       CONCORD_SEMANTIC_SEARCH: "${CONCORD_SEMANTIC_SEARCH:-1}"
+      # Semantic-search concurrency cap (ADR-0001). Default 2 ≈ one inference per core on a
+      # weak ~2-core non-AVX2 box; raise on beefier/AVX2 HW; 0 disables. Bounds how many
+      # inferences run at once, not how long one takes — set a client/proxy read-timeout too.
+      CONCORD_SEMANTIC_MAX_CONCURRENCY: "${CONCORD_SEMANTIC_MAX_CONCURRENCY:-2}"
     restart: unless-stopped
     healthcheck:
       # Mirrors the Dockerfile HEALTHCHECK; uses the venv python (no curl in the slim image).

@@ -271,6 +271,12 @@ request input sizes, and sets `X-Content-Type-Options: nosniff`. CORS is intenti
 (`*`) with credentials disabled — correct for an unauthenticated, read-only service on a
 trusted network.
 
+The compute-heavy `/v1/semantic-search` is protected by a concurrency cap
+(`CONCORD_SEMANTIC_MAX_CONCURRENCY`, default 2) that sheds overload with `503` + `Retry-After`.
+The app bounds how *many* inferences run at once, **not how long one takes** — on slow
+(non-AVX2) hardware a single query can take seconds, so set a **client / reverse-proxy
+read-timeout** as well (see [`docs/SECURITY.md`](docs/SECURITY.md)).
+
 **It is not hardened for the public internet.** Before exposing it beyond a LAN, put a
 reverse proxy (TLS), authentication, and rate limiting in front of it. The full threat model
 and the checklist for public exposure are in [`docs/SECURITY.md`](docs/SECURITY.md).
