@@ -100,18 +100,62 @@ _TABLES: tuple[str, ...] = (
         PRIMARY KEY (place_id, book_id, chapter, verse)
     )
     """,
+    # Translator's notes (v4, additive). A note is anchored to a verse by CANONICAL
+    # coordinates (book_id + chapter + verse) plus `translation_id` — notes are
+    # translation-specific because `char_offset` indexes into THAT translation's verse text.
+    # This mirrors how `cross_references` / `place_verses` anchor (no `verses.id` FK). The
+    # anchor is a single point (`char_offset`), not a span (SPEC v4 §4). `note_type` is a
+    # constrained set; NULL is allowed for a plain footnote. Notes are user-supplied from
+    # `data/private/` and never ship in the public image (SPEC v4 §2).
+    """
+    CREATE TABLE IF NOT EXISTS translator_notes (
+        id             INTEGER PRIMARY KEY,
+        translation_id TEXT NOT NULL REFERENCES translations (id),
+        book_id        TEXT NOT NULL REFERENCES books (id),
+        chapter        INTEGER NOT NULL,
+        verse          INTEGER NOT NULL,
+        note_type      TEXT CHECK (note_type IN ('tn', 'sn', 'tc', 'map', 'other')),
+        text           TEXT NOT NULL,
+        char_offset    INTEGER NOT NULL DEFAULT 0,
+        marker         TEXT,
+        ordinal        INTEGER NOT NULL
+    )
+    """,
+    # A note's own cross-references → target canonical coords (range via to_verse_end, NULL
+    # = single verse). Distinct from `cross_references`, which is verse→verse (TSK); these
+    # belong to a `translator_notes` row.
+    """
+    CREATE TABLE IF NOT EXISTS note_cross_references (
+        id             INTEGER PRIMARY KEY,
+        note_id        INTEGER NOT NULL REFERENCES translator_notes (id),
+        to_book_id     TEXT NOT NULL REFERENCES books (id),
+        to_chapter     INTEGER NOT NULL,
+        to_verse_start INTEGER NOT NULL,
+        to_verse_end   INTEGER
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
     "ON cross_references (from_book_id, from_chapter, from_verse)",
     # Supports the verse→places direction (mirrors idx_xref_from).
     "CREATE INDEX IF NOT EXISTS idx_place_verses_bcv ON place_verses (book_id, chapter, verse)",
+    # "all notes for this verse/chapter in this translation" — the Slice-2 read lookup.
+    "CREATE INDEX IF NOT EXISTS idx_notes_anchor "
+    "ON translator_notes (translation_id, book_id, chapter, verse)",
+    # A note's cross-references.
+    "CREATE INDEX IF NOT EXISTS idx_note_xref_note ON note_cross_references (note_id)",
 )
 
-# FTS5 virtual table over verse text, external-content linked to verses.id.
-_FTS = (
+# FTS5 virtual tables, external-content linked to their content table's INTEGER PK.
+# `verses_fts` over verse text; `notes_fts` over translator-note bodies (v4). Both follow
+# the same external-content pattern: the loader rebuilds each after bulk insert. Search-time
+# filtering (by translation / note_type) JOINs `notes_fts.rowid = translator_notes.id`.
+_FTS: tuple[str, ...] = (
     "CREATE VIRTUAL TABLE IF NOT EXISTS verses_fts "
-    "USING fts5(text, content='verses', content_rowid='id')"
+    "USING fts5(text, content='verses', content_rowid='id')",
+    "CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts "
+    "USING fts5(text, content='translator_notes', content_rowid='id')",
 )
 
 
@@ -127,11 +171,12 @@ def create_schema(conn: sqlite3.Connection) -> None:
     for statement in _TABLES:
         conn.execute(statement)
     try:
-        conn.execute(_FTS)
+        for fts in _FTS:
+            conn.execute(fts)
     except sqlite3.OperationalError as exc:
         raise RuntimeError(
             "SQLite FTS5 is required but not available in this build. "
-            "Concord's search index (verses_fts) cannot be created. "
+            "Concord's search indexes (verses_fts, notes_fts) cannot be created. "
             "Install or rebuild SQLite with the FTS5 extension enabled."
         ) from exc
     conn.commit()
