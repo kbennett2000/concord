@@ -61,3 +61,17 @@ def test_accepts(text: str, spans: tuple[Span, ...]) -> None:
 def test_rejects(text: str, message: str) -> None:
     with pytest.raises(ParseError, match=message):
         parse_reference(text, RESOLVER)
+
+
+def test_rejects_oversized_verse_list() -> None:
+    # 101 elements: each list element becomes its own SQL query downstream
+    # (queries._collect), so the element count is capped to bound the fan-out.
+    ref = "John 3:1" + ",1" * 100
+    with pytest.raises(ParseError, match="at most 100 are allowed"):
+        parse_reference(ref, RESOLVER)
+
+
+def test_accepts_verse_list_at_cap() -> None:
+    # Exactly at the cap (100 elements) still parses.
+    ref = "John 3:1" + ",1" * 99
+    parse_reference(ref, RESOLVER)  # does not raise

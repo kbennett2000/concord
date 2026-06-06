@@ -22,6 +22,11 @@ _DASHES = "‐‑‒–—―−"
 _DASH_TABLE = str.maketrans(_DASHES, "-" * len(_DASHES))
 _SPEC_CHARS = set("0123456789:,-")
 
+# Cap on verse-list elements (e.g. ``3:16,17,18,...``). Each element becomes its own SQL
+# query downstream (queries._collect), so an unbounded list is an amplification vector.
+# A real verse list is a handful of verses; 100 is far above any legitimate use.
+_MAX_LIST_ELEMENTS = 100
+
 
 class ParseError(Exception):
     """Raised when a reference string is not valid per the SPEC §5 grammar."""
@@ -171,6 +176,11 @@ def _parse_list(spec: str, raw: str) -> tuple[Span, ...]:
     elements = spec.split(",")
     if any(element == "" for element in elements):
         raise ParseError(f"empty list element in {raw!r} (adjacent commas?)")
+    if len(elements) > _MAX_LIST_ELEMENTS:
+        raise ParseError(
+            f"verse list in {raw!r} has {len(elements)} elements; "
+            f"at most {_MAX_LIST_ELEMENTS} are allowed"
+        )
 
     first = elements[0]
     if ":" not in first:

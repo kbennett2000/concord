@@ -42,6 +42,18 @@ def test_limit_zero_is_422(client: TestClient) -> None:
     assert client.get("/v1/search", params={"q": "gen", "limit": 0}).status_code == 422
 
 
+def test_q_too_long_is_422(client: TestClient) -> None:
+    response = client.get("/v1/search", params={"q": "a" * 1001})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_parameter"
+
+
+def test_semantic_q_too_long_is_422(client: TestClient) -> None:
+    response = client.get("/v1/semantic-search", params={"q": "a" * 1001})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_parameter"
+
+
 def test_envelope_matches_verses_endpoint(client: TestClient) -> None:
     search_error = client.get("/v1/search", params={"q": '"unbalanced'}).json()
     verses_error = client.get("/v1/verses/foo bar").json()

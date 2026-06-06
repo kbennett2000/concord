@@ -906,6 +906,19 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   container reports `uid=999(app)`, reaches `healthy`, and `make docker-verify` passes
   (corpus + semantic search primed, offline /docs, random) — all as the non-root user.
 
+### HS-3 — Input bounds (behavior change)
+- Capped unbounded inputs that previously fanned out to compute or many SQL queries:
+  - `bible-api`: `max_length` on `q` (1000) for `/search` + `/semantic-search`, and on the
+    `ref` path param (256) for `/verses/{ref}`, `/cross-references/{ref}`,
+    `/verses/{ref}/places`. Over-length input → 422 `invalid_parameter` at the HTTP edge.
+  - `bible-core` parser: `_parse_list` now rejects verse lists with > 100 elements
+    (`ParseError` → 400 `unparseable_reference`). This is the load-bearing fix — each list
+    element becomes its own SQL query in `queries._collect`, and the parser is embeddable
+    outside the web layer, so the cap lives with it, not only at the HTTP edge.
+- Tests added matching existing patterns: parser cap accept-at-100 / reject-at-101
+  (`test_parser_edge_cases.py`); `q` too long → 422 (`test_search_errors.py`); `ref` too
+  long → 422 and oversized list → 400 (`test_errors.py`). `make check`: 425 passed.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)
