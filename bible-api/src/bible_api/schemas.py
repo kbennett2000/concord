@@ -111,6 +111,45 @@ class CrossRefResponse(BaseModel):
     cross_references: list[CrossRefEntry]
 
 
+class NoteCrossReference(BaseModel):
+    """A cross-reference carried by a translator's note → a target verse or range."""
+
+    to_book: str
+    to_chapter: int
+    to_verse_start: int
+    to_verse_end: int | None
+    reference: str
+
+
+class TranslatorNote(BaseModel):
+    """One translator's note: its canonical anchor, the point ``char_offset`` a client uses to
+    place the marker, and the note's own cross-references."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    type: str | None
+    text: str
+    char_offset: int
+    marker: str | None
+    ordinal: int
+    cross_references: list[NoteCrossReference]
+
+
+class NotesResponse(BaseModel):
+    """A passage's translator's notes. ``verse`` echoes the ``?verse`` filter (null when the
+    whole chapter was requested). A known translation with no notes returns ``notes: []`` (200),
+    not an error — the published image ships zero notes."""
+
+    translation: str
+    book: str
+    chapter: int
+    verse: int | None
+    total: int
+    notes: list[TranslatorNote]
+
+
 class Book(BaseModel):
     """A book's catalog metadata."""
 

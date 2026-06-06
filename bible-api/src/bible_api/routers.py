@@ -14,6 +14,8 @@ import structlog
 from bible_core.parser import UnknownBookError, parse_reference
 from bible_core.queries import (
     CrossRefRow,
+    NoteCrossRefRow,
+    NoteRow,
     PlaceRow,
     QueryResult,
     count_place_verses,
@@ -21,6 +23,7 @@ from bible_core.queries import (
     get_books,
     get_chapter,
     get_cross_references,
+    get_notes,
     get_place,
     get_place_verses,
     get_places_for_reference,
@@ -61,6 +64,8 @@ from .schemas import (
     CrossRefResponse,
     CrossRefSource,
     CrossRefTarget,
+    NoteCrossReference,
+    NotesResponse,
     PlaceDetail,
     PlacesResponse,
     PlaceSummary,
@@ -74,6 +79,7 @@ from .schemas import (
     SemanticSearchResponse,
     Translation,
     TranslationsResponse,
+    TranslatorNote,
     VersePlacesResponse,
 )
 from .shaping import shape_grouped, shape_parallel
@@ -289,6 +295,70 @@ def cross_references_endpoint(
         offset=offset,
         total=page.total,
         cross_references=entries,
+    )
+    return cached_json_response(response, request)
+
+
+# --- translator's notes (v4): passage read --------------------------------------------
+
+
+def _note_xref_reference(x: NoteCrossRefRow) -> str:
+    """Human reference for a note's cross-ref target (book name + chapter:start[-end])."""
+    if x.to_verse_end is not None and x.to_verse_end != x.to_verse_start:
+        return f"{x.to_book_name} {x.to_chapter}:{x.to_verse_start}-{x.to_verse_end}"
+    return f"{x.to_book_name} {x.to_chapter}:{x.to_verse_start}"
+
+
+def _translator_note(row: NoteRow) -> TranslatorNote:
+    return TranslatorNote(
+        book=row.book_id,
+        chapter=row.chapter,
+        verse=row.verse,
+        reference=f"{row.book_name} {row.chapter}:{row.verse}",
+        type=row.note_type,
+        text=row.text,
+        char_offset=row.char_offset,
+        marker=row.marker,
+        ordinal=row.ordinal,
+        cross_references=[
+            NoteCrossReference(
+                to_book=x.to_book_id,
+                to_chapter=x.to_chapter,
+                to_verse_start=x.to_verse_start,
+                to_verse_end=x.to_verse_end,
+                reference=_note_xref_reference(x),
+            )
+            for x in row.cross_references
+        ],
+    )
+
+
+@router.get("/translations/{translation}/notes/{book}/{chapter}")
+def notes_endpoint(
+    translation: str,
+    book: str,
+    request: Request,
+    conn: Conn,
+    chapter: Annotated[int, Path(ge=1)],
+    verse: Annotated[int | None, Query(ge=1)] = None,
+) -> Response:
+    # Unknown translation → 404; unknown book → 404 (matches the chapter read). A KNOWN
+    # translation with no notes (the public image, or any translation but a user's NET) returns
+    # 200 with an empty list — not an error (SPEC v4 §5). An empty/out-of-range chapter or verse
+    # likewise returns empty, since notes are an overlay (no verse-range validation here).
+    translation_id = resolve_translation(request, translation)
+    info = SqliteBookResolver(conn).resolve(book)
+    if info is None:
+        raise UnknownBookError(f"unrecognised book {book!r}")
+
+    rows = get_notes(conn, translation_id, info.id, chapter, verse)
+    response = NotesResponse(
+        translation=translation_id,
+        book=info.id,
+        chapter=chapter,
+        verse=verse,
+        total=len(rows),
+        notes=[_translator_note(row) for row in rows],
     )
     return cached_json_response(response, request)
 

@@ -12,6 +12,7 @@ Each :class:`~bible_core.parser.Span` maps to **one** SQL query; ranges are expr
 from __future__ import annotations
 
 import sqlite3
+from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
@@ -333,6 +334,86 @@ def get_cross_references(
         0
     ]
     return CrossRefPage(rows=rows, total=total)
+
+
+# --- translator's notes (v4) ---------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class NoteCrossRefRow:
+    """One cross-reference carried by a note → a target verse or range (canonical coords)."""
+
+    to_book_id: str
+    to_book_name: str
+    to_chapter: int
+    to_verse_start: int
+    to_verse_end: int | None  # None ⇒ single verse
+
+
+@dataclass(frozen=True)
+class NoteRow:
+    """One translator's note for a passage, with its own cross-references nested."""
+
+    id: int
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+    note_type: str | None
+    text: str
+    char_offset: int
+    marker: str | None
+    ordinal: int
+    cross_references: tuple[NoteCrossRefRow, ...]
+
+
+def get_notes(
+    conn: sqlite3.Connection,
+    translation_id: str,
+    book_id: str,
+    chapter: int,
+    verse: int | None = None,
+) -> tuple[NoteRow, ...]:
+    """Notes for a chapter (or one verse) in a translation, ordered verse → ordinal → id.
+
+    Unpaginated — a chapter's notes are bounded (mirrors ``get_places_for_reference``). A
+    translation with no notes for the passage simply returns ``()`` — the caller serves that as
+    an empty list (200), never a 404.
+    """
+    params: list[str | int] = [translation_id, book_id, chapter]
+    verse_clause = ""
+    if verse is not None:
+        verse_clause = " AND n.verse = ?"
+        params.append(verse)
+
+    note_sql = (
+        "SELECT n.id, n.book_id, b.name, n.chapter, n.verse, n.note_type, n.text, "
+        "n.char_offset, n.marker, n.ordinal "
+        "FROM translator_notes n JOIN books b ON b.id = n.book_id "
+        f"WHERE n.translation_id = ? AND n.book_id = ? AND n.chapter = ?{verse_clause} "
+        "ORDER BY n.verse, n.ordinal, n.id"
+    )
+    note_rows = conn.execute(note_sql, params).fetchall()
+    if not note_rows:
+        return ()
+
+    ids = [r[0] for r in note_rows]
+    placeholders = ",".join("?" * len(ids))
+    xref_sql = (
+        "SELECT x.note_id, x.to_book_id, b.name, x.to_chapter, x.to_verse_start, x.to_verse_end "
+        "FROM note_cross_references x JOIN books b ON b.id = x.to_book_id "
+        f"WHERE x.note_id IN ({placeholders}) ORDER BY x.note_id, x.id"
+    )
+    by_note: dict[int, list[NoteCrossRefRow]] = defaultdict(list)
+    for r in conn.execute(xref_sql, ids):
+        by_note[r[0]].append(NoteCrossRefRow(r[1], r[2], r[3], r[4], r[5]))
+
+    return tuple(
+        NoteRow(
+            r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], tuple(by_note.get(r[0], ()))
+        )
+        for r in note_rows
+    )
 
 
 # --- metadata + random ---------------------------------------------------------------
