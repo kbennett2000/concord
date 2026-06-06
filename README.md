@@ -76,6 +76,8 @@ curl localhost:8000/healthz
 That last line returns JSON with translation and verse counts. Open `localhost:8000/docs` in
 a browser for interactive Swagger documentation — it works fully offline.
 
+Prefer not to build? Pull the prebuilt image instead — see [Deployment](#deployment).
+
 Want a verse?
 
 ```bash
@@ -204,7 +206,21 @@ The database, the embedding model, and the precomputed verse vectors are all **b
 the image** at build time — no volumes, no separate data step. A fresh container is
 immediately ready and identical to every other container built from the same source.
 
-Deploy to a LAN host (replace `192.168.1.62` with yours):
+**The easy path — pull the published image.** A prebuilt image is published to GHCR, so you
+can skip the ~20-min build entirely and just pull it (no auth required):
+
+```bash
+docker pull ghcr.io/kbennett2000/concord:v1.0.0     # or :latest
+docker run -d -p 8000:8000 ghcr.io/kbennett2000/concord:v1.0.0
+curl localhost:8000/healthz
+```
+
+The image is `linux/amd64` and, like a locally-built one, runs fully offline once pulled. To
+use it from compose, point the `image:` at the published tag instead of building locally. The
+build-from-source and `docker save`/`scp` paths below remain available — pulling is just the
+quickest way in.
+
+Deploy to a LAN host by building from source (replace `192.168.1.62` with yours):
 
 ```bash
 rsync -a --exclude .git --exclude data/private ./ user@192.168.1.62:~/concord/
