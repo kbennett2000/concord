@@ -983,6 +983,13 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   Covers 503+envelope+Retry-After, sub-cap success, slot release, cap-0 inert, disabled-inert,
   FTS5 unaffected. ADR-0001 flipped to Accepted. `make check` green.
 
+### HS-9 — Bump CI actions off Node 20
+- `ci.yml`: `actions/checkout@v4 → @v6` and `astral-sh/setup-uv@v5 → @v8` (their current
+  stable majors, on Node 24) ahead of GitHub's 2026-06-16 forced Node-24 cutover, clearing
+  the Node-20 deprecation warning flagged in HS-2. Versions only — gate steps, the `uv`
+  `version: "0.11"` pin, concurrency, and permissions unchanged. Verified by the PR's own
+  green CI run on the bumped versions.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)
