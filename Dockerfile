@@ -66,13 +66,23 @@ ENV PYTHONUNBUFFERED=1 \
     CONCORD_EMBEDDINGS_PATH=/app/embeddings.db
 WORKDIR /app
 
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/bible.db /app/bible.db
-COPY --from=builder /app/embeddings.db /app/embeddings.db
-COPY --from=builder /app/model /app/model
+# Run as a non-root system user, not root. Create it before the COPYs so the baked assets
+# land owned by it. The service is read-only at runtime — bible.db is opened mode=ro and
+# embeddings.db is only SELECTed once at boot (no journal/WAL written), logs go to stdout —
+# so no writable directory is ever needed; the user just needs to read the venv + the two
+# databases + the model.
+RUN groupadd --system app && useradd --system --no-create-home --gid app app
+
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder --chown=app:app /app/bible.db /app/bible.db
+COPY --from=builder --chown=app:app /app/embeddings.db /app/embeddings.db
+COPY --from=builder --chown=app:app /app/model /app/model
 
 # Container always listens on 8000; the host port is remapped via compose.
 EXPOSE 8000
+
+# Drop root for everything below (healthcheck + CMD both run as this user).
+USER app
 
 # Healthy once /healthz returns 200 with a loaded corpus AND semantic search primed. Uses
 # stdlib urllib (slim has no curl) and the venv python on PATH. The long start-period covers
