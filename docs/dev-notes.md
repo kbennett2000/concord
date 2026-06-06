@@ -1127,3 +1127,10 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   ways: the `.dockerignore` `data/private/` rule, and an empirical busybox build of the
   post-`.dockerignore` context (`COPY . /ctx` + `find … NET.json -o net.json`) that returned
   nothing — confirming the restricted notes never enter the build context or the baked `bible.db`.
+
+### Release — v1.0.1 (Vary: Origin CORS fix)
+- **Date:** 2026-06-06. v1.0.1 — Vary: Origin CORS cache-poisoning fix (surfaced by
+  concord-tutorial-web); first patch release. Bumped bible-api `__version__`/pyproject
+  `1.0.0 → 1.0.1` (the OpenAPI version shown at `/docs`; refreshed `uv.lock`). The underlying
+  fix is logged above (`### API — Vary: Origin on cacheable responses`); tag/publish is a
+  separate manual trigger (`publish-image.yml` on `v*`), not part of this prep.
