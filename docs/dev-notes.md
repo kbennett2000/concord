@@ -894,6 +894,18 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   or run the ~21-min embed (those stay behind the integration marker / the Docker build).
   A Docker build + `/healthz` smoke job was deliberately deferred.
 
+### HS-2 — Non-root container user
+- Runtime stage of the `Dockerfile` only: create a system user/group `app` (uid/gid 999),
+  `COPY --chown=app:app` the venv + `bible.db` + `embeddings.db` + model, and add `USER app`
+  before the healthcheck/`CMD`. The image no longer runs as root.
+- Read-only model confirmed and held: `bible.db` is opened `mode=ro`; `embeddings.db` is
+  only `SELECT`ed once at boot by `load_store` (no journal/WAL written); logs go to stdout —
+  so no writable directory is needed. `--chown` gives `app` ownership of its assets, so the
+  boot-time embeddings read needs no reliance on SQLite's read-only-open fallback.
+- Verified end-to-end: rebuilt (builder layers cached, only the runtime stage changed),
+  container reports `uid=999(app)`, reaches `healthy`, and `make docker-verify` passes
+  (corpus + semantic search primed, offline /docs, random) — all as the non-root user.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)
