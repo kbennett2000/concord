@@ -1,0 +1,49 @@
+# Concord CI — runs the same gate as `make check` (ruff lint, ruff format --check,
+# pyright strict, pytest) on every PR and every push to main.
+#
+# Intentionally fast: the default pytest run is `-m "not integration"`, so the suite uses
+# only synthetic tmp fixtures. This job does NOT fetch the ~313 MB embedding model or run
+# the ~21-min embed; those live behind the integration marker / the Docker build.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One in-flight run per ref; new pushes cancel stale runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: make check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          # Match the uv major pinned in the Dockerfile.
+          version: "0.11"
+          enable-cache: true
+
+      - name: Sync workspace (frozen, with dev tools)
+        run: uv sync --frozen
+
+      - name: Lint
+        run: make lint
+
+      - name: Format check
+        run: make fmt-check
+
+      - name: Typecheck
+        run: make typecheck
+
+      - name: Test
+        run: make test
