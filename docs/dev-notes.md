@@ -954,6 +954,21 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   `pytest -m integration` went from **22 passed / 14 skipped** to **36 passed / 0 skipped**
   (the 14 items in the four files now run + pass). `make check`: 428 passed, 36 deselected.
 
+### HS-7 — Publish image to GHCR (first release)
+- Distribution only (no runtime/behavior/Dockerfile-contents change): new
+  `.github/workflows/publish-image.yml` builds the existing multi-stage Dockerfile and pushes
+  to `ghcr.io/kbennett2000/concord`. **Gated to version tags (`v*`) + manual dispatch** so the
+  ~22-min embed build never runs per-commit; the `ci.yml` test/lint gate is untouched. Tags
+  pushed: `vX.Y.Z` + `latest` + `sha-<short>` (amd64 only; arm64 would emulate the embed for
+  hours). Uses `docker/login-action` with the built-in `GITHUB_TOKEN` (`packages: write`).
+- First release **v1.0.0**: bumped bible-api `__version__`/pyproject `0.0.0 → 1.0.0` (the
+  OpenAPI version shown at `/docs`; refreshed `uv.lock`). Lets songbird's combined compose
+  `docker pull` a ready image instead of building.
+- **One-time manual step:** GHCR packages default to private — set the `concord` package
+  visibility to **Public** after the first publish so `docker pull` works anonymously.
+- README gains a "pull the published image" path in Deployment (additive to build-from-source
+  + tarball) and a Quick start pointer.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)

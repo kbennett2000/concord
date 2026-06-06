@@ -1,6 +1,6 @@
 [project]
 name = "bible-api"
-version = "0.0.0"
+version = "1.0.0"
 description = "Concord's thin FastAPI HTTP face over bible-core."
 requires-python = ">=3.11"
 dependencies = [

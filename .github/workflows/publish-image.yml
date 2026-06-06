@@ -1,0 +1,66 @@
+# Build and push the Concord production image to GHCR.
+#
+# Distribution only — this builds the existing multi-stage Dockerfile (geography + semantic +
+# v1, offline at runtime) and pushes it to ghcr.io/<owner>/concord. It does NOT run on every
+# commit: the image build bakes the corpus embeddings (~22 min), so it is gated to version
+# tags (releases) and manual dispatch. The fast test/lint gate lives in ci.yml and is
+# untouched.
+#
+# First-publish note: GHCR packages default to PRIVATE. After the first run, set the package
+# visibility to Public once (GitHub UI → Packages → concord → Package settings) so it can be
+# pulled anonymously. The GITHUB_TOKEN below can push but cannot change visibility.
+name: Publish image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Don't cancel an in-flight release build (it's long and produces an artifact).
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write # required to push to GHCR with the built-in GITHUB_TOKEN
+
+jobs:
+  publish:
+    name: build & push to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags + labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/concord
+          # Control 'latest' explicitly (below) rather than via semver auto-tagging.
+          flavor: latest=false
+          tags: |
+            type=ref,event=tag                 # vX.Y.Z on a version-tag push
+            type=raw,value=latest              # moving latest (tag push + manual dispatch)
+            type=sha,prefix=sha-,format=short  # immutable per-commit tag
+
+      - name: Build and push (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # metadata-action emits org.opencontainers.image.source, which links the GHCR
+          # package back to this repo.
+          labels: ${{ steps.meta.outputs.labels }}
