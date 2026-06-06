@@ -51,6 +51,10 @@ class SemanticUnavailableError(Exception):
     """Semantic search was requested but is disabled / not primed on this instance."""
 
 
+class SemanticBusyError(Exception):
+    """Semantic search is at its concurrency cap; the request is shed (ADR-0001)."""
+
+
 class UnknownPlaceError(Exception):
     """A requested place id (a path resource) is not in the places table → 404."""
 
@@ -81,9 +85,15 @@ def _envelope(code: str, message: str, detail: dict[str, Any] | None = None) -> 
 
 
 def _error_response(
-    status: int, code: str, message: str, detail: dict[str, Any] | None = None
+    status: int,
+    code: str,
+    message: str,
+    detail: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
-    return JSONResponse(status_code=status, content=_envelope(code, message, detail))
+    return JSONResponse(
+        status_code=status, content=_envelope(code, message, detail), headers=headers
+    )
 
 
 async def _handle_unknown_book(_request: Request, exc: Exception) -> Response:
@@ -127,6 +137,11 @@ async def _handle_semantic_unavailable(_request: Request, exc: Exception) -> Res
     return _error_response(503, "semantic_unavailable", str(exc))
 
 
+async def _handle_semantic_busy(_request: Request, exc: Exception) -> Response:
+    # 503 (global capacity, not a per-client quota) + Retry-After (ADR-0001).
+    return _error_response(503, "semantic_busy", str(exc), headers={"Retry-After": "1"})
+
+
 async def _handle_unknown_place(_request: Request, exc: Exception) -> Response:
     return _error_response(404, "unknown_place", str(exc), cast(UnknownPlaceError, exc).detail)
 
@@ -151,6 +166,7 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(NoMatchError, _handle_no_match)
     app.add_exception_handler(SearchQueryError, _handle_search_query)
     app.add_exception_handler(SemanticUnavailableError, _handle_semantic_unavailable)
+    app.add_exception_handler(SemanticBusyError, _handle_semantic_busy)
     app.add_exception_handler(UnknownPlaceError, _handle_unknown_place)
     app.add_exception_handler(PlaceFilterError, _handle_place_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Annotated, Literal
 
+import structlog
 from bible_core.parser import UnknownBookError, parse_reference
 from bible_core.queries import (
     CrossRefRow,
@@ -49,6 +50,7 @@ from .errors import (
     NoMatchError,
     NoVersesFoundError,
     PlaceFilterError,
+    SemanticBusyError,
     SemanticUnavailableError,
     UnknownPlaceError,
 )
@@ -190,7 +192,22 @@ def semantic_search_endpoint(
         raise SemanticUnavailableError("semantic search is not enabled on this server")
 
     # Search always runs in WEB space; `translation` only controls the displayed text.
-    matches = cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
+    # Concurrency cap (ADR-0001): bound simultaneous ONNX inferences so a tight loop / retry
+    # storm can't saturate CPU on a shared box. Non-blocking — shed the excess with 503 +
+    # Retry-After rather than queueing. Wraps only the inference; text hydration stays outside.
+    sem = request.app.state.semantic_semaphore
+    if sem is None:
+        matches = cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
+    else:
+        if not sem.acquire(blocking=False):
+            structlog.get_logger("bible_api").warning(
+                "concord.api.semantic_shed", limit=request.app.state.semantic_max_concurrency
+            )
+            raise SemanticBusyError("semantic search is at capacity; retry shortly")
+        try:
+            matches = cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
+        finally:
+            sem.release()
     book_names: dict[str, str] = request.app.state.book_names
     results = [
         SemanticSearchHit(

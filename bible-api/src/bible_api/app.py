@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import sys
+import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -258,12 +259,15 @@ def create_app(
     *,
     enable_semantic: bool | None = None,
     embeddings_path: str | Path | None = None,
+    semantic_max_concurrency: int | None = None,
 ) -> FastAPI:
     """Build the FastAPI application, pointed at ``db_path`` (default: config/env).
 
     ``enable_semantic`` overrides ``CONCORD_SEMANTIC_SEARCH`` (the fast test suite passes
     ``False`` to skip the heavy model load). ``embeddings_path`` overrides where the vector
     store is read from (default: the store's own ``CONCORD_EMBEDDINGS_PATH`` resolution).
+    ``semantic_max_concurrency`` overrides ``CONCORD_SEMANTIC_MAX_CONCURRENCY`` (the
+    semantic-search concurrency cap; ADR-0001) — a per-app seam for tests.
     """
     _configure_logging()
     app = FastAPI(
@@ -282,6 +286,15 @@ def create_app(
     )
     app.state.embeddings_path = Path(embeddings_path) if embeddings_path is not None else None
     app.state.semantic_store = None
+    # Semantic-search concurrency cap (ADR-0001): a bounded semaphore sheds excess inferences
+    # with 503 + Retry-After. None = no cap (cap <= 0). Wraps only the inference in the handler.
+    cap = (
+        config.semantic_max_concurrency()
+        if semantic_max_concurrency is None
+        else semantic_max_concurrency
+    )
+    app.state.semantic_max_concurrency = cap
+    app.state.semantic_semaphore = threading.BoundedSemaphore(cap) if cap > 0 else None
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
