@@ -919,6 +919,19 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   (`test_parser_edge_cases.py`); `q` too long → 422 (`test_search_errors.py`); `ref` too
   long → 422 and oversized list → 400 (`test_errors.py`). `make check`: 425 passed.
 
+### HS-4 — Security headers + threat model
+- `bible-api`: added a tiny pure-ASGI `SecurityHeadersMiddleware` that sets
+  `X-Content-Type-Options: nosniff` on **every** response (JSON, errors, and the vendored
+  static docs). No CSP — unnecessary for a JSON API and would risk the offline Swagger
+  UI/ReDoc for little gain. CORS left exactly as-is; the rationale (read-only +
+  unauthenticated → `*` with credentials off is safe) is now documented, not just commented.
+- Docs: new `docs/SECURITY.md` (trusted-LAN threat model, CORS rationale, and a checklist of
+  what to add — reverse proxy/TLS, auth, rate limiting, narrowed CORS — before any public
+  exposure) plus a short Security section in the README pointing to it.
+- Verified: `test_security_headers.py` asserts nosniff on a JSON endpoint, an error, and
+  `/docs`; the existing `test_docs_offline.py` still passes. Confirmed against a live uvicorn
+  run that `/docs` carries nosniff and still has no CDN URLs. `make check`: 428 passed.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)
