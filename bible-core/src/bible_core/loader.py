@@ -76,6 +76,8 @@ class BuildStats:
     place_verses: int
     places_excluded: int
     place_verse_links_skipped: int
+    notes: int
+    note_cross_references: int
     elapsed_seconds: float
 
 
@@ -325,10 +327,16 @@ def build_database(
     data_dirs: list[Path],
     cross_ref_dirs: list[Path] | None = None,
     geo_dir: Path | None = None,
+    notes_dir: Path | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
-    ``cross_ref_dirs`` (cross-reference TSV), and ``geo_dir`` (geography JSONL). Idempotent —
-    same inputs, byte-identical db."""
+    ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), and ``notes_dir``
+    (translator's-notes JSON). Idempotent — same inputs, byte-identical db.
+
+    ``notes_dir`` is normally ``data/private/notes`` and exists only when a user has supplied
+    notes; absent/empty → zero notes (the public-image case). It must NOT overlap the
+    translation scan (``data_dirs``): notes live in a *subdirectory* of ``data/private`` so the
+    non-recursive translation glob never sees them (SPEC v4 §3)."""
     start = time.perf_counter()
     cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
@@ -391,6 +399,15 @@ def build_database(
                 else GeoStats(0, 0, 0, 0, {})
             )
 
+            # Notes loader — same local-import cycle break as geo (notes.py imports LoaderError).
+            from .notes import NotesStats, load_notes
+
+            notes_stats = (
+                load_notes(conn, notes_dir, frozenset(seen_codes), alias_to_book)
+                if notes_dir is not None
+                else NotesStats(0, 0, {})
+            )
+
         books_with_verses = conn.execute(
             "SELECT COUNT(*) FROM books WHERE chapter_count IS NOT NULL"
         ).fetchone()[0]
@@ -407,6 +424,8 @@ def build_database(
         place_verses=geo_stats.place_verses,
         places_excluded=geo_stats.places_excluded,
         place_verse_links_skipped=geo_stats.verse_links_skipped,
+        notes=notes_stats.notes,
+        note_cross_references=notes_stats.note_cross_references,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -443,8 +462,11 @@ def main(argv: list[str] | None = None) -> int:
     data_dirs = _default_data_dirs(base)
     cross_ref_dirs = [base / "cross-references"]
     geo_dir = base / "geography"
+    # Notes live in a subdir of `private/` (never the top-level translation scan). Loaded only
+    # when present locally — the public build has no `private/`, so it bakes zero notes.
+    notes_dir = base / "private" / "notes"
     try:
-        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs, geo_dir)
+        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs, geo_dir, notes_dir)
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -459,7 +481,8 @@ def main(argv: list[str] | None = None) -> int:
             f"Built {args.output}: {stats.translations} translations, "
             f"{stats.verses} verses, {stats.books_with_verses} books, "
             f"{stats.cross_references} cross-references{clamped}, "
-            f"{stats.places} places, {stats.place_verses} place-verse links "
+            f"{stats.places} places, {stats.place_verses} place-verse links, "
+            f"{stats.notes} notes, {stats.note_cross_references} note cross-references "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0
