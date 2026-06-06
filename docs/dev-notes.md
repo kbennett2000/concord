@@ -939,6 +939,21 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   Pinned to the multi-arch **index** digest so cross-arch resolution still works.
 - Verified the digests pull and the image builds and runs healthy off the pinned bases.
 
+### HS-6 — Precision-aware integration skip-guards
+- Pre-Track-B cleanup. Four real-model integration tests gated their skip on the fp32 file
+  `onnx/model.onnx` (the S0–S2 default); S3a moved the default to int8 without updating them,
+  so they silently skipped on the int8 standard. Changed each guard to the precision-aware
+  `model_dir() / "onnx" / _ONNX_FILENAMES[model_precision()]` (so it's correct in both int8
+  and fp32 envs and can't drift under a future default change); the `@pytest.mark.integration`
+  markers are untouched, so CI still excludes them. Files: `test_build_embeddings.py`,
+  `test_semantic_embed.py`, `test_semantic_search_real.py` (bible-semantic),
+  `test_semantic_endpoint_real.py` (bible-api). The private `_ONNX_FILENAMES` import trips
+  pyright strict's `reportPrivateUsage`; since `model.py` is out of scope, each file carries a
+  file-scoped `# pyright: reportPrivateUsage=false` pragma.
+- Verified in an isolated int8-only env (`CONCORD_MODEL_PATH` → int8-only model, fp32 absent):
+  `pytest -m integration` went from **22 passed / 14 skipped** to **36 passed / 0 skipped**
+  (the 14 items in the four files now run + pass). `make check`: 428 passed, 36 deselected.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)

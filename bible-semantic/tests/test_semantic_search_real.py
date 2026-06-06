@@ -6,12 +6,14 @@ specifics.
 
 Run with: `uv run pytest -m integration`.
 """
+# tests read the model module's precision→filename map (a private symbol)
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
 import pytest
 from bible_semantic.build import default_embeddings_path
-from bible_semantic.model import model_dir
+from bible_semantic.model import _ONNX_FILENAMES, model_dir, model_precision
 from bible_semantic.store import semantic_search
 
 pytestmark = pytest.mark.integration
@@ -23,8 +25,9 @@ _EXPECTED = {("PHP", 4, 6), ("1PE", 5, 7)} | {("MAT", 6, v) for v in range(25, 3
 def _require() -> None:
     if not default_embeddings_path().is_file():
         pytest.skip("embeddings.db not built — run scripts/build_embeddings.py")
-    if not (model_dir() / "onnx" / "model.onnx").is_file():
-        pytest.skip("model not present — run scripts/fetch_model.py")
+    precision = model_precision()
+    if not (model_dir() / "onnx" / _ONNX_FILENAMES[precision]).is_file():
+        pytest.skip(f"{precision} model not present — run scripts/fetch_model.py")
 
 
 def test_anxiety_query_surfaces_expected_verses() -> None:

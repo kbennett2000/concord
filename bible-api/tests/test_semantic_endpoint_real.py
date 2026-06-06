@@ -4,7 +4,7 @@ Exercises the endpoint mechanics — result shape, the cross-translation hydrate
 ETag round-trip, and /healthz readiness — against the real baked artifacts. Skips cleanly
 when any of bible.db, embeddings.db, or the model is absent.
 """
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportPrivateUsage=false
 
 from __future__ import annotations
 
@@ -13,7 +13,13 @@ from pathlib import Path
 
 import pytest
 from bible_api.app import create_app
-from bible_semantic.model import EMBEDDING_DIM, MODEL_ID, model_dir
+from bible_semantic.model import (
+    _ONNX_FILENAMES,
+    EMBEDDING_DIM,
+    MODEL_ID,
+    model_dir,
+    model_precision,
+)
 from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
@@ -30,8 +36,9 @@ _EXPECTED = {("PHP", 4, 6), ("1PE", 5, 7)} | {("MAT", 6, v) for v in range(25, 3
 def semantic_client() -> Iterator[TestClient]:
     if not _BIBLE_DB.is_file() or not _EMBEDDINGS_DB.is_file():
         pytest.skip("real bible.db + embeddings.db required (build them first)")
-    if not (model_dir() / "onnx" / "model.onnx").is_file():
-        pytest.skip("model not present — run scripts/fetch_model.py")
+    precision = model_precision()
+    if not (model_dir() / "onnx" / _ONNX_FILENAMES[precision]).is_file():
+        pytest.skip(f"{precision} model not present — run scripts/fetch_model.py")
     app = create_app(db_path=_BIBLE_DB, enable_semantic=True, embeddings_path=_EMBEDDINGS_DB)
     with TestClient(app) as client:
         yield client
