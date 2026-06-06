@@ -1053,3 +1053,34 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
 - **CI is licensing-clean:** every test uses tiny synthetic fixtures (`noteskit.py`); none
   depends on the copyrighted NET data (gitignored — CI never has it). `make check` green; full
   fast suite 451 passed. v1/v2/v3 behavior unchanged (additive tables only).
+
+### Slice V4-S2 — Notes read endpoint
+- **Date:** 2026-06-06. **PR:** _(this PR)_ (`v4/slice-2-notes-endpoint`).
+- **What landed:** the passage-read endpoint `GET /v1/translations/{translation}/notes/{book}/{chapter}`
+  (+ optional `?verse`) serving the notes S1 baked — `get_notes` query (`NoteRow`/`NoteCrossRefRow`)
+  in `bible_core.queries`, the `TranslatorNote`/`NoteCrossReference`/`NotesResponse` Pydantic models,
+  the router endpoint, synthetic-fixture tests, and the SPEC §5 resolutions. **No schema change**
+  (serves what S1 baked); mirrors the `/cross-references` endpoint. No FTS search, no parser, no
+  songbird.
+- **Open-question resolutions (SPEC §5):**
+  1. **Response shape** — flat `notes` list, each with its canonical anchor + a `reference`
+     string, `type`/`text`/`char_offset`/`marker`/`ordinal`, and nested `cross_references` (target
+     canonical coords + nullable range + `reference`). Top level echoes
+     `translation`/`book`/`chapter`/`verse`/`total`. Mirrors the `CrossRef*` shape.
+  2. **`?verse`** — chapter in path, optional `?verse` query (`Query(ge=1)`); present narrows to
+     that verse, a valid-but-absent verse → empty 200, a non-positive verse → 422.
+  3. **Empty / out-of-range** — only unknown *translation* (404) or unknown *book* (404, matching
+     the chapter read) errors; a valid book+chapter/verse with no notes → empty 200 (notes are an
+     overlay, like `/verses/{ref}/places` — no verse-range validation).
+  4. **Attachment** — flat list with per-note anchor (simplest for a client placing markers),
+     ordered `verse` → `ordinal` → id. Unpaginated (a chapter's notes are bounded — mirrors
+     `get_places_for_reference`).
+- **Public-image correctness (load-bearing):** a known translation with **no notes returns 200 +
+  empty list**, not 404 — so the endpoint is correct on the notes-free published image. Proven by
+  `test_known_translation_no_notes_is_empty_200` (WEB is loaded but has zero notes in the fixture).
+  Unknown translation → 404 `unknown_translation`; unknown book → 404 `unknown_book`.
+- **Tests:** extended `apikit.build_corpus` with synthetic KJV notes (WEB deliberately has none);
+  `test_notes_endpoint.py` covers chapter read + ordering, `?verse` narrowing, the cross-ref shape
+  (nullable end + range + reference strings), the empty/unknown split, case-insensitive
+  translation path, and the immutable-ETag 304. CI uses only synthetic fixtures — no NET data.
+  `make check` green; full fast suite **465 passed**. v1/v2/v3 + v4 S1 unchanged.
