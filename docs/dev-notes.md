@@ -1003,3 +1003,53 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   now use intent language ("designed to build on"), not a finished "consumes this surface". The
   curious-reader pointer toward soap-journal stays. (The `bible-core` in-process-linking mentions
   in `docs/SPEC.md` / `docs/v2/SPEC.md` / `CLAUDE.md` were already future-framed and untouched.)
+
+## v4 — Translator's notes
+
+### Slice V4-S1 — Notes storage + ingest + licensing safety
+- **Date:** 2026-06-06. **PR:** _(this PR)_ (`v4/slice-1-notes-storage`).
+- **What landed:** the additive `translator_notes` + `note_cross_references` tables + the
+  `notes_fts` FTS5 mirror in `bible.db` (owned by `bible-core`, existing tables untouched); the
+  build-time `bible_core.notes` loader ingesting **user-supplied notes JSON from
+  `data/private/notes/`**; the licensing-safety proof (clean build → zero notes) + the
+  dual-ignore regression guard; synthetic-fixture tests; and the docs/licensing
+  (`THIRD_PARTY_NOTICES`, `data/SOURCES.md`, `docs/v4/notes-ingest.md`). **No endpoint** (Slice
+  2). Notes bake into `bible.db` via the existing build flow (the cross-references / geography
+  precedent) — **no Dockerfile change** (`COPY data/ data/` + a default `notes_dir` in `main()`
+  carry it in when present locally).
+- **The four open-question resolutions (SPEC v4 §10 / Slice-1 prompt):**
+  1. **JSON shape + pickup** — a **Concord-native contract** (documented in
+     `docs/v4/notes-ingest.md`), one file per translation at **`data/private/notes/<CODE>.json`**.
+     The pickup dir is a **subdirectory** of `data/private/`, so the non-recursive translation
+     scanner (`discover_files` globs `data/private/*.json`) never sees it — a notes file is never
+     mistaken for a translation (a flat `data/private/notes.json` would have been parsed as one
+     and failed).
+  2. **FTS** — built the `notes_fts` table + rebuild **now** (the cheap `verses_fts`
+     external-content pattern); the search *endpoint* is deferred to the search slice. Slice-2
+     search will JOIN `notes_fts.rowid = translator_notes.id` to filter by translation/type.
+  3. **Parser home** — **deferred.** The MIT NET parser lives in an external repo
+     (`kbennett2000/net-bible-study`) not in this workspace; per Kris's answer this slice is
+     capability-first — it documents the parse step + the target JSON contract + intended home,
+     and the actual port is a follow-up. (Diverges from the Slice-1 prompt's lean; flagged and
+     approved in planning.)
+  4. **Verse anchor** — **canonical coordinates** (`book_id` FK to `books` + `chapter` + `verse`)
+     plus `translation_id`, **no `verses.id` FK** — matching `cross_references` / `place_verses`.
+     Notes are translation-specific because `char_offset` indexes into *that* translation's text.
+- **How "the image ships no notes" is proven:** two tests. (1)
+  `test_notes_loader.test_clean_build_with_no_private_data_yields_zero_notes` — a build with no
+  `notes_dir` bakes zero notes / cross-refs (exactly the Docker build, whose context excludes
+  `data/private/`). (2) `test_licensing_safety` — `data/private/` stays in **both** `.gitignore`
+  and `.dockerignore` (the dual-ignore invariant; the only barrier in front of the broad
+  `COPY data/ data/`). Also confirmed live: `python -m bible_core.loader` on the real corpus
+  (with the 4 private translations present but no `data/private/notes/`) reports **0 notes,
+  0 note cross-references**. **No new ignore path needed** — `data/private/notes/` is already
+  under the covered `data/private/`.
+- **Loader details:** ids assigned deterministically (files in sorted-path order, notes in array
+  order) → idempotent / byte-identical rebuilds. Loud `LoaderError` on unknown translation,
+  unknown book, bad note type, empty text, negative `char_offset`, invalid JSON. Default
+  `ordinal` = 1-based position among a verse's notes; `note_type` nullable (CHECK-constrained set
+  `tn`/`sn`/`tc`/`map`/`other`). Same loader↔module import-cycle break as geo (local import of
+  `notes` inside `build_database`; `notes` imports `LoaderError` from `loader`).
+- **CI is licensing-clean:** every test uses tiny synthetic fixtures (`noteskit.py`); none
+  depends on the copyrighted NET data (gitignored — CI never has it). `make check` green; full
+  fast suite 451 passed. v1/v2/v3 behavior unchanged (additive tables only).
