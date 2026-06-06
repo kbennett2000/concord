@@ -1004,6 +1004,26 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   curious-reader pointer toward soap-journal stays. (The `bible-core` in-process-linking mentions
   in `docs/SPEC.md` / `docs/v2/SPEC.md` / `CLAUDE.md` were already future-framed and untouched.)
 
+### API — `Vary: Origin` on cacheable responses (2026-06-06)
+- **Correction:** cacheable responses carried `ETag` + `Cache-Control: …immutable` but **no
+  `Vary` header**, a cross-origin cache-poisoning bug surfaced by `concord-tutorial-web`.
+  **Mechanism:** Starlette's `CORSMiddleware` (`allow_origins=["*"]`, credentials off) adds
+  `Access-Control-Allow-Origin` *only* when the request carries an `Origin` header. So a
+  top-level browser navigation (no `Origin`) hard-caches a copy with **no `ACAO`** for a year;
+  a later cross-origin `fetch()` of the same URL — with no `Vary: Origin` to mark the response
+  origin-dependent — reuses that cached copy, and the browser's CORS check fails even though the
+  server and CORS config are correct. Bites any consumer that visits a URL directly then fetches
+  it cross-origin (tutorial; songbird/soap-journal exposed too).
+- **Fix:** one line — added `"Vary": "Origin"` to the `headers` dict in
+  `cached_json_response` (`bible-api/.../caching.py`), the single place that serves immutable
+  responses, so it covers **every** cacheable endpoint and **both** the 200 and 304 paths.
+  `/random` (`no_store_json_response`, uncached) is unaffected. **CORS posture unchanged** —
+  still `*`, credentials off; this is cache-correctness, not a policy change. No ADR (correctness
+  fix). `docs/SECURITY.md` CORS section gains a one-line note.
+- **Tests:** `test_cors_cache_vary.py` asserts `Vary: Origin` on the 200 and on the 304
+  (If-None-Match) path, and documents that an `Origin`-bearing request still gets
+  `ACAO: *`. Red on `main` (200 + 304), green after the one-liner. Full fast gate clean.
+
 ## v4 — Translator's notes
 
 ### Slice V4-S1 — Notes storage + ingest + licensing safety

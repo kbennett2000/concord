@@ -87,13 +87,16 @@ install.
 
 ## Out of scope for v1
 
-**v2 (semantic search) is shipped. v3 is now in progress: biblical geography.** v2's
-meaning-based retrieval landed in the `bible-semantic` package. v3 is the active milestone,
-designed in `docs/v3/SPEC.md`: place data + the bi-directional place↔verse link, served
-read-only and offline. It is **purely additive** — no new package, no ML — just the `places`
-+ `place_verses` tables in `bible.db` (owned by `bible-core`) and new `/v1/places*`
-endpoints in `bible-api`, baked via the existing build like v1's cross-references. The items
-below remain out of scope unless explicitly expanded.
+**v2 (semantic search), v3 (biblical geography), and v4 (translator's notes) are all
+shipped.** v2's meaning-based retrieval landed in the `bible-semantic` package. v3 added
+place data + the bi-directional place↔verse link (`places` + `place_verses` tables in
+`bible.db`, owned by `bible-core`; `/v1/places*` endpoints in `bible-api`), designed in
+`docs/v3/SPEC.md`. v4 added translator's/study/text-critical notes (`translator_notes` +
+`note_cross_references` tables; the `/v1/translations/{translation}/notes/{book}/{chapter}`
+endpoint), designed in `docs/v4/SPEC.md` — notes are **user-supplied and never shipped in
+the public image**. Each milestone was **purely additive** — no schema rewrites — baked via
+the existing build like v1's cross-references. **Journeys / routes is the named next
+frontier.** The items below remain out of scope unless explicitly expanded.
 
 Do not build these without an explicit decision to expand scope:
 
@@ -107,7 +110,7 @@ Do not build these without an explicit decision to expand scope:
 - Any internet dependency at runtime.
 - **Journeys / routes** (Paul's missionary journeys, the Exodus path) — ordered sequences,
   competing proposed routes, segment-level links, and dating debates. **The named next
-  frontier after v3**, deliberately deferred; it will *reference* v3's place data (hence
+  frontier after v4**, deliberately deferred; it will *reference* v3's place data (hence
   v3's stable-id + disambiguation foundation), not rebuild it. Region grouping/containment
   and the dataset's full scholarly apparatus are deferred with it.
 

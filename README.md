@@ -95,7 +95,7 @@ rest are below.
 
 ## What's in the box
 
-Thirteen endpoints. Each is documented in full — with real request/response examples — in
+Fourteen endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -109,16 +109,17 @@ Thirteen endpoints. Each is documented in full — with real request/response ex
 | `GET /v1/places/{id}` | One place's detail — coordinates, confidence, and how honestly it's located. |
 | `GET /v1/places/{id}/verses` | The verses that mention a place. |
 | `GET /v1/verses/{ref}/places` | The places a verse or passage names. |
+| `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
 | `GET /healthz` | Liveness plus row counts. |
 
-Under the hood, Concord is two packages. `bible-core` is the engine — schema, loader,
+Under the hood, Concord is three packages. `bible-core` is the engine — schema, loader,
 reference parser, and queries — with **zero web dependencies**, so a Python app can embed it
-in-process and skip HTTP entirely. `bible-api` is the thin FastAPI layer that wraps it. The
-`/v1` prefix is a promise: encode against this surface with confidence. (Semantic search adds
-a third package, `bible-semantic` — the embedding engine, also web-free.)
+in-process and skip HTTP entirely. `bible-semantic` is the embedding engine behind semantic
+search — also web-free. `bible-api` is the thin FastAPI layer that wraps them. The `/v1`
+prefix is a promise: encode against this surface with confidence.
 
 ### Semantic search
 
