@@ -969,6 +969,20 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
 - README gains a "pull the published image" path in Deployment (additive to build-from-source
   + tarball) and a Quick start pointer.
 
+### HS-8 — Semantic-endpoint concurrency cap (ADR-0001, Track B)
+- Implements the accepted ADR-0001: a per-app bounded semaphore in **bible-api** caps
+  concurrent `/v1/semantic-search` ONNX inferences; over-cap requests are shed with **503
+  `semantic_busy` + `Retry-After: 1`** in the standard envelope. Knob
+  `CONCORD_SEMANTIC_MAX_CONCURRENCY` (config.py, **default 2**, sized to a weak ~2-core
+  non-AVX2 box; `0` disables). Inert when `CONCORD_SEMANTIC_SEARCH=0` or cap `0`; FTS5
+  `/search` untouched; bible-semantic stays pure. Shed events log
+  `concord.api.semantic_shed`. **No in-app inference deadline** (uncancelable `session.run()`)
+  — caller-wait-time delegated to a documented client/proxy read-timeout (SECURITY.md + README).
+- Tests are **deterministic** (`test_semantic_concurrency.py`): a stub store + no-op compute
+  reach the guard, and "cap full" is simulated by pre-holding the permit — no threads/sleeps.
+  Covers 503+envelope+Retry-After, sub-cap success, slot release, cap-0 inert, disabled-inert,
+  FTS5 unaffected. ADR-0001 flipped to Accepted. `make check` green.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)
