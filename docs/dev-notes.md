@@ -932,6 +932,13 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   `/docs`; the existing `test_docs_offline.py` still passes. Confirmed against a live uvicorn
   run that `/docs` carries nosniff and still has no CDN URLs. `make check`: 428 passed.
 
+### HS-5 — Pin base images by digest
+- `Dockerfile`: pinned all three base-image references by `@sha256:` digest — `python:3.12-slim`
+  in both the builder and runtime stages and the `ghcr.io/astral-sh/uv:0.11` image — with the
+  human-readable tag (and resolved version, 3.12.13-slim-trixie) kept in an adjacent comment.
+  Pinned to the multi-arch **index** digest so cross-arch resolution still works.
+- Verified the digests pull and the image builds and runs healthy off the pinned bases.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)

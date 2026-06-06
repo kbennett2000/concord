@@ -12,9 +12,13 @@
 # are baked, so the precision/model guard (S3a) catches a stale artifact at boot.
 
 # --- builder ----------------------------------------------------------------------------
-FROM python:3.12-slim AS builder
+# Base images are pinned by digest for byte-reproducible builds; the tag in each comment is
+# the human-readable equivalent (refresh the digest when bumping the tag).
+# python:3.12-slim (3.12.13-slim-trixie)
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/uv
+# ghcr.io/astral-sh/uv:0.11
+COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c98858d3162bd28cf536f6 /uv /bin/uv
 ENV UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     UV_COMPILE_BYTECODE=1
@@ -57,7 +61,8 @@ RUN /app/.venv/bin/python scripts/fetch_model.py
 RUN /app/.venv/bin/python scripts/build_embeddings.py
 
 # --- runtime ----------------------------------------------------------------------------
-FROM python:3.12-slim AS runtime
+# python:3.12-slim (3.12.13-slim-trixie) — pinned by digest (see builder stage).
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
