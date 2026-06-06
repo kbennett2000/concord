@@ -880,6 +880,20 @@ in the README.
   future journeys/routes layer needs to reference rather than rebuild. The `bible-core` web-free
   boundary held throughout (the place queries are pure SQL over the link table). **v3 is shipped.**
 
+## Hardening sprint
+
+Perimeter-only security hardening (no request-path logic changes; nothing under
+`bible-semantic/`). One branch + one PR per slice.
+
+### HS-1 — CI
+- Added `.github/workflows/ci.yml`: runs the `make check` gate (ruff lint, ruff
+  format --check, pyright strict, pytest) on every PR and every push to `main`, as four
+  discrete steps over `uv sync --frozen`. Mirrors local `make check` so CI cannot drift.
+- Kept fast on purpose: the default pytest run is `-m "not integration"`, so the per-PR
+  job uses only synthetic tmp fixtures — it does **not** fetch the ~313 MB embedding model
+  or run the ~21-min embed (those stay behind the integration marker / the Docker build).
+  A Docker build + `/healthz` smoke job was deliberately deferred.
+
 ## Corrections
 
 ### Docs — the soap-journal relationship (2026-06-05, PR #24)
