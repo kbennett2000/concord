@@ -1134,3 +1134,9 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   `1.0.0 → 1.0.1` (the OpenAPI version shown at `/docs`; refreshed `uv.lock`). The underlying
   fix is logged above (`### API — Vary: Origin on cacheable responses`); tag/publish is a
   separate manual trigger (`publish-image.yml` on `v*`), not part of this prep.
+
+### Release — v1.0.2 (corrects mis-tagged v1.0.1)
+- **Date:** 2026-06-06. v1.0.2 supersedes a mis-tagged v1.0.1: the `v1.0.1` tag landed on the
+  pre-bump commit (tree still read 1.0.0) before the version bump merged, so the tag and
+  in-code version disagreed. Bumped bible-api `__version__`/pyproject `1.0.1 → 1.0.2` to match
+  the intended release tag (refreshed `uv.lock`). The CORS fix is present in both tags.

@@ -211,8 +211,8 @@ immediately ready and identical to every other container built from the same sou
 can skip the ~20-min build entirely and just pull it (no auth required):
 
 ```bash
-docker pull ghcr.io/kbennett2000/concord:v1.0.1     # or :latest
-docker run -d -p 8000:8000 ghcr.io/kbennett2000/concord:v1.0.1
+docker pull ghcr.io/kbennett2000/concord:v1.0.2     # or :latest
+docker run -d -p 8000:8000 ghcr.io/kbennett2000/concord:v1.0.2
 curl localhost:8000/healthz
 ```
 
