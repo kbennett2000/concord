@@ -8,12 +8,20 @@ Two parts:
 
 Run with: `uv run pytest -m integration` (after `uv run python scripts/fetch_model.py`).
 """
+# tests read the model module's precision→filename map (a private symbol)
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from bible_semantic.model import EMBEDDING_DIM, embed_query, model_dir
+from bible_semantic.model import (
+    _ONNX_FILENAMES,
+    EMBEDDING_DIM,
+    embed_query,
+    model_dir,
+    model_precision,
+)
 from numpy.typing import NDArray
 
 pytestmark = pytest.mark.integration
@@ -21,12 +29,14 @@ pytestmark = pytest.mark.integration
 
 def _require_model() -> None:
     directory = model_dir()
+    precision = model_precision()
     if (
         not (directory / "tokenizer.json").is_file()
-        or not (directory / "onnx" / "model.onnx").is_file()
+        or not (directory / "onnx" / _ONNX_FILENAMES[precision]).is_file()
     ):
         pytest.skip(
-            f"model not present under {directory} — run `uv run python scripts/fetch_model.py`"
+            f"{precision} model not present under {directory} — "
+            "run `uv run python scripts/fetch_model.py`"
         )
 
 

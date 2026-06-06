@@ -5,6 +5,8 @@ guard row, a known verse's vector present and unit-norm, and byte-identical idem
 
 Run with: `uv run pytest -m integration` (needs `bible.db` and `scripts/fetch_model.py`).
 """
+# tests read the model module's precision→filename map (a private symbol)
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
@@ -14,7 +16,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 from bible_semantic.build import build_embeddings, default_bible_db_path
-from bible_semantic.model import EMBEDDING_DIM, MODEL_ID, MODEL_REVISION, model_dir
+from bible_semantic.model import (
+    _ONNX_FILENAMES,
+    EMBEDDING_DIM,
+    MODEL_ID,
+    MODEL_REVISION,
+    model_dir,
+    model_precision,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -26,8 +35,11 @@ def _require_inputs() -> Path:
     model = model_dir()
     if not bible_db.is_file():
         pytest.skip(f"bible.db not found at {bible_db} — build it via bible_core.loader")
-    if not (model / "onnx" / "model.onnx").is_file():
-        pytest.skip(f"model not present under {model} — run `python scripts/fetch_model.py`")
+    precision = model_precision()
+    if not (model / "onnx" / _ONNX_FILENAMES[precision]).is_file():
+        pytest.skip(
+            f"{precision} model not present under {model} — run `python scripts/fetch_model.py`"
+        )
     return bible_db
 
 
