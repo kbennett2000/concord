@@ -1,6 +1,6 @@
 # ADR-0001: Semantic-endpoint overload protection
 
-**Status:** Proposed
+**Status:** Accepted
 
 <!--
 ADR format for this repo (the first one — establishes the template): a short title line, a
