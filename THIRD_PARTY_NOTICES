@@ -1,0 +1,62 @@
+THIRD-PARTY NOTICES
+===================
+
+Concord bundles and builds upon third-party data and code. This file records the
+provenance and licensing of those components. For the data committed to this repository,
+see also data/SOURCES.md.
+
+--------------------------------------------------------------------------------
+Cross-reference dataset — data/cross-references/
+--------------------------------------------------------------------------------
+Source:  OpenBible.info cross-reference dataset
+         https://www.openbible.info/labs/cross-references/
+License: Creative Commons Attribution (CC BY)
+
+  Cross-reference data courtesy of OpenBible.info, licensed under a Creative
+  Commons Attribution (CC BY) license.
+
+--------------------------------------------------------------------------------
+Geography / place dataset — data/geography/
+--------------------------------------------------------------------------------
+Source:  OpenBible.info Bible-Geocoding-Data
+         https://github.com/openbibleinfo/Bible-Geocoding-Data
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+  Place data courtesy of OpenBible.info, licensed under a Creative Commons
+  Attribution 4.0 International (CC BY 4.0) license.
+
+--------------------------------------------------------------------------------
+Translator's notes — capability (SPEC v4), parser, and the NET data
+--------------------------------------------------------------------------------
+Concord can store and serve translator's notes, but it redistributes NONE of the
+copyrighted notes themselves. Two distinct things, two distinct licenses:
+
+  1. The NET notes parser (code). The parser that turns a user's legally-obtained
+     NET Bible into the notes JSON Concord ingests is MIT-licensed, ported from
+     kbennett2000/net-bible-study (as used by soap-journal). The parser is *code
+     only*; it may live in this repository. Its output for the NET Bible is NOT.
+     (As of v4 Slice 1 the parser has not yet been vendored — the notes-ingest
+     capability is in place against a documented JSON contract; the parser port is
+     a follow-up. See docs/v4/notes-ingest.md.)
+
+  2. The NET text and notes (data). The New English Translation (NET Bible),
+     including its translator's / study / text-critical notes, is:
+
+         Copyright © Biblical Studies Press, L.L.C. All rights reserved.
+         https://netbible.com/
+
+     This material is NOT redistributable. It is never committed to this
+     repository and never baked into the published Docker image. A user who
+     legally owns the NET Bible supplies their own parsed notes JSON under the
+     gitignored, dockerignored data/private/ tree and rebuilds Concord locally
+     (see docs/v4/notes-ingest.md). The same applies to any other restricted
+     translation's notes.
+
+--------------------------------------------------------------------------------
+Restricted translations — data/private/
+--------------------------------------------------------------------------------
+Any translation or notes set under data/private/ is non-distributable, local-only,
+and intentionally absent from this repository and the published image. The
+data/private/ directory is excluded by BOTH .gitignore and .dockerignore (the
+"dual-ignore" invariant, SPEC v4 §2) — the only barrier keeping "all rights
+reserved" content out of the build context and the baked bible.db.

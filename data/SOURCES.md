@@ -58,3 +58,21 @@ to the repo with the attribution above. The geography loader (`bible_core.geo`) 
 **disciplined subset** of these files into the `places` + `place_verses` tables (SPEC v3
 §4); the bulk of the dataset's scholarly apparatus is deliberately not used. The attribution
 line **must appear in the README** (Slice V3-S2).
+
+## Translator's notes (`data/private/notes/`) — NOT committed
+
+| Field | Value |
+|---|---|
+| Files | `data/private/notes/<TRANSLATION>.json` (one per translation; see [docs/v4/notes-ingest.md](../docs/v4/notes-ingest.md) for the JSON shape) |
+| Source | User-supplied — parsed locally from a translation the user legally owns (e.g. the NET Bible) |
+| License | Translation-specific. NET notes are **© Biblical Studies Press, "all rights reserved"** — **not redistributable** |
+| Status | **Gitignored + dockerignored** (`data/private/`); never committed, never baked into the public image |
+
+Translator's notes (SPEC v4) follow the same never-distributed pipeline as restricted
+*translations*: the richest source (NET) is copyrighted and may not be redistributed, so its
+notes are **user-supplied** and live only under the gitignored `data/private/` tree. The notes
+loader (`bible_core.notes`) bakes them into a *local* `bible.db`; the published image ships
+**zero** notes (proven by `test_notes_loader.test_clean_build_with_no_private_data_yields_zero_notes`
+and the dual-ignore guard `test_licensing_safety`). The MIT-licensed parser that produces the
+notes JSON is code only — its restricted *output* never enters this repo. See
+[../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
