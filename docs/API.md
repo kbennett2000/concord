@@ -21,6 +21,7 @@ running instance loaded with the 13 bundled public-domain translations.
 - [`GET /v1/places/{id}`](#get-v1placesid)
 - [`GET /v1/places/{id}/verses`](#get-v1placesidverses)
 - [`GET /v1/verses/{ref}/places`](#get-v1versesrefplaces)
+- [`GET /v1/translations/{translation}/notes/{book}/{chapter}`](#get-v1translationstranslationnotesbookchapter)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
 - [`GET /v1/translations`](#get-v1translations)
@@ -480,6 +481,58 @@ verses of the passage appears once — ordered by `name` then `id`. A reference 
 returns `200` with `"total": 0` and `"places": []` (never a 404).
 
 **Errors:** `400 unparseable_reference` · `404 unknown_book`. **Caching:** immutable.
+
+## `GET /v1/translations/{translation}/notes/{book}/{chapter}`
+
+Translator's notes for a passage in one translation — study / translator's / text-critical notes
+anchored to a point in the verse text, each with its own cross-references. Ordered by `verse`,
+then `ordinal`.
+
+> **Notes are user-supplied and never shipped.** The published image contains **zero** notes
+> (the richest source, NET, is copyrighted — see [notes-ingest](v4/notes-ingest.md)), so on a
+> stock image this endpoint returns `200` with an empty list for every translation. A note set
+> appears only after a user bakes their own legally-obtained notes into `bible.db` locally.
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `translation` | path | string | — | A loaded translation id (case-insensitive). Unknown → `404`. |
+| `book` | path | string | — | A book id or alias per the [grammar](#reference-grammar). Unknown → `404`. |
+| `chapter` | path | int | — | ≥ 1. |
+| `verse` | query | int | — | ≥ 1. Narrows to a single verse; omit for the whole chapter. |
+
+```bash
+$ curl -s 'localhost:8000/v1/translations/NET/notes/John/3?verse=16'
+```
+```json
+{
+  "translation": "NET", "book": "JHN", "chapter": 3, "verse": 16, "total": 1,
+  "notes": [
+    {
+      "book": "JHN", "chapter": 3, "verse": 16, "reference": "John 3:16",
+      "type": "tn", "text": "Or 'this is how much God loved the world.'",
+      "char_offset": 8, "marker": "23", "ordinal": 1,
+      "cross_references": [
+        { "to_book": "ROM", "to_chapter": 5, "to_verse_start": 8, "to_verse_end": null,
+          "reference": "Romans 5:8" }
+      ]
+    }
+  ]
+}
+```
+
+Each note carries its **canonical anchor** (`book`/`chapter`/`verse` + a human `reference`), the
+`type` (`tn` translator's · `sn` study · `tc` text-critical · `map` · or `null` for a plain
+footnote), the `text`, the **`char_offset`** (a point — where the marker attaches in the verse
+text — not a span), the source `marker`, the `ordinal` (stable order within a verse), and the
+note's own `cross_references` (each a target by canonical coords, `to_verse_end` null for a single
+verse, set for a range).
+
+**Empty results** return `200` with `"total": 0` and `"notes": []` — a translation with no notes
+loaded (every translation on the public image) is a normal state, **not** a 404. Likewise a valid
+book + chapter (or `?verse`) that simply has no notes returns empty.
+
+**Errors:** `404 unknown_translation` · `404 unknown_book` · `422 invalid_parameter`
+(`chapter`/`verse` < 1). **Caching:** immutable.
 
 ## `GET /v1/random`
 

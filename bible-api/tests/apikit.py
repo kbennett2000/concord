@@ -161,5 +161,35 @@ def build_corpus(path: Path) -> None:
         "INSERT INTO place_verses (place_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)",
         place_verses,
     )
+
+    # Deterministic translator's notes (v4) for the notes endpoint tests. KJV has notes; WEB has
+    # none (so a loaded translation with zero notes returns 200 empty — the public-image case).
+    #  - KJV JHN 3:16 → two notes (ordinals 1,2; a tn with two cross-refs + a sn)
+    #  - KJV JHN 3:17 → one tc note
+    #  - KJV GEN 1:1  → one plain note (NULL type)
+    # (id, translation_id, book_id, chapter, verse, note_type, text, char_offset, marker, ordinal)
+    notes = [
+        (1, "KJV", "JHN", 3, 16, "tn", "On the Greek behind 'so loved'.", 8, "1", 1),
+        (2, "KJV", "JHN", 3, 16, "sn", "A study note on divine love.", 20, "2", 2),
+        (3, "KJV", "JHN", 3, 17, "tc", "A text-critical variant note.", 0, None, 1),
+        (4, "KJV", "GEN", 1, 1, None, "A plain footnote with no type.", 3, None, 1),
+    ]
+    # (note_id, to_book_id, to_chapter, to_verse_start, to_verse_end)
+    note_cross_refs = [
+        (1, "GEN", 1, 1, None),  # single-verse target
+        (1, "JHN", 4, 2, 4),  # same-chapter range target
+    ]
+    conn.executemany(
+        "INSERT INTO translator_notes "
+        "(id, translation_id, book_id, chapter, verse, note_type, text, char_offset, "
+        "marker, ordinal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        notes,
+    )
+    conn.executemany(
+        "INSERT INTO note_cross_references "
+        "(note_id, to_book_id, to_chapter, to_verse_start, to_verse_end) VALUES (?, ?, ?, ?, ?)",
+        note_cross_refs,
+    )
+
     conn.commit()
     conn.close()

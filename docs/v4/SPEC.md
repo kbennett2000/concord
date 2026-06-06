@@ -194,6 +194,27 @@ tracks what shipped (see `docs/v4/notes-ingest.md` for the full contract + flow,
 5. **Slicing** — confirmed two slices: **(1)** storage + ingest + licensing safety (this slice);
    **(2)** the read endpoint(s) + notes search.
 
+### Resolutions (Slice V4-S2, 2026-06-06) — the §5 read endpoint
+
+The passage-read endpoint shipped, serving the notes S1 baked. It mirrors `/cross-references`:
+
+- **Endpoint:** `GET /v1/translations/{translation}/notes/{book}/{chapter}` with an optional
+  `?verse=` to narrow to one verse (the chapter-path + optional-`?verse` granularity chosen at
+  S1). One endpoint, both use cases.
+- **Response shape:** a flat `notes` list, each note carrying its canonical anchor
+  (`book`/`chapter`/`verse` + a `reference` string), `type`, `text`, `char_offset`, `marker`,
+  `ordinal`, and a nested `cross_references` list (`to_book`/`to_chapter`/`to_verse_start`/
+  `to_verse_end` nullable + `reference`). Top level echoes `translation`/`book`/`chapter`/`verse`
+  + `total`. Ordered by `verse`, then `ordinal`, then id.
+- **Honest absence (load-bearing):** a **known translation with no notes → 200 + empty list**
+  (the published image ships zero notes, so it must return empty cleanly, not error). An
+  **unknown translation → 404** (`unknown_translation`); an **unknown book → 404**
+  (`unknown_book`, matching the chapter read). A valid-but-absent chapter/verse → empty 200
+  (notes are an overlay, like `/verses/{ref}/places` — no verse-range validation). A non-positive
+  `?verse` → 422 (edge validation).
+- **Out of scope (a later slice):** notes FTS *search* exposure — `notes_fts` exists but is not
+  queried by this endpoint.
+
 ## 11. Verification note (licensing-safe testing)
 
 Tests must **not** depend on the copyrighted NET data being present (it's gitignored — CI won't
