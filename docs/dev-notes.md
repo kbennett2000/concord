@@ -1084,3 +1084,26 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   (nullable end + range + reference strings), the empty/unknown split, case-insensitive
   translation path, and the immutable-ETag 304. CI uses only synthetic fixtures — no NET data.
   `make check` green; full fast suite **465 passed**. v1/v2/v3 + v4 S1 unchanged.
+
+### Tooling — soap-journal → Concord notes converter
+- **Date:** 2026-06-06. **Script:** `scripts/convert_net_notes.py`.
+- **What it does:** reshapes a soap-journal *translation* file (footnotes nested under
+  `books[].chapters[].footnotes[]`) into Concord's flat v4 notes contract
+  (`{"translation": "<CODE>", "notes": [...]}` at `data/private/notes/<CODE>.json`). The field
+  vocabulary already matches (SPEC §4 mirrored soap-journal), so it's a mechanical reshape:
+  flatten the footnotes to a flat `notes[]`; inject the canonical anchor (`book` from the
+  enclosing `abbreviation`, `chapter` from the enclosing `number`); rename `verse_number`→`verse`,
+  `note_type`→`type`, `cross_refs`→`cross_references` (and within each, `to_*`→`*`); stringify the
+  int `marker` (the loader requires string|null); and map cross-ref `to_book_order_index` → a book
+  token via the file's own `order_index → abbreviation`. Skips-and-counts empty-text /
+  bad-verse / unknown-xref-book entries so the emitted file is guaranteed loadable.
+- **Verified on the real NET data (local):** emits **58,253 notes + 16,167 note cross-references**
+  (matches SPEC §4), loads via `python -m bible_core.loader` with no `LoaderError`, and serves
+  through `/v1/translations/NET/notes/{book}/{chapter}`.
+- **Licensing:** the converter is copyright-free transform logic (no embedded NET text), distinct
+  from the deferred MIT PDF parser. Its **output** `data/private/notes/NET.json` is restricted,
+  **generated locally and never committed or shipped** — it sits under `data/private/`, excluded by
+  **both** `.gitignore` and `.dockerignore` (the dual-ignore invariant, SPEC v4 §2). Proven both
+  ways: the `.dockerignore` `data/private/` rule, and an empirical busybox build of the
+  post-`.dockerignore` context (`COPY . /ctx` + `find … NET.json -o net.json`) that returned
+  nothing — confirming the restricted notes never enter the build context or the baked `bible.db`.
