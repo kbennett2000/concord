@@ -17,13 +17,25 @@ public record.
 
 ## Translations (`data/translations/`)
 
-All public domain. Fill in one row per committed translation.
+One row per committed translation. Source-edition detail below is drawn from each file's
+JSON `copyright` metadata; all are freely redistributable (public domain, except BSB,
+whose publisher dedicates the text to free use/redistribution).
 
 | ID | Full name | Source edition / origin | Notes |
 |---|---|---|---|
-| KJV | King James Version | _(source)_ | Public domain |
-| WEB | World English Bible | _(source)_ | Public domain |
-| _…_ | _…_ | _…_ | _…_ |
+| AKJV | American King James Version | Public-domain modernization of the KJV | Public domain |
+| ASV | American Standard Version | 1901 | Public domain |
+| BSB | Berean Standard Bible | Bible Hub / Berean Bible Translation Committee | Publisher-dedicated to free use & redistribution |
+| CPDV | Catholic Public Domain Version | Ronald L. Conte Jr. | Public domain |
+| DBT | Darby Bible Translation | 1890 | Public domain |
+| DRB | Douay-Rheims Bible | Challoner Revision | Public domain |
+| ERV | English Revised Version | 1885 | Public domain |
+| JPS | JPS Tanakh / Weymouth NT | JPS Tanakh 1917 (OT) + Weymouth NT 1903 (NT) | Public domain |
+| KJV | King James Version | Standard public-domain text | Public domain |
+| SLT | Smith's Literal Translation | 1876 | Public domain |
+| WBT | Webster's Bible Translation | 1833 | Public domain |
+| WEB | World English Bible | Standard public-domain text | Public domain |
+| YLT | Young's Literal Translation | 1898 | Public domain |
 
 > The `attribution` column in the `translations` table is populated from this record
 > (or the translation JSON metadata) during the loader slice.

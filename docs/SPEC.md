@@ -363,6 +363,11 @@ None of these block Slices 0, 1, or 3.
 Smallest reviewable, load-bearing units, PR-per-slice. Dependencies noted; the one
 intentionally-larger slice is flagged with its reasoning.
 
+> **Post-v1 plans live in versioned specs.** This §10 covers the v1 build (slices 0–9).
+> Semantic search, biblical geography, and translator's notes have their own build plans
+> in [`docs/v2/SPEC.md`](v2/SPEC.md), [`docs/v3/SPEC.md`](v3/SPEC.md), and
+> [`docs/v4/SPEC.md`](v4/SPEC.md) respectively — all shipped.
+
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|
 | 0 | Skeleton & boot | both | Two-package scaffold, path-dependency wiring, lint/format/test config, minimal dev Dockerfile + compose, configurable port (`BIBLE_API_PORT`), `/healthz` → 200 on empty DB, placeholder test | — | Boundary correct; app boots |
