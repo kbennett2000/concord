@@ -30,6 +30,8 @@ from fastapi.openapi.docs import (
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__, config
 from .errors import register_error_handlers
@@ -224,6 +226,33 @@ def healthz(request: Request) -> HealthResponse:
     )
 
 
+class SecurityHeadersMiddleware:
+    """Set ``X-Content-Type-Options: nosniff`` on every response.
+
+    For a JSON API plus vendored offline docs, nosniff is the one security header that is
+    unambiguously appropriate: it stops content-type sniffing without constraining anything,
+    and the vendored Swagger UI / ReDoc assets are served with correct content types so it
+    can't break them. No CSP — it would risk the offline docs and buys little for a
+    read-only, LAN-trusted service (see docs/SECURITY.md). Pure ASGI so it adds the header
+    even to error and static-file responses without buffering them.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message).setdefault("X-Content-Type-Options", "nosniff")
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
 def create_app(
     db_path: str | Path | None = None,
     *,
@@ -254,6 +283,7 @@ def create_app(
     app.state.embeddings_path = Path(embeddings_path) if embeddings_path is not None else None
     app.state.semantic_store = None
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins(),

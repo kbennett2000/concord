@@ -247,6 +247,18 @@ part of the required schema, so a `bible.db` built before v3 fails fast at start
 rebuild hint — `make build-db`, or just rebuild the image, which bakes a fresh one. A clean
 `docker compose up --build` needs no thought here; only a hand-carried older database does.
 
+## Security
+
+Concord is built for a **trusted LAN**: read-only, no authentication, no writes, and no
+internet access at runtime. It runs as a non-root user, opens its database read-only, caps
+request input sizes, and sets `X-Content-Type-Options: nosniff`. CORS is intentionally open
+(`*`) with credentials disabled — correct for an unauthenticated, read-only service on a
+trusted network.
+
+**It is not hardened for the public internet.** Before exposing it beyond a LAN, put a
+reverse proxy (TLS), authentication, and rate limiting in front of it. The full threat model
+and the checklist for public exposure are in [`docs/SECURITY.md`](docs/SECURITY.md).
+
 ## The data
 
 Concord bundles **13 public-domain translations** (KJV, WEB, ASV, YLT, BSB, and others — see
