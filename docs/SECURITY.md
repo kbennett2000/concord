@@ -61,6 +61,9 @@ not an oversight:
   ambient credentials to these requests, so there's no CSRF-style risk to abuse.
 - Operators who want to narrow it (e.g. to a single internal app's origin) can set
   `CONCORD_CORS_ORIGINS` — but on a trusted LAN the default is appropriate.
+- Cacheable (immutable) responses carry `Vary: Origin` so a copy cached by a no-`Origin`
+  navigation isn't replayed to a later cross-origin `fetch` (which would fail its CORS check
+  on the cached response). This is purely cache-correctness — the posture above is unchanged.
 
 ## Before exposing Concord to the public internet
 

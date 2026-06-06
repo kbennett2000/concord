@@ -26,7 +26,10 @@ def cached_json_response(model: BaseModel, request: Request) -> Response:
     # a no-op for every model without aliases.
     body = model.model_dump_json(by_alias=True).encode("utf-8")
     etag = _etag(body)
-    headers = {"ETag": etag, "Cache-Control": CACHE_CONTROL}
+    # Vary: Origin marks the response as origin-dependent so a cache entry created by a
+    # no-Origin navigation (no Access-Control-Allow-Origin) is not replayed to a later
+    # cross-origin fetch, whose CORS check would then fail. See docs/SECURITY.md.
+    headers = {"ETag": etag, "Cache-Control": CACHE_CONTROL, "Vary": "Origin"}
 
     if_none_match = request.headers.get("if-none-match")
     if if_none_match and etag in {tag.strip() for tag in if_none_match.split(",")}:
