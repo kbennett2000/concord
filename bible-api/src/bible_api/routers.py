@@ -80,6 +80,14 @@ router = APIRouter(prefix="/v1")
 
 Format = Literal["parallel", "grouped"]
 
+# Defense-in-depth input bounds. A reference or search query above these lengths is abusive,
+# not legitimate use (the longest real reference is a few dozen chars; FTS5/semantic queries
+# are short phrases) — reject at the HTTP edge before parsing or fanning out to the DB/model.
+# The parser also caps verse-list elements independently (bible_core), since it's embeddable
+# outside this web layer.
+MAX_REF_LENGTH = 256
+MAX_QUERY_LENGTH = 1000
+
 
 def _respond(result: QueryResult, fmt: Format, request: Request) -> Response:
     if not result.rows:
@@ -95,7 +103,7 @@ Conn = Annotated[sqlite3.Connection, Depends(get_conn)]
 
 @router.get("/verses/{ref}")
 def get_verses_endpoint(
-    ref: str,
+    ref: Annotated[str, Path(max_length=MAX_REF_LENGTH)],
     request: Request,
     conn: Conn,
     translations: str | None = None,
@@ -126,7 +134,7 @@ def get_chapter_endpoint(
 def search_endpoint(
     request: Request,
     conn: Conn,
-    q: Annotated[str, Query(min_length=1)],
+    q: Annotated[str, Query(min_length=1, max_length=MAX_QUERY_LENGTH)],
     translation: str | None = None,
     book: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -167,7 +175,7 @@ def search_endpoint(
 def semantic_search_endpoint(
     request: Request,
     conn: Conn,
-    q: Annotated[str, Query(min_length=1)],
+    q: Annotated[str, Query(min_length=1, max_length=MAX_QUERY_LENGTH)],
     translation: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     min_score: Annotated[float | None, Query(ge=-1.0, le=1.0)] = None,
@@ -213,7 +221,7 @@ def _target_reference(row: CrossRefRow) -> str:
 
 @router.get("/cross-references/{ref}")
 def cross_references_endpoint(
-    ref: str,
+    ref: Annotated[str, Path(max_length=MAX_REF_LENGTH)],
     request: Request,
     conn: Conn,
     include_text: bool = False,
@@ -465,7 +473,9 @@ def place_verses_endpoint(
 
 
 @router.get("/verses/{ref}/places")
-def verse_places_endpoint(ref: str, request: Request, conn: Conn) -> Response:
+def verse_places_endpoint(
+    ref: Annotated[str, Path(max_length=MAX_REF_LENGTH)], request: Request, conn: Conn
+) -> Response:
     # parse_reference raises ParseError (400) / UnknownBookError (404), already wired. A valid
     # ref naming no place returns 200 with an empty list (SPEC v3 §7).
     reference = parse_reference(ref, SqliteBookResolver(conn))

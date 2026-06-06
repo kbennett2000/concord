@@ -44,3 +44,20 @@ def test_422_bad_format_uses_envelope(client: TestClient) -> None:
     body = response.json()
     assert body["error"]["code"] == "invalid_parameter"
     assert "errors" in body["error"]["detail"]
+
+
+def test_422_ref_too_long_uses_envelope(client: TestClient) -> None:
+    response = client.get("/v1/verses/" + "x" * 300)
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "invalid_parameter"
+    assert "errors" in body["error"]["detail"]
+
+
+def test_400_oversized_verse_list(client: TestClient) -> None:
+    # 101 list elements stay within the 256-char ref cap, so they reach the parser, which
+    # rejects the over-long list as unparseable.
+    ref = "John 3:1" + ",1" * 100
+    response = client.get("/v1/verses/" + ref)
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unparseable_reference"
