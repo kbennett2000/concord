@@ -1287,3 +1287,19 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   WEB-omits-JHN-3:16 asymmetry, max-relevance ordering, pagination over verses, `*`=all, 404/400,
   immutable-ETag 304). OpenAPI regenerated (additive: the new `translations` query param).
   `make check` green.
+
+### Release v1.1.0
+- **Date:** 2026-06-07. **PR:** _(this PR)_ (`chore/release-v1.1.0`).
+- **What shipped:** the first minor since v1.0.2, packaging the merged-but-unreleased v5 search work.
+  v1.1.0 adds **notes keyword search** (`GET /v1/notes/search`, V5-S1) and **multi-translation
+  keyword verse search** (`GET /v1/search?translations=`, V5-S2). Both are **purely additive to
+  `/v1`** — new endpoint / new optional param, no change to any existing response shape — hence a
+  **semver minor**, not a patch.
+- **Mechanics:** bumped `bible_api.__version__` `1.0.2 → 1.1.0` (`bible_core.__version__` left as-is);
+  regenerated `docs/openapi.json` via `make openapi` (only `info.version` moved — the V5 PRs already
+  landed the new paths/param); README published-image examples (`docker pull`/`docker run … :v1.0.2`)
+  → `:v1.1.0` (local-build `concord:latest` examples untouched). `make check` green.
+- **Not in this release:** notes *semantic* search (v5-S3) — deferred, not in the code. v1.1.0 is
+  keyword search only.
+- **Post-merge (Kris):** push the `v1.1.0` tag to trigger `publish-image.yml`, building/pushing
+  `ghcr.io/kbennett2000/concord:v1.1.0` (+ `:latest` + `:sha-…`).
