@@ -8,7 +8,9 @@ the shared shaper into whichever ``?format=`` was requested.
 from __future__ import annotations
 
 import sqlite3
-from typing import Annotated, Literal
+import threading
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from typing import Annotated, Any, Literal
 
 import structlog
 from bible_core.parser import UnknownBookError, parse_reference
@@ -54,6 +56,7 @@ from .errors import (
     NoVersesFoundError,
     PlaceFilterError,
     SemanticBusyError,
+    SemanticTimeoutError,
     SemanticUnavailableError,
     UnknownPlaceError,
 )
@@ -179,6 +182,24 @@ def search_endpoint(
     return cached_json_response(response, request)
 
 
+def _run_inference(
+    semaphore: threading.Semaphore, store: Any, q: str, limit: int, min_score: float | None
+) -> list[Any]:
+    """Run the ONNX inference + cosine top-k, releasing the concurrency permit when done.
+
+    The permit is released *here* — never in the handler — so a request whose caller has
+    already given up on the wall-clock deadline (ADR-0002) keeps holding its slot until the
+    inference truly finishes. That keeps the concurrency cap coupled to real CPU exactly as
+    ADR-0001 requires: a retry after a timeout hits a full cap and is shed with 503, instead
+    of stacking a second slow pass on top of the first. The semaphore is the single owner —
+    released exactly once, on every path (success, error, or post-timeout completion).
+    """
+    try:
+        return cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
+    finally:
+        semaphore.release()
+
+
 @router.get("/semantic-search")
 def semantic_search_endpoint(
     request: Request,
@@ -203,17 +224,34 @@ def semantic_search_endpoint(
     # Retry-After rather than queueing. Wraps only the inference; text hydration stays outside.
     sem = request.app.state.semantic_semaphore
     if sem is None:
+        # No cap: run inline. A deadline has no permit to couple to here, so it doesn't apply
+        # (an uncapped box already opts out of this protection; ADR-0002).
         matches = cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
+    elif not sem.acquire(blocking=False):
+        structlog.get_logger("bible_api").warning(
+            "concord.api.semantic_shed", limit=request.app.state.semantic_max_concurrency
+        )
+        raise SemanticBusyError("semantic search is at capacity; retry shortly")
     else:
-        if not sem.acquire(blocking=False):
-            structlog.get_logger("bible_api").warning(
-                "concord.api.semantic_shed", limit=request.app.state.semantic_max_concurrency
-            )
-            raise SemanticBusyError("semantic search is at capacity; retry shortly")
-        try:
-            matches = cosine_top_k(embed_query(q), store.matrix, store.refs, limit, min_score)
-        finally:
-            sem.release()
+        # Permit held; ownership passes to the worker, which releases it exactly once.
+        executor = request.app.state.semantic_executor
+        if executor is None:
+            # Deadline disabled (timeout 0): run synchronously — ADR-0001 behaviour, unchanged.
+            matches = _run_inference(sem, store, q, limit, min_score)
+        else:
+            timeout_s = request.app.state.semantic_timeout_s
+            future = executor.submit(_run_inference, sem, store, q, limit, min_score)
+            try:
+                matches = future.result(timeout=timeout_s)
+            except FuturesTimeoutError:
+                # Caller gives up, but the worker keeps running and holds its permit until done,
+                # so the cap stays coupled to CPU and a retry hits semantic_busy (ADR-0002).
+                structlog.get_logger("bible_api").warning(
+                    "concord.api.semantic_timeout", timeout_s=timeout_s
+                )
+                raise SemanticTimeoutError(
+                    "semantic search exceeded its time budget; retry shortly"
+                ) from None
     book_names: dict[str, str] = request.app.state.book_names
     results = [
         SemanticSearchHit(
