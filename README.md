@@ -14,7 +14,7 @@ telemetry, no phone-home.
 
 - **A developer who wants to get hands-on?** → [Quick start](#quick-start), including [semantic search](#semantic-search) and the new [geography](#geography) endpoints.
 - **Here because Scripture matters to you, and you're curious what this is?** → [What is this, really?](#what-is-this-really)
-- **Looking for a polished Bible app to actually use?** → [soap-journal](https://github.com/kbennett2000/soap-journal) (desktop) or [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone).
+- **Looking for a polished Bible app to actually use?** → [songbird](https://github.com/kbennett2000/songbird) (desktop) or [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone).
 
 ## What is this, really?
 
@@ -35,13 +35,13 @@ don't live in the foundation. You live in the house.
 ### Are you looking for a Bible app to actually use?
 
 If you want a polished, end-user app that lets you read, journal, take notes, and reflect on
-Scripture — try [soap-journal](https://github.com/kbennett2000/soap-journal) (desktop) or
+Scripture — try [songbird](https://github.com/kbennett2000/songbird) (desktop) or
 [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone). They're
 probably what you actually want.
 
-soap-journal is the app Concord is *designed to build on* — that integration is the intended
-next step on the app side, not yet wired up. soap-journal-mobile is offline-first and goes
-anywhere, so it runs on its own and doesn't depend on Concord's LAN server at all.
+songbird is built on top of Concord — a polished desktop app that runs against this very
+`/v1` surface. soap-journal-mobile is offline-first and goes anywhere, so it runs on its own
+and doesn't depend on Concord's LAN server at all.
 
 Concord itself is for the builders.
 
@@ -335,9 +335,8 @@ gets built next.
 
 Concord exists to be built on.
 
-- **The app it's for:** [soap-journal](https://github.com/kbennett2000/soap-journal) is the
-  end-user Bible journaling app Concord is designed to build on — the intended next step on the
-  app side, not yet wired up.
+- **The app it's for:** [songbird](https://github.com/kbennett2000/songbird) is a polished
+  end-user Bible app built on top of Concord — a working desktop client of this `/v1` surface.
 - **Embedding in-process:** because `bible-core` has no web dependencies, a Python project can
   import it directly and query Scripture without running the HTTP server at all.
 - **Learn to build on it:**
