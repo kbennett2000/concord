@@ -1221,3 +1221,37 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   into `make check` **and** added as an explicit CI step for a clear failure label. Verified the
   check fails on a stale artifact and passes after `make openapi`. API.md points at the committed
   schema. `make check` green.
+
+## v5 — Search completeness
+
+### Slice V5-S1 — Notes keyword search
+- **Date:** 2026-06-07. **PR:** _(this PR)_ (`v5/slice-1-notes-search`).
+- **What landed:** `GET /v1/notes/search` over the existing `notes_fts` mirror (built in v4-S1) —
+  the direct analogue of `/v1/search`. **Purely additive**: one new route + two response models,
+  **no schema change**. `bible_core.queries.search_notes` (+ `NoteSearchHit`/`NoteSearchPage`)
+  reuses `search_verses`' FTS5 shape — `snippet()`, the `SEARCH_MARK_*` markers, the
+  `OperationalError → SearchQueryError` mapping — over `JOIN notes_fts.rowid = translator_notes.id`,
+  relevance-ranked with the canonical tiebreak **extended by `ordinal, id`** so multi-note verses
+  page deterministically. `bible-api` adds `NoteSearchHit`/`NoteSearchResponse` and the endpoint
+  (`q`, optional `translation`/`type`/`book`, `limit` 1–100, `offset` ≥0).
+- **Filters & errors (the two spec open questions, resolved):** `translation` is an *optional
+  filter* here (omit ⇒ all translations), not `/search`'s defaulted single selector, so it
+  validates-without-defaulting — **unknown `translation` → 404 `unknown_translation`** (shared
+  casing, consistent with every translation param). **Unknown `type` → 400 `unknown_type`** (closed
+  enum `NOTE_TYPES`, reusing `PlaceFilterError` like `/places` status). Unknown `book` → 400
+  `unknown_book` (as `/search`). Malformed `q` → 400 `invalid_search_query`. **Honest empty:** no
+  notes loaded (the public image) or zero matches → 200 `total:0 hits:[]`, never 404.
+- **Cross-references omitted** from search hits (spec's lean default) — fetch the full note via the
+  passage read. Confirmed in the hit-key-list test.
+- **Test-corpus fix (load-bearing):** `bible-api/tests/apikit.py` seeded notes but rebuilt only
+  `verses_fts`, never `notes_fts` (so the mirror was empty in tests). Added the
+  `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` rebuild, mirroring the real loader
+  (`bible_core.notes`). Also added a synthetic identical-body note pair (GEN 2:1 + 1JN 1:1) so the
+  cross-book canonical tiebreak is observable — placed in chapters no v4 notes-read test asserts on,
+  keeping those green. Synthetic only; no NET data.
+- **Tests:** new `bible-core/tests/test_notes_search.py` (13: word/phrase, snippet markers, each
+  filter, canonical + ordinal tiebreaks, pagination, malformed→raise) and
+  `bible-api/tests/test_notes_search_endpoint.py` (21: matching, filters incl. case-insensitive
+  translation, ordering/pagination, empty splits, the unknown-filter 404/400 splits, immutable-ETag
+  304, hit shape omits `cross_references`). OpenAPI regenerated (additive: the new path).
+  `make check` green.

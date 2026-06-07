@@ -35,6 +35,7 @@ from bible_core.queries import (
     get_verses,
     list_places,
     reference_exists,
+    search_notes,
     search_verses,
 )
 from bible_core.resolver import SqliteBookResolver
@@ -59,6 +60,7 @@ from .errors import (
     SemanticTimeoutError,
     SemanticUnavailableError,
     UnknownPlaceError,
+    UnknownTranslationError,
 )
 from .schemas import (
     Book,
@@ -68,6 +70,8 @@ from .schemas import (
     CrossRefSource,
     CrossRefTarget,
     NoteCrossReference,
+    NoteSearchHit,
+    NoteSearchResponse,
     NotesResponse,
     PlaceDetail,
     PlacesResponse,
@@ -174,6 +178,80 @@ def search_endpoint(
                 chapter=hit.chapter,
                 verse=hit.verse,
                 reference=f"{hit.book_name} {hit.chapter}:{hit.verse}",
+                snippet=hit.snippet,
+            )
+            for hit in page.hits
+        ],
+    )
+    return cached_json_response(response, request)
+
+
+# The closed set of note types (mirrors the ``note_type`` CHECK constraint in bible_core.schema).
+# A fixed enum, so an unknown ``?type=`` is a 400 filter error (like ``/places`` status).
+NOTE_TYPES = ("tn", "sn", "tc", "map", "other")
+
+
+@router.get("/notes/search")
+def notes_search_endpoint(
+    request: Request,
+    conn: Conn,
+    q: Annotated[str, Query(min_length=1, max_length=MAX_QUERY_LENGTH)],
+    translation: str | None = None,
+    type: str | None = None,
+    book: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    # All three filters are optional (omit ⇒ search every loaded translation/type/book).
+    # translation is a *filter* here, not the defaulted single selector of /search, so we
+    # validate-without-defaulting: unknown id → 404 (consistent with every translation param);
+    # unknown type → 400 (closed enum); unknown book → 400 (same as /search). An instance with
+    # no notes simply matches nothing → 200 empty, never an error.
+    translation_filter: str | None = None
+    if translation is not None and translation.strip():
+        tid = translation.strip().upper()
+        loaded: set[str] = request.app.state.translations
+        if tid not in loaded:
+            raise UnknownTranslationError(tid, list(loaded))
+        translation_filter = tid
+
+    type_filter: str | None = None
+    if type is not None and type.strip():
+        type_filter = type.strip()
+        if type_filter not in NOTE_TYPES:
+            raise PlaceFilterError(
+                "unknown_type",
+                f"unknown note type {type_filter!r}",
+                {"type": type_filter, "available": list(NOTE_TYPES)},
+            )
+
+    book_id: str | None = None
+    if book is not None and book.strip():
+        info = SqliteBookResolver(conn).resolve(book)
+        if info is None:
+            raise BookFilterError(f"unknown book filter {book!r}")
+        book_id = info.id
+
+    page = search_notes(conn, q, translation_filter, type_filter, book_id, limit, offset)
+    response = NoteSearchResponse(
+        query=q,
+        translation=translation_filter,
+        type=type_filter,
+        book=book_id,
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        hits=[
+            NoteSearchHit(
+                book=hit.book_id,
+                chapter=hit.chapter,
+                verse=hit.verse,
+                reference=f"{hit.book_name} {hit.chapter}:{hit.verse}",
+                translation=hit.translation_id,
+                type=hit.note_type,
+                char_offset=hit.char_offset,
+                marker=hit.marker,
+                ordinal=hit.ordinal,
                 snippet=hit.snippet,
             )
             for hit in page.hits

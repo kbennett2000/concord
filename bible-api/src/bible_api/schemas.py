@@ -150,6 +150,39 @@ class NotesResponse(BaseModel):
     notes: list[TranslatorNote]
 
 
+class NoteSearchHit(BaseModel):
+    """One note-search match: the note's canonical anchor, owning translation, and a highlighted
+    snippet of its body. The note's own ``cross_references`` are omitted for leanness — fetch the
+    full note via the passage read (SPEC v5 §4)."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    translation: str
+    type: str | None
+    char_offset: int
+    marker: str | None
+    ordinal: int
+    snippet: str
+
+
+class NoteSearchResponse(BaseModel):
+    """A page of note-search results: the echoed filter state, total count, and hits.
+    ``translation``, ``type``, and ``book`` echo the optional filters (null when unset). No notes
+    loaded (the public image) or no matches returns ``total: 0`` / ``hits: []`` (200), not an
+    error."""
+
+    query: str
+    translation: str | None
+    type: str | None
+    book: str | None
+    limit: int
+    offset: int
+    total: int
+    hits: list[NoteSearchHit]
+
+
 class Book(BaseModel):
     """A book's catalog metadata."""
 
