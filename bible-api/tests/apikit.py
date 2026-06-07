@@ -167,12 +167,17 @@ def build_corpus(path: Path) -> None:
     #  - KJV JHN 3:16 → two notes (ordinals 1,2; a tn with two cross-refs + a sn)
     #  - KJV JHN 3:17 → one tc note
     #  - KJV GEN 1:1  → one plain note (NULL type)
+    # Notes 5–6 are a v5 notes-search fixture: an identical body in two books (GEN before 1JN
+    # canonically) so a query ties on FTS rank and the canonical tiebreak is observable. They sit
+    # in chapters no notes-endpoint chapter-read asserts on (GEN 2, 1JN 1), keeping v4 tests intact.
     # (id, translation_id, book_id, chapter, verse, note_type, text, char_offset, marker, ordinal)
     notes = [
         (1, "KJV", "JHN", 3, 16, "tn", "On the Greek behind 'so loved'.", 8, "1", 1),
         (2, "KJV", "JHN", 3, 16, "sn", "A study note on divine love.", 20, "2", 2),
         (3, "KJV", "JHN", 3, 17, "tc", "A text-critical variant note.", 0, None, 1),
         (4, "KJV", "GEN", 1, 1, None, "A plain footnote with no type.", 3, None, 1),
+        (5, "KJV", "GEN", 2, 1, "tn", "A tiebreak fixture note.", 0, None, 1),
+        (6, "KJV", "1JN", 1, 1, "tn", "A tiebreak fixture note.", 0, None, 1),
     ]
     # (note_id, to_book_id, to_chapter, to_verse_start, to_verse_end)
     note_cross_refs = [
@@ -190,6 +195,7 @@ def build_corpus(path: Path) -> None:
         "(note_id, to_book_id, to_chapter, to_verse_start, to_verse_end) VALUES (?, ?, ?, ?, ?)",
         note_cross_refs,
     )
+    conn.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
 
     conn.commit()
     conn.close()
