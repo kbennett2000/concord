@@ -267,6 +267,133 @@ def search_verses(
     return SearchPage(hits=hits, total=total)
 
 
+@dataclass(frozen=True)
+class VerseMatch:
+    """One translation's match for a canonical verse: which translation, and its marked snippet."""
+
+    translation_id: str
+    snippet: str
+
+
+@dataclass(frozen=True)
+class MultiSearchHit:
+    """A canonical verse that matched in >=1 searched translation, with a match per translation.
+
+    ``matches`` is ordered best-relevance-first, so ``matches[0]`` is the top-ranked translation's
+    snippet (the API surfaces it as the flat ``snippet`` for clients that read only that field).
+    """
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+    matches: tuple[VerseMatch, ...]
+
+
+@dataclass(frozen=True)
+class MultiSearchPage:
+    """A page of canonical-verse hits plus the total count of distinct matching verses."""
+
+    hits: tuple[MultiSearchHit, ...]
+    total: int
+
+
+def search_verses_multi(
+    conn: sqlite3.Connection,
+    query: str,
+    translation_ids: Sequence[str],
+    book_id: str | None,
+    limit: int,
+    offset: int,
+) -> MultiSearchPage:
+    """Full-text search across several translations, deduped by **canonical verse**.
+
+    One hit per canonical verse that matched in at least one of ``translation_ids``, ranked by best
+    (max) per-verse FTS relevance — ``MIN(f.rank)``, since FTS5 ``rank`` is lower-is-better — with a
+    canonical tiebreak, so ``limit``/``offset`` pages over canonical *verses* (not (verse,
+    translation) pairs) never overlap. ``total`` counts distinct matching verses.
+
+    Two queries (the ``get_notes`` precedent): query 1 ranks + paginates the canonical verses;
+    query 2 hydrates the per-translation snippets for only that page's verses, so snippet work is
+    bounded by ``limit × len(translation_ids)`` — no per-verse fan-out. Raises
+    :class:`SearchQueryError` on a malformed MATCH. ``translation_ids`` is assumed non-empty and
+    validated by the caller.
+    """
+    placeholders = ",".join("?" * len(translation_ids))
+    ids = list(translation_ids)
+    book_filter = " AND v.book_id = ?" if book_id is not None else ""
+    match_params: list[str] = [query, *ids]
+    if book_id is not None:
+        match_params.append(book_id)
+
+    page_sql = (
+        "SELECT v.book_id, b.name, v.chapter, v.verse, MIN(f.rank) AS best_rank "
+        "FROM verses_fts f "
+        "JOIN verses v ON v.id = f.rowid "
+        "JOIN books b ON b.id = v.book_id "
+        f"WHERE verses_fts MATCH ? AND v.translation_id IN ({placeholders}){book_filter} "
+        "GROUP BY v.book_id, v.chapter, v.verse "
+        "ORDER BY best_rank, b.canonical_order, v.chapter, v.verse "
+        "LIMIT ? OFFSET ?"
+    )
+    count_sql = (
+        "SELECT COUNT(*) FROM ("
+        "SELECT 1 FROM verses_fts f "
+        "JOIN verses v ON v.id = f.rowid "
+        f"WHERE verses_fts MATCH ? AND v.translation_id IN ({placeholders}){book_filter} "
+        "GROUP BY v.book_id, v.chapter, v.verse)"
+    )
+
+    try:
+        page_rows = conn.execute(page_sql, [*match_params, limit, offset]).fetchall()
+        total = conn.execute(count_sql, match_params).fetchone()[0]
+    except sqlite3.OperationalError as exc:
+        raise SearchQueryError(str(exc)) from exc
+
+    if not page_rows:
+        return MultiSearchPage(hits=(), total=total)
+
+    # Query 2: snippets for just this page's verses. Row-value IN keyed on (book, chapter, verse).
+    keys = [(r[0], r[2], r[3]) for r in page_rows]
+    key_placeholders = ",".join("(?,?,?)" for _ in keys)
+    snippet_fn = (
+        f"snippet(verses_fts, 0, '{SEARCH_MARK_OPEN}', "
+        f"'{SEARCH_MARK_CLOSE}', '…', {SNIPPET_TOKENS})"
+    )
+    detail_sql = (
+        f"SELECT v.book_id, v.chapter, v.verse, v.translation_id, {snippet_fn} "
+        "FROM verses_fts f "
+        "JOIN verses v ON v.id = f.rowid "
+        f"WHERE verses_fts MATCH ? AND v.translation_id IN ({placeholders}) "
+        f"AND (v.book_id, v.chapter, v.verse) IN (VALUES {key_placeholders}) "
+        "ORDER BY f.rank, v.translation_id"
+    )
+    detail_params: list[str | int] = [query, *ids]
+    for book, chapter, verse in keys:
+        detail_params.extend((book, chapter, verse))
+
+    try:
+        detail_rows = conn.execute(detail_sql, detail_params).fetchall()
+    except sqlite3.OperationalError as exc:
+        raise SearchQueryError(str(exc)) from exc
+
+    by_verse: dict[tuple[str, int, int], list[VerseMatch]] = defaultdict(list)
+    for r in detail_rows:
+        by_verse[(r[0], r[1], r[2])].append(VerseMatch(r[3], r[4]))
+
+    hits = tuple(
+        MultiSearchHit(
+            book_id=r[0],
+            book_name=r[1],
+            chapter=r[2],
+            verse=r[3],
+            matches=tuple(by_verse[(r[0], r[2], r[3])]),
+        )
+        for r in page_rows
+    )
+    return MultiSearchPage(hits=hits, total=total)
+
+
 # --- cross-references ----------------------------------------------------------------
 
 
