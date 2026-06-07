@@ -1,5 +1,5 @@
 # Concord CI — runs the same gate as `make check` (ruff lint, ruff format --check,
-# pyright strict, pytest) on every PR and every push to main.
+# pyright strict, pytest, OpenAPI contract drift) on every PR and every push to main.
 #
 # Intentionally fast: the default pytest run is `-m "not integration"`, so the suite uses
 # only synthetic tmp fixtures. This job does NOT fetch the ~313 MB embedding model or run
@@ -47,3 +47,6 @@ jobs:
 
       - name: Test
         run: make test
+
+      - name: OpenAPI contract up to date
+        run: make openapi-check

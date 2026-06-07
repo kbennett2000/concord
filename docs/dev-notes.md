@@ -1140,3 +1140,21 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   pre-bump commit (tree still read 1.0.0) before the version bump merged, so the tag and
   in-code version disagreed. Bumped bible-api `__version__`/pyproject `1.0.1 → 1.0.2` to match
   the intended release tag (refreshed `uv.lock`). The CORS fix is present in both tags.
+
+## Hardening + honesty pass
+
+### Published /v1 OpenAPI contract artifact
+- **Date:** 2026-06-07. The producer half of the two-repo contract with songbird: the
+  FastAPI-generated OpenAPI schema is now committed at `docs/openapi.json`, with a CI drift check
+  so a response-shape change can't merge without regenerating the artifact.
+- `scripts/dump_openapi.py` builds the schema via `create_app(enable_semantic=False)` — DB- and
+  model-free (the lifespan that opens `bible.db` runs only on startup, not on construction) and
+  all routes register unconditionally, so the schema is the full surface even in CI with no
+  `bible.db` / model. Rendered **deterministically** (`json.dumps(indent=2, sort_keys=True)` +
+  trailing newline) so the committed file diffs cleanly; verified byte-stable across re-runs.
+  `info.version` flows from `bible_api.__version__` (currently 1.0.2) → the artifact is versioned
+  with the release for free, and a version bump that isn't regenerated fails the check.
+- `make openapi` regenerates; `make openapi-check` (script `--check`, exit 1 on drift) is folded
+  into `make check` **and** added as an explicit CI step for a clear failure label. Verified the
+  check fails on a stale artifact and passes after `make openapi`. API.md points at the committed
+  schema. `make check` green.
