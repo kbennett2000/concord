@@ -37,6 +37,7 @@ from bible_core.queries import (
     reference_exists,
     search_notes,
     search_verses,
+    search_verses_multi,
 )
 from bible_core.resolver import SqliteBookResolver
 from bible_semantic.model import embed_query
@@ -151,12 +152,11 @@ def search_endpoint(
     conn: Conn,
     q: Annotated[str, Query(min_length=1, max_length=MAX_QUERY_LENGTH)],
     translation: str | None = None,
+    translations: str | None = None,
     book: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Response:
-    translation_id = resolve_translation(request, translation)
-
     book_id: str | None = None
     if book is not None and book.strip():
         info = SqliteBookResolver(conn).resolve(book)
@@ -164,23 +164,55 @@ def search_endpoint(
             raise BookFilterError(f"unknown book filter {book!r}")
         book_id = info.id
 
-    page = search_verses(conn, q, translation_id, book_id, limit, offset)
+    # ?translations= (plural) opts into multi-translation mode (v5-S2, ADR-0003); absent/blank keeps
+    # the byte-for-byte single-translation path. ?translation= (singular) still selects the one.
+    if translations is None or not translations.strip():
+        translation_id = resolve_translation(request, translation)
+        page = search_verses(conn, q, translation_id, book_id, limit, offset)
+        response = SearchResponse(
+            query=q,
+            translation=translation_id,
+            book=book_id,
+            limit=limit,
+            offset=offset,
+            total=page.total,
+            hits=[
+                SearchHit(
+                    book=hit.book_id,
+                    chapter=hit.chapter,
+                    verse=hit.verse,
+                    reference=f"{hit.book_name} {hit.chapter}:{hit.verse}",
+                    snippet=hit.snippet,
+                )
+                for hit in page.hits
+            ],
+        )
+        return cached_json_response(response, request)
+
+    if translations.strip() == "*":
+        ids: tuple[str, ...] = tuple(sorted(request.app.state.translations))
+    else:
+        ids = resolve_translations(request, translations)
+
+    multi = search_verses_multi(conn, q, ids, book_id, limit, offset)
     response = SearchResponse(
         query=q,
-        translation=translation_id,
+        translation=ids[0],  # the primary (first resolved); matches[0] is the top-ranked snippet
+        translations=list(ids),
         book=book_id,
         limit=limit,
         offset=offset,
-        total=page.total,
+        total=multi.total,
         hits=[
             SearchHit(
                 book=hit.book_id,
                 chapter=hit.chapter,
                 verse=hit.verse,
                 reference=f"{hit.book_name} {hit.chapter}:{hit.verse}",
-                snippet=hit.snippet,
+                snippet=hit.matches[0].snippet,
+                matches={m.translation_id: m.snippet for m in hit.matches},
             )
-            for hit in page.hits
+            for hit in multi.hits
         ],
     )
     return cached_json_response(response, request)

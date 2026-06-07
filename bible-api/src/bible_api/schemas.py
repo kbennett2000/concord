@@ -8,7 +8,9 @@ on ``?format=``.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
 
 class ParallelVerse(BaseModel):
@@ -46,17 +48,36 @@ class VerseResponseGrouped(BaseModel):
 
 
 class SearchHit(BaseModel):
-    """One full-text search match with its highlighted snippet."""
+    """One full-text search match with its highlighted snippet.
+
+    ``matches`` (v5-S2) carries the per-translation snippets in multi-translation mode
+    (``?translations=``). In single-translation mode it is ``None`` and **omitted** from the JSON
+    (see the serializer) so the legacy response is byte-for-byte unchanged; the flat ``snippet`` is
+    then the only snippet, and in multi mode it echoes the top-ranked translation's snippet.
+    """
 
     book: str
     chapter: int
     verse: int
     reference: str
     snippet: str
+    matches: dict[str, str] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_null_matches(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        if self.matches is None:
+            data.pop("matches", None)  # surgical: drop only the new key, only when null
+        return data
 
 
 class SearchResponse(BaseModel):
-    """A page of search results: the echoed query state, total count, and hits."""
+    """A page of search results: the echoed query state, total count, and hits.
+
+    ``translations`` (v5-S2) echoes the searched set in multi-translation mode; ``None`` and omitted
+    in single-translation mode, where ``translation`` carries the one searched id (in multi mode
+    ``translation`` is the primary — the first resolved id). Existing fields are unchanged.
+    """
 
     query: str
     translation: str
@@ -65,6 +86,14 @@ class SearchResponse(BaseModel):
     offset: int
     total: int
     hits: list[SearchHit]
+    translations: list[str] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_null_translations(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        if self.translations is None:
+            data.pop("translations", None)  # surgical: drop only the new key, only when null
+        return data
 
 
 class CrossRefSource(BaseModel):
