@@ -14,6 +14,7 @@ DEFAULT_CORS_ORIGINS = "*"
 DEFAULT_DB_PATH = "bible.db"
 DEFAULT_TRANSLATION = "KJV"
 DEFAULT_SEMANTIC_MAX_CONCURRENCY = 2
+DEFAULT_SEMANTIC_TIMEOUT_S = 10.0
 _FALSEY = {"0", "false", "no", "off"}
 
 
@@ -73,3 +74,17 @@ def semantic_max_concurrency() -> int:
         os.environ.get("CONCORD_SEMANTIC_MAX_CONCURRENCY", DEFAULT_SEMANTIC_MAX_CONCURRENCY)
     )
     return value if value > 0 else 0
+
+
+def semantic_timeout_s() -> float:
+    """Wall-clock deadline for a single semantic inference. ``CONCORD_SEMANTIC_TIMEOUT_S``.
+
+    Float seconds, default 10.0. ``0`` (or any non-positive value) disables the deadline.
+    Sized so a legitimate single query on a weak non-AVX2 box ("several seconds", ADR-0001)
+    completes with comfortable headroom — it fires only on a pathological / hung inference.
+    The deadline bounds how long a *caller* waits; the concurrency cap still bounds how much
+    *CPU* runs (a timed-out inference keeps its permit until it finishes). See
+    docs/adr/ADR-0002. ``float()`` fails loudly at startup on a malformed value.
+    """
+    value = float(os.environ.get("CONCORD_SEMANTIC_TIMEOUT_S", DEFAULT_SEMANTIC_TIMEOUT_S))
+    return value if value > 0 else 0.0

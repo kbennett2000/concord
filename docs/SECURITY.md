@@ -18,10 +18,12 @@ tampering. The hardening in place reflects that:
   starting, so a process compromise doesn't begin as root.
 - **Bounded inputs.** Reference and query lengths are capped, and the reference parser caps
   verse-list size, so a single cheap request can't fan out to unbounded compute or SQL.
-- **Semantic-search concurrency cap.** `/v1/semantic-search` runs an ONNX inference per
-  request; a bounded number run at once (`CONCORD_SEMANTIC_MAX_CONCURRENCY`, default 2),
-  excess shed with `503` + `Retry-After`, so a loop/retry storm can't saturate CPU (see the
-  subsection below and ADR-0001).
+- **Semantic-search overload protection.** `/v1/semantic-search` runs an ONNX inference per
+  request, governed by two in-process bounds: a concurrency cap on how *many* run at once
+  (`CONCORD_SEMANTIC_MAX_CONCURRENCY`, default 2) and a wall-clock deadline on how *long* one
+  may run (`CONCORD_SEMANTIC_TIMEOUT_S`, default 10s), each shedding with `503` + `Retry-After`.
+  Together they keep a loop/retry storm or a single slow query from tying up the box (see the
+  subsection below and ADR-0001 / ADR-0002).
 - **`X-Content-Type-Options: nosniff`** on every response. No CSP — it isn't needed for a
   JSON API and would risk the vendored offline docs for little gain.
 - **Offline by construction.** All assets (database, model, vectors, Swagger UI / ReDoc) are
@@ -37,16 +39,24 @@ Two distinct risks, handled at two layers:
   bounds simultaneous inferences and sheds the excess immediately with `503` + `Retry-After`.
   This is an in-process guarantee that holds on every deployment.
 
-- **One request that is slow** — **your** concern, and it is **not** handled by the app. The
-  app deliberately does **not** bound how long a single inference runs, because an ONNX
-  `session.run()` is not cleanly cancelable (see ADR-0001 for the full reasoning). On
-  **non-AVX2 hardware a single query can take several seconds**. You must therefore **set a
-  read-timeout in the client and/or a reverse proxy** in front of Concord — that is the only
-  layer that can give up on a slow upstream and stop a caller from hanging. Treat this as
-  required, not optional, especially on slow hardware.
+- **One request that is slow** — now **partly the app's concern too** (ADR-0002). A
+  server-side wall-clock deadline (`CONCORD_SEMANTIC_TIMEOUT_S`, default **10s**, `0` disables)
+  bounds how long a caller waits: the inference runs in a small executor and, if it overruns the
+  budget, the request is shed with `503` + `Retry-After`. Crucially, the deadline bounds *caller
+  wait*, not *CPU* — an ONNX `session.run()` is not cleanly cancelable (see ADR-0001), so the
+  timed-out inference keeps running to completion and keeps holding its concurrency permit until
+  it does. That is deliberate: it keeps the cap coupled to real CPU, so a retry after a timeout
+  hits a full cap and is shed (`semantic_busy`) rather than stacking a second slow pass.
 
-See [`docs/adr/ADR-0001`](adr/ADR-0001-semantic-endpoint-overload-protection.md) for the
-decision and tradeoffs.
+  **Still set a client / reverse-proxy read-timeout as defense-in-depth.** The in-app deadline
+  does not cover a stalled network read, a slow-loris client, or a deployment that has turned the
+  cap or the deadline off — and a proxy is the only layer that can abandon a genuinely stuck
+  upstream socket. On non-AVX2 hardware especially, treat the proxy read-timeout as belt to the
+  app's braces, not as redundant.
+
+See [`docs/adr/ADR-0001`](adr/ADR-0001-semantic-endpoint-overload-protection.md) and
+[`docs/adr/ADR-0002`](adr/ADR-0002-semantic-endpoint-deadline.md) for the decisions and
+tradeoffs.
 
 ## CORS — why it's permissive on purpose
 
@@ -75,9 +85,10 @@ be read as a claim that it is hardened for that. If you put it on the public int
   network or a proxy to handle transport security).
 - **Authentication / authorization** at the proxy — Concord has none by design.
 - **Rate limiting and a request read-timeout** at the proxy. Rate limiting bounds abuse
-  beyond Concord's input caps and concurrency cap; the **read-timeout** bounds how long a
-  caller waits on a slow semantic inference (which the app does not bound — see the semantic
-  subsection above). The read-timeout matters most on non-AVX2 hardware.
+  beyond Concord's input caps and concurrency cap; the **read-timeout** is defense-in-depth
+  behind the app's own semantic deadline (`CONCORD_SEMANTIC_TIMEOUT_S`) — it still covers a
+  stalled socket, a slow-loris client, or a deployment with the deadline turned off (see the
+  semantic subsection above). It matters most on non-AVX2 hardware.
 - **A restrictive `CONCORD_CORS_ORIGINS`** naming only the origins you actually serve.
 - **Network controls** (firewall/ACLs) limiting who can reach the port at all.
 
