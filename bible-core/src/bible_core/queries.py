@@ -416,6 +416,94 @@ def get_notes(
     )
 
 
+@dataclass(frozen=True)
+class NoteSearchHit:
+    """One note-search match: its canonical anchor, owning translation, and highlighted snippet.
+
+    The note's own ``cross_references`` are deliberately omitted (fetch via the passage read);
+    search hits stay lean (SPEC v5 §4).
+    """
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+    translation_id: str
+    note_type: str | None
+    char_offset: int
+    marker: str | None
+    ordinal: int
+    snippet: str
+
+
+@dataclass(frozen=True)
+class NoteSearchPage:
+    """A page of note-search hits plus the total match count (for pagination metadata)."""
+
+    hits: tuple[NoteSearchHit, ...]
+    total: int
+
+
+def search_notes(
+    conn: sqlite3.Connection,
+    query: str,
+    translation_id: str | None,
+    note_type: str | None,
+    book_id: str | None,
+    limit: int,
+    offset: int,
+) -> NoteSearchPage:
+    """Full-text search translator-note bodies, optionally filtered by translation/type/book.
+
+    The direct analogue of :func:`search_verses` over the ``notes_fts`` mirror. Relevance-ranked
+    (FTS5 ``rank``) with a canonical tiebreak extended by ``ordinal`` so multi-note verses page
+    deterministically. Returns the page plus the total match count (a second query). Raises
+    :class:`SearchQueryError` if the MATCH expression is invalid. Filters are validated at the
+    API edge; an instance with no notes simply matches nothing (an empty page, never an error).
+    """
+    filters = ""
+    base_params: list[str] = [query]
+    if translation_id is not None:
+        filters += " AND n.translation_id = ?"
+        base_params.append(translation_id)
+    if note_type is not None:
+        filters += " AND n.note_type = ?"
+        base_params.append(note_type)
+    if book_id is not None:
+        filters += " AND n.book_id = ?"
+        base_params.append(book_id)
+
+    snippet_fn = (
+        f"snippet(notes_fts, 0, '{SEARCH_MARK_OPEN}', '{SEARCH_MARK_CLOSE}', '…', {SNIPPET_TOKENS})"
+    )
+    hits_sql = (
+        f"SELECT n.book_id, b.name, n.chapter, n.verse, n.translation_id, n.note_type, "
+        f"n.char_offset, n.marker, n.ordinal, {snippet_fn} "
+        "FROM notes_fts f "
+        "JOIN translator_notes n ON n.id = f.rowid "
+        "JOIN books b ON b.id = n.book_id "
+        f"WHERE notes_fts MATCH ?{filters} "
+        "ORDER BY f.rank, b.canonical_order, n.chapter, n.verse, n.ordinal, n.id "
+        "LIMIT ? OFFSET ?"
+    )
+    count_sql = (
+        "SELECT COUNT(*) FROM notes_fts f "
+        "JOIN translator_notes n ON n.id = f.rowid "
+        f"WHERE notes_fts MATCH ?{filters}"
+    )
+
+    try:
+        hit_rows = conn.execute(hits_sql, [*base_params, limit, offset]).fetchall()
+        total = conn.execute(count_sql, base_params).fetchone()[0]
+    except sqlite3.OperationalError as exc:
+        raise SearchQueryError(str(exc)) from exc
+
+    hits = tuple(
+        NoteSearchHit(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]) for r in hit_rows
+    )
+    return NoteSearchPage(hits=hits, total=total)
+
+
 # --- metadata + random ---------------------------------------------------------------
 
 
