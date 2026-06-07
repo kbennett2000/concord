@@ -820,6 +820,22 @@
           },
           {
             "in": "query",
+            "name": "translations",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Translations"
+            }
+          },
+          {
+            "in": "query",
             "name": "book",
             "required": false,
             "schema": {

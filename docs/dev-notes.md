@@ -1255,3 +1255,35 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   translation, ordering/pagination, empty splits, the unknown-filter 404/400 splits, immutable-ETag
   304, hit shape omits `cross_references`). OpenAPI regenerated (additive: the new path).
   `make check` green.
+
+### Slice V5-S2 — Multi-translation keyword verse search
+- **Date:** 2026-06-07. **PR:** _(this PR)_ (`v5/slice-2-multi-translation-search`). **ADR:**
+  [ADR-0003](adr/ADR-0003-search-multi-translation-shape.md).
+- **What landed:** the additive widening of `/v1/search` to search across several loaded
+  translations at once, deduped by canonical verse (SPEC v5 §3). **Purely additive** — a new optional
+  `translations` (plural, CSV; `*` = all loaded) param + two new optional response fields; **no
+  schema/storage change** (`verses_fts` already indexes every translation). The single-translation
+  path is **byte-for-byte unchanged** (`search_verses` untouched; a contract-unchanged test proves no
+  new key reaches the wire when `translations` is absent).
+- **Result model:** one hit per canonical verse that matched in ≥1 searched translation, carrying a
+  `matches: {TRANSLATION: snippet}` map; ranked by **max** per-verse relevance (`MIN(f.rank)`, FTS5
+  rank is lower-is-better) + canonical tiebreak; `total` = distinct matching verses. The flat
+  `snippet` echoes the top-ranked translation's snippet (old clients still get one); response-level
+  `translation` is the primary (first resolved id, still a required non-null string).
+- **Dedup vs pagination → two queries** (`bible_core.queries.search_verses_multi`, the `get_notes`
+  precedent): query 1 groups to canonical verses + paginates (`GROUP BY book/chapter/verse`,
+  `ORDER BY MIN(rank), canonical_order, …`, `LIMIT/OFFSET`); query 2 hydrates `matches` for only that
+  page's verses via SQLite **row-value `IN (VALUES …)`**. Snippet work bounded by
+  `limit × |translations|` — no per-verse fan-out.
+- **Byte-identity mechanism:** the new `SearchHit.matches` / `SearchResponse.translations` fields are
+  optional (`None`) and dropped from the JSON by a surgical `@model_serializer(mode="wrap")` that pops
+  **only** the new key when null — so the legacy `book: null` and every other byte are untouched
+  (a blanket `exclude_none` would have wrongly dropped `book`). See ADR-0003.
+- **Errors/dispatch:** unknown id → 404 `unknown_translation` (shared `resolve_translations`);
+  malformed `q` → 400 `invalid_search_query`; empty → 200 empty; `translations` blank → the legacy
+  single path; if both `translation=`/`translations=` given, `translations` wins.
+- **Tests (synthetic only):** new `bible-core/tests/test_search_multi.py` (12) and
+  `bible-api/tests/test_search_multi_endpoint.py` (17, incl. the contract-unchanged proof, dedup, the
+  WEB-omits-JHN-3:16 asymmetry, max-relevance ordering, pagination over verses, `*`=all, 404/400,
+  immutable-ETag 304). OpenAPI regenerated (additive: the new `translations` query param).
+  `make check` green.
