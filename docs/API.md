@@ -495,6 +495,13 @@ then `ordinal`.
 > (the richest source, NET, is copyrighted — see [notes-ingest](v4/notes-ingest.md)), so on a
 > stock image this endpoint returns `200` with an empty list for every translation. A note set
 > appears only after a user bakes their own legally-obtained notes into `bible.db` locally.
+>
+> **To supply your own:** drop a `<TRANSLATION>.json` file into the gitignored
+> `data/private/notes/` directory and rebuild (`make build-db`); the loader picks it up
+> automatically, and the file never enters the public repo or a shared image. See
+> [`examples/notes-sample.json`](../examples/notes-sample.json) for a minimal, runnable example
+> of the file shape, and [notes-ingest](v4/notes-ingest.md) for the full contract (field rules,
+> aliases, validation).
 
 | Param | In | Type | Default | Notes |
 |---|---|---|---|---|
