@@ -14,6 +14,7 @@ import sqlite3
 import sys
 import threading
 from collections.abc import AsyncGenerator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -169,7 +170,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         else {"translation": store.meta.translation, "count": len(store.refs)},
         cors_origins=config.cors_origins(),
     )
-    yield
+    try:
+        yield
+    finally:
+        executor = app.state.semantic_executor
+        if executor is not None:
+            # wait=False so a still-running (timed-out) inference can't block shutdown;
+            # cancel_futures drops only not-yet-started work — a running pass can't be cancelled.
+            executor.shutdown(wait=False, cancel_futures=True)
 
 
 @router.get("/docs", include_in_schema=False)
@@ -260,6 +268,7 @@ def create_app(
     enable_semantic: bool | None = None,
     embeddings_path: str | Path | None = None,
     semantic_max_concurrency: int | None = None,
+    semantic_timeout_s: float | None = None,
 ) -> FastAPI:
     """Build the FastAPI application, pointed at ``db_path`` (default: config/env).
 
@@ -267,7 +276,9 @@ def create_app(
     ``False`` to skip the heavy model load). ``embeddings_path`` overrides where the vector
     store is read from (default: the store's own ``CONCORD_EMBEDDINGS_PATH`` resolution).
     ``semantic_max_concurrency`` overrides ``CONCORD_SEMANTIC_MAX_CONCURRENCY`` (the
-    semantic-search concurrency cap; ADR-0001) — a per-app seam for tests.
+    semantic-search concurrency cap; ADR-0001) and ``semantic_timeout_s`` overrides
+    ``CONCORD_SEMANTIC_TIMEOUT_S`` (the per-inference wall-clock deadline; ADR-0002) — both
+    per-app seams for tests.
     """
     _configure_logging()
     app = FastAPI(
@@ -295,6 +306,18 @@ def create_app(
     )
     app.state.semantic_max_concurrency = cap
     app.state.semantic_semaphore = threading.BoundedSemaphore(cap) if cap > 0 else None
+    # Per-inference wall-clock deadline (ADR-0002): run the inference in a small executor and
+    # give up waiting after `timeout` seconds (503 + Retry-After). The timed-out worker keeps
+    # running and holds its permit until it finishes, so the cap stays coupled to real CPU
+    # exactly as ADR-0001 requires. Only meaningful with a cap on AND a positive timeout;
+    # max_workers is pinned to the cap (acquire-before-submit bounds in-flight workers to it).
+    timeout = config.semantic_timeout_s() if semantic_timeout_s is None else semantic_timeout_s
+    app.state.semantic_timeout_s = timeout
+    app.state.semantic_executor = (
+        ThreadPoolExecutor(max_workers=cap, thread_name_prefix="semantic")
+        if app.state.semantic_semaphore is not None and timeout > 0
+        else None
+    )
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
