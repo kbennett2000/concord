@@ -55,6 +55,10 @@ class SemanticBusyError(Exception):
     """Semantic search is at its concurrency cap; the request is shed (ADR-0001)."""
 
 
+class SemanticTimeoutError(Exception):
+    """A single semantic inference exceeded the server-side wall-clock deadline (ADR-0002)."""
+
+
 class UnknownPlaceError(Exception):
     """A requested place id (a path resource) is not in the places table → 404."""
 
@@ -142,6 +146,14 @@ async def _handle_semantic_busy(_request: Request, exc: Exception) -> Response:
     return _error_response(503, "semantic_busy", str(exc), headers={"Retry-After": "1"})
 
 
+async def _handle_semantic_timeout(_request: Request, exc: Exception) -> Response:
+    # 503 (not 504): Concord is the origin doing its own compute, not a gateway awaiting an
+    # upstream, and a deadline breach almost always means the box is genuinely overloaded — the
+    # same "retry shortly" condition as semantic_busy, so clients back off uniformly. A distinct
+    # code keeps "ran too long" separable from "shed before running" in logs (ADR-0002).
+    return _error_response(503, "semantic_timeout", str(exc), headers={"Retry-After": "1"})
+
+
 async def _handle_unknown_place(_request: Request, exc: Exception) -> Response:
     return _error_response(404, "unknown_place", str(exc), cast(UnknownPlaceError, exc).detail)
 
@@ -167,6 +179,7 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SearchQueryError, _handle_search_query)
     app.add_exception_handler(SemanticUnavailableError, _handle_semantic_unavailable)
     app.add_exception_handler(SemanticBusyError, _handle_semantic_busy)
+    app.add_exception_handler(SemanticTimeoutError, _handle_semantic_timeout)
     app.add_exception_handler(UnknownPlaceError, _handle_unknown_place)
     app.add_exception_handler(PlaceFilterError, _handle_place_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)

@@ -175,6 +175,8 @@ in a `.env` file (`docker compose` reads both). See [`.env.example`](.env.exampl
 | `CONCORD_DEFAULT_TRANSLATION` | `KJV` | Translation used when `?translation(s)=` is omitted. Must be one that's loaded, or the API refuses to start. |
 | `BIBLE_DB_PATH` | `/app/bible.db` | Path to the database inside the container. |
 | `CONCORD_SEMANTIC_SEARCH` | `1` | Whether `/v1/semantic-search` is served. Set it to `0` to disable (skips loading the embedding model). |
+| `CONCORD_SEMANTIC_MAX_CONCURRENCY` | `2` | Max simultaneous semantic inferences; excess is shed with `503` + `Retry-After`. `0` disables the cap. Raise on beefier/AVX2 hardware. |
+| `CONCORD_SEMANTIC_TIMEOUT_S` | `10` | Per-inference wall-clock deadline (seconds); a query over budget is shed with `503` + `Retry-After`. `0` disables it. |
 
 Changing the port is one line:
 
@@ -274,11 +276,13 @@ request input sizes, and sets `X-Content-Type-Options: nosniff`. CORS is intenti
 (`*`) with credentials disabled — correct for an unauthenticated, read-only service on a
 trusted network.
 
-The compute-heavy `/v1/semantic-search` is protected by a concurrency cap
-(`CONCORD_SEMANTIC_MAX_CONCURRENCY`, default 2) that sheds overload with `503` + `Retry-After`.
-The app bounds how *many* inferences run at once, **not how long one takes** — on slow
-(non-AVX2) hardware a single query can take seconds, so set a **client / reverse-proxy
-read-timeout** as well (see [`docs/SECURITY.md`](docs/SECURITY.md)).
+The compute-heavy `/v1/semantic-search` is protected by two in-process bounds, each shedding
+overload with `503` + `Retry-After`: a concurrency cap on how *many* inferences run at once
+(`CONCORD_SEMANTIC_MAX_CONCURRENCY`, default 2) and a wall-clock deadline on how *long* a
+single one may run (`CONCORD_SEMANTIC_TIMEOUT_S`, default 10s). The deadline bounds caller
+wait, not CPU (a slow inference runs to completion and keeps its slot), so on slow (non-AVX2)
+hardware you should **still set a client / reverse-proxy read-timeout** as defense-in-depth
+(see [`docs/SECURITY.md`](docs/SECURITY.md)).
 
 **It is not hardened for the public internet.** Before exposing it beyond a LAN, put a
 reverse proxy (TLS), authentication, and rate limiting in front of it. The full threat model
