@@ -1140,3 +1140,18 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   pre-bump commit (tree still read 1.0.0) before the version bump merged, so the tag and
   in-code version disagreed. Bumped bible-api `__version__`/pyproject `1.0.1 → 1.0.2` to match
   the intended release tag (refreshed `uv.lock`). The CORS fix is present in both tags.
+
+## Hardening + honesty pass
+
+### Notes-endpoint honesty
+- **Date:** 2026-06-07. `GET /v1/translations/{translation}/notes/{book}/{chapter}` is fully
+  wired and live, but the public image ships **zero** notes (notes are user-supplied; the richest
+  source, NET, is copyrighted), so for almost every operator it always returns `200` with an empty
+  list. That read as broken without being stated. Made it explicit: README "What Concord doesn't do
+  (yet)" gains a notes item, and docs/API.md's existing empty-200 callout now also explains *how to
+  supply your own* (the `data/private/notes/` pattern + `make build-db`).
+- Added `examples/notes-sample.json` — a minimal, committed example of the file shape (KJV anchor,
+  two note types + a null-type plain footnote, a cross-reference). Synthetic illustrative content,
+  not real notes; lives outside the gitignored `data/private/`. **Verified loadable** via the real
+  loader (`bible_core.notes.parse_notes_file` → 3 notes, 2 cross-references). Docs-only otherwise;
+  `make check` green.
