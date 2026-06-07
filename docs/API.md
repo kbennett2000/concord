@@ -5,6 +5,9 @@ running instance loaded with the 13 bundled public-domain translations.
 
 - **Base URL:** `http://<host>:<port>` (default `http://localhost:8000`)
 - **Versioning:** data endpoints live under `/v1`. That prefix is a stability contract.
+- **Machine-readable schema:** the full OpenAPI spec is committed at
+  [`docs/openapi.json`](openapi.json) (also served live at `/openapi.json`), versioned with the
+  release and CI-checked against the code — build clients against it with confidence.
 - **Responses:** JSON (`application/json`). Verse text is returned exactly as stored —
   Unicode, editorial brackets (`[is]`), and punctuation are preserved untouched.
 
