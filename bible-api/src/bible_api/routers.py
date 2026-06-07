@@ -54,9 +54,9 @@ from .dependencies import (
 )
 from .errors import (
     BookFilterError,
+    FilterError,
     NoMatchError,
     NoVersesFoundError,
-    PlaceFilterError,
     SemanticBusyError,
     SemanticTimeoutError,
     SemanticUnavailableError,
@@ -251,7 +251,7 @@ def notes_search_endpoint(
     if type is not None and type.strip():
         type_filter = type.strip()
         if type_filter not in NOTE_TYPES:
-            raise PlaceFilterError(
+            raise FilterError(
                 "unknown_type",
                 f"unknown note type {type_filter!r}",
                 {"type": type_filter, "available": list(NOTE_TYPES)},
@@ -615,7 +615,7 @@ def places_endpoint(
     if type_filter is not None:
         available = distinct_place_types(conn)
         if type_filter not in available:
-            raise PlaceFilterError(
+            raise FilterError(
                 "unknown_type",
                 f"unknown place type {type_filter!r}",
                 {"type": type_filter, "available": available},
@@ -623,7 +623,7 @@ def places_endpoint(
 
     status_filter = status.strip() if status and status.strip() else None
     if status_filter is not None and status_filter not in PLACE_STATUSES:
-        raise PlaceFilterError(
+        raise FilterError(
             "unknown_status",
             f"unknown place status {status_filter!r}",
             {"status": status_filter, "available": list(PLACE_STATUSES)},
