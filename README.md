@@ -339,6 +339,9 @@ Concord exists to be built on.
   end-user Bible app built on top of Concord — a working desktop client of this `/v1` surface.
 - **Embedding in-process:** because `bible-core` has no web dependencies, a Python project can
   import it directly and query Scripture without running the HTTP server at all.
+  [`examples/embed_in_process.py`](examples/embed_in_process.py) is a runnable example — it
+  parses a reference and fetches a verse with no server running, then (if the embedding model
+  and vector store are present) does a `bible-semantic` query in-process too.
 - **Learn to build on it:**
   [concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web) — a
   five-lesson, beginner-first course (no experience needed) that builds a real app on the

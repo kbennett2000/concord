@@ -1140,3 +1140,24 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   pre-bump commit (tree still read 1.0.0) before the version bump merged, so the tag and
   in-code version disagreed. Bumped bible-api `__version__`/pyproject `1.0.1 → 1.0.2` to match
   the intended release tag (refreshed `uv.lock`). The CORS fix is present in both tags.
+
+## Hardening + honesty pass
+
+### In-process embedding reference example
+- **Date:** 2026-06-07. `bible-core`'s headline — zero web deps, embeddable in-process — had no
+  consumer in the tree. Added `examples/embed_in_process.py`: opens a built `bible.db`, parses a
+  reference, and fetches a verse using **only `bible_core`** (read-only conn → `SqliteBookResolver`
+  → `parse_reference` → `get_verse_text`), no FastAPI/Uvicorn/socket. It then *optionally* runs a
+  `bible_semantic` query — `bible_semantic` is imported **lazily inside the function, guarded by
+  `try/except ImportError`**, and returns `None` (caller skips, exit 0) if the package, the ONNX
+  model (`FileNotFoundError`), or the vector store (`StoreError`) is absent. So the core path is
+  genuinely web-free *and* semantic-free at import time.
+- **Smoke test** lives in `bible-semantic/tests/` (the package that can import both `bible_core`
+  and `bible_semantic` without dragging in the web layer). It builds a tiny one-translation
+  `bible.db` via the public `bible_core.loader.build_database` (inline JSON — the test kits aren't
+  importable across package test dirs), loads the example by path with `importlib`, and asserts the
+  fetch returns the expected text. The semantic skip is made **deterministic** by pointing
+  `CONCORD_EMBEDDINGS_PATH` at a missing file → `StoreError` → `None`, so it holds whether or not a
+  real store/model is present locally. The real embedding path is an `@pytest.mark.integration`
+  test with the standard store+model skip-guard. README "Embedding in-process" bullet now points at
+  the example. `make check` green.
