@@ -57,10 +57,12 @@ What's left is just *asking it questions* and *showing the answers*. Both of tho
 approachable than they sound, and there's a growing universe of tutorials and AI assistants
 that can walk you through it patiently.
 
-A tutorial repo or two — written for someone in exactly your shoes — is on the way. When it
-lands it'll live alongside this one, at `kbennett2000/concord-tutorial-*`. In the meantime,
-keep reading if you're curious. The next sections are written for developers, but you might
-surprise yourself.
+A tutorial written for someone in exactly your shoes is here:
+**[concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web)** — a free,
+five-lesson course that takes you from "what's an API?" to a real app you built yourself,
+running on your own computer. No experience needed. If that "I've never coded" voice is you,
+start there. (The next sections of this README are written for developers — but the course
+was written for you.)
 
 ## Quick start
 
@@ -338,8 +340,10 @@ Concord exists to be built on.
   app side, not yet wired up.
 - **Embedding in-process:** because `bible-core` has no web dependencies, a Python project can
   import it directly and query Scripture without running the HTTP server at all.
-- **Coming:** beginner-friendly tutorial repos at `kbennett2000/concord-tutorial-*` — forward
-  signal, no timeline yet.
+- **Learn to build on it:**
+  [concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web) — a
+  five-lesson, beginner-first course (no experience needed) that builds a real app on the
+  `/v1` surface.
 
 The `/v1` prefix means today's responses are a contract. Build against them with confidence.
 
