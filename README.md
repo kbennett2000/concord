@@ -97,14 +97,14 @@ rest are below.
 
 ## What's in the box
 
-Fourteen endpoints. Each is documented in full — with real request/response examples — in
+Fifteen endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
 |---|---|
 | `GET /v1/verses/{ref}` | Fetch a verse, range, list, or chapter across one or more translations. |
 | `GET /v1/chapters/{book}/{chapter}` | Fetch a whole chapter, multi-translation aware. |
-| `GET /v1/search` | Full-text search within a single translation. |
+| `GET /v1/search` | Full-text search — one translation, or across several at once with `?translations=`. |
 | `GET /v1/semantic-search` | Meaning-based search — find verses by idea, rendered in any translation. |
 | `GET /v1/cross-references/{ref}` | Cross-references for a verse, optionally with target text. |
 | `GET /v1/places` | Browse places, filtered by type, status, or name. |
@@ -112,6 +112,7 @@ Fourteen endpoints. Each is documented in full — with real request/response ex
 | `GET /v1/places/{id}/verses` | The verses that mention a place. |
 | `GET /v1/verses/{ref}/places` | The places a verse or passage names. |
 | `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
+| `GET /v1/notes/search` | Keyword search over translator's notes — user-supplied, never shipped in the public image. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -328,9 +329,15 @@ still haven't made a release, on purpose:
 - **Catholic and deuterocanonical books.** The schema is ready for them, but the data, naming
   conventions, and Vulgate psalm-numbering mapping are all distinct work that didn't belong in
   a clean release. Future work.
-- **Multi-translation search.** Search hits a single translation at a time. Cross-translation
-  search introduces noise (near-duplicate hits) that's worth solving carefully when the time
-  comes.
+- **Notes semantic search.** Keyword search over translator's notes shipped in v5
+  (`GET /v1/notes/search`); *meaning-based* search over them is designed but gated behind real
+  demand — the note-embedding corpus is large and tied to restrictively-licensed source text, so
+  it's opt-in/local rather than something every instance pays for. Keyword notes search covers the
+  common case.
+- **Multi-translation *semantic* search.** Not a gap — it's deliberately not a thing. Semantic
+  search is already translation-agnostic: it ranks verse *references* in one meaning-space (WEB) and
+  renders them in whatever translation you ask for, so "search all translations" has no meaning for
+  it. (Keyword multi-translation search *did* ship in v5 — see `GET /v1/search?translations=`.)
 - **Ship translator's notes.** The notes endpoint
   (`GET /v1/translations/{translation}/notes/{book}/{chapter}`) is fully wired and live, but
   the public image ships **zero** notes — the richest source (NET) is copyrighted, and notes

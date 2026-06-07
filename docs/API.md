@@ -25,6 +25,7 @@ running instance loaded with the 13 bundled public-domain translations.
 - [`GET /v1/places/{id}/verses`](#get-v1placesidverses)
 - [`GET /v1/verses/{ref}/places`](#get-v1versesrefplaces)
 - [`GET /v1/translations/{translation}/notes/{book}/{chapter}`](#get-v1translationstranslationnotesbookchapter)
+- [`GET /v1/notes/search`](#get-v1notessearch)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
 - [`GET /v1/translations`](#get-v1translations)
@@ -161,13 +162,15 @@ $ curl -s 'localhost:8000/v1/chapters/john/1?translations=kjv'
 
 ## `GET /v1/search`
 
-Full-text search within **one** translation (multi-translation search is out of scope for
-v1). Backed by SQLite FTS5.
+Full-text search, backed by SQLite FTS5. Searches **one** translation by default; add
+`?translations=` to search **several at once**, deduped by canonical verse (see
+[Multi-translation search](#multi-translation-search) below).
 
 | Param | Type | Default | Notes |
 |---|---|---|---|
 | `q` | string | — (required) | FTS5 query; see syntax below. |
-| `translation` | string | default translation | Single translation. |
+| `translation` | string | default translation | Single translation (single-translation mode). |
+| `translations` | string | — | **Multi-translation mode.** Comma-separated ids (`KJV,WEB,ASV`), or `*` for all loaded. When present it takes precedence over `translation`; absent/blank keeps single-translation mode. |
 | `book` | string | — | Optional filter; USFM id or alias. |
 | `limit` | int | `20` | 1–100. |
 | `offset` | int | `0` | ≥ 0. |
@@ -190,6 +193,52 @@ Matched terms are wrapped in `<mark>…</mark>`. Results are relevance-ranked (F
 with a canonical tiebreak, so `limit`/`offset` pages don't overlap. `total` is the full
 match count, independent of the page.
 
+### Multi-translation search
+
+Pass `?translations=` (a comma-separated list, or `*` for all loaded) to search several
+translations at once. Results are **deduped by canonical verse**: one hit per verse that matched in
+at least one of the requested translations, ranked by its **best (max) relevance** across them, with
+the same canonical tiebreak. `total` counts distinct matching **verses**, not (verse, translation)
+pairs.
+
+Each hit gains a `matches` map — `{ "<TRANSLATION>": "<marked snippet>", … }` — carrying every
+translation that matched and its snippet. The response also echoes the searched set as
+`translations`.
+
+```bash
+$ curl -s 'localhost:8000/v1/search?q=lovingkindness&translations=KJV,ASV&limit=1'
+```
+```json
+{
+  "query": "lovingkindness", "translation": "KJV", "book": null,
+  "limit": 1, "offset": 0, "total": 1,
+  "hits": [
+    { "book": "PSA", "chapter": 63, "verse": 3, "reference": "Psalms 63:3",
+      "snippet": "Because thy <mark>lovingkindness</mark> [is] better than life, ...",
+      "matches": {
+        "KJV": "Because thy <mark>lovingkindness</mark> [is] better than life, ...",
+        "ASV": "Because thy <mark>lovingkindness</mark> is better than life, ..."
+      }
+    }
+  ],
+  "translations": ["KJV", "ASV"]
+}
+```
+
+A few shape notes (the rationale is recorded in
+[ADR-0003](adr/ADR-0003-search-multi-translation-shape.md)):
+
+- The `matches` map is **authoritative** — it's the full per-translation detail.
+- The flat top-level `snippet` on each hit echoes that hit's **top-ranked** translation's snippet, so
+  a client that reads only `snippet` still gets something sensible (it may name a different
+  translation per hit).
+- The result-level `translation` is the **primary** — the first id you requested (so `translation`
+  stays a single non-null id in both modes). The searched set is in `translations`.
+
+**Additive and backward-compatible.** This is a purely additive widening: with `translations` absent
+the response is **byte-for-byte** the single-translation shape above — no `matches`, no
+`translations` field. Existing single-translation clients are unaffected.
+
 **FTS5 query syntax** (passed through to SQLite):
 
 | Form | Example | Meaning |
@@ -204,8 +253,8 @@ match count, independent of the page.
 
 **Errors:** `422 invalid_parameter` (missing/empty `q`, `limit` out of 1–100) ·
 `400 invalid_search_query` (malformed FTS5, e.g. an unbalanced quote — `detail.fts5_error`
-carries the SQLite message) · `404 unknown_translation` · `400 unknown_book` (filter).
-**Caching:** immutable.
+carries the SQLite message) · `404 unknown_translation` (an unknown id in `translation` **or** any
+id in `translations`) · `400 unknown_book` (filter). **Caching:** immutable.
 
 ## `GET /v1/semantic-search`
 
@@ -543,6 +592,59 @@ book + chapter (or `?verse`) that simply has no notes returns empty.
 
 **Errors:** `404 unknown_translation` · `404 unknown_book` · `422 invalid_parameter`
 (`chapter`/`verse` < 1). **Caching:** immutable.
+
+## `GET /v1/notes/search`
+
+Full-text keyword search over translator-note **bodies** (the `notes_fts` FTS5 mirror), across all
+loaded note translations by default. The counterpart to [`/v1/search`](#get-v1search) for notes; the
+read endpoint above fetches notes by passage, this one finds them by text.
+
+> **Notes are user-supplied and never shipped.** The published image contains **zero** notes (the
+> richest source, NET, is copyrighted — see [notes-ingest](v4/notes-ingest.md)), so on a stock image
+> this endpoint returns `200` with an empty list for **every** query. A populated example like the
+> one below requires a user to bake their own legally-obtained notes into `bible.db` locally: drop a
+> `<TRANSLATION>.json` into the gitignored `data/private/notes/` directory and rebuild
+> (`make build-db`). See [`examples/notes-sample.json`](../examples/notes-sample.json) and
+> [notes-ingest](v4/notes-ingest.md) for the file shape and contract.
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `q` | string | — (required) | FTS5 query; same syntax as [`/v1/search`](#get-v1search). |
+| `translation` | string | — (all) | Optional **filter** to one notes translation (e.g. `NET`). Case-insensitive. Omitted ⇒ all loaded. |
+| `type` | string | — (all) | Optional filter: `tn` (translator's) · `sn` (study) · `tc` (text-critical) · `map` · `other`. |
+| `book` | string | — | Optional filter; USFM id or alias. |
+| `limit` | int | `20` | 1–100. |
+| `offset` | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/notes/search?q=Greek&translation=NET&type=tn&limit=1'
+```
+```json
+{
+  "query": "Greek", "translation": "NET", "type": "tn", "book": null,
+  "limit": 1, "offset": 0, "total": 1,
+  "hits": [
+    { "book": "JHN", "chapter": 3, "verse": 16, "reference": "John 3:16",
+      "translation": "NET", "type": "tn", "char_offset": 8, "marker": "23", "ordinal": 1,
+      "snippet": "The <mark>Greek</mark> construction here indicates result, not purpose." }
+  ]
+}
+```
+
+Each hit carries the note's **canonical anchor** (`book`/`chapter`/`verse` + a human `reference`),
+the owning `translation`, the `type` (or `null` for a plain footnote), the `char_offset`, source
+`marker`, `ordinal`, and a `<mark>`-tagged `snippet` of the note body. The note's own
+`cross_references` are **omitted** here for leanness — fetch the full note (with its cross-references)
+via the [passage read](#get-v1translationstranslationnotesbookchapter) above. Results are
+relevance-ranked (FTS5 `rank`) with a canonical tiebreak (verse → ordinal → id).
+
+**Empty results** return `200` with `"total": 0` and `"hits": []` — never a 404. This is the normal
+state on the public image (no notes loaded) and for any query with no matches.
+
+**Errors:** `404 unknown_translation` · `400 unknown_type` (unknown `type`; `detail.available` lists
+the valid types) · `400 unknown_book` (filter) · `400 invalid_search_query` (malformed FTS5 —
+`detail.fts5_error`) · `422 invalid_parameter` (missing/empty `q`, `limit` out of 1–100).
+**Caching:** immutable.
 
 ## `GET /v1/random`
 
