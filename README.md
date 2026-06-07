@@ -331,6 +331,14 @@ still haven't made a release, on purpose:
 - **Multi-translation search.** Search hits a single translation at a time. Cross-translation
   search introduces noise (near-duplicate hits) that's worth solving carefully when the time
   comes.
+- **Ship translator's notes.** The notes endpoint
+  (`GET /v1/translations/{translation}/notes/{book}/{chapter}`) is fully wired and live, but
+  the public image ships **zero** notes — the richest source (NET) is copyrighted, and notes
+  are user-supplied by design. So on a stock image this endpoint returns `200` with an empty
+  list for every translation. To populate it, bake your own legally-obtained notes in via the
+  gitignored `data/private/notes/` directory — see
+  [`docs/API.md`](docs/API.md#get-v1translationstranslationnotesbookchapter) and
+  [`examples/notes-sample.json`](examples/notes-sample.json) for the file shape.
 
 If any of these would unblock a project of yours, open an issue and say so — it shapes what
 gets built next.
