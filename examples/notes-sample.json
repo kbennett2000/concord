@@ -1,0 +1,38 @@
+{
+  "translation": "KJV",
+  "notes": [
+    {
+      "book": "GEN",
+      "chapter": 1,
+      "verse": 1,
+      "text": "Example study note: the Hebrew opens with a temporal clause. This is illustrative sample text, not a real scholarly note — replace it with your own legally-obtained notes.",
+      "type": "sn",
+      "char_offset": 0,
+      "marker": "1",
+      "ordinal": 1,
+      "cross_references": [
+        { "book": "JHN", "chapter": 1, "verse_start": 1, "verse_end": 3 }
+      ]
+    },
+    {
+      "book": "John",
+      "chapter": 3,
+      "verse": 16,
+      "text": "Example translator's note anchored at the word 'so'. Illustrative sample text only.",
+      "type": "tn",
+      "char_offset": 8,
+      "marker": "a",
+      "ordinal": 1,
+      "cross_references": [
+        { "book": "ROM", "chapter": 5, "verse_start": 8, "verse_end": null }
+      ]
+    },
+    {
+      "book": "John",
+      "chapter": 3,
+      "verse": 16,
+      "text": "Example plain footnote on the same verse (no type, so it stores as null). A second note on one verse shows how ordinal orders them.",
+      "ordinal": 2
+    }
+  ]
+}
