@@ -1143,6 +1143,37 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
 
 ## Hardening + honesty pass
 
+### Semantic-endpoint wall-clock deadline (ADR-0002)
+- **Date:** 2026-06-07. Closes the gap ADR-0001 left open (risk 2 — *one slow inference*): the
+  cap bounded how *many* inferences run, nothing bounded how *long* one runs, so on a no-proxy
+  `make run` / `docker compose` deploy a caller could hang for seconds. Adds a server-side
+  deadline `CONCORD_SEMANTIC_TIMEOUT_S` (config.py, float, **default 10s**, `0` disables) → on
+  breach, **503 `semantic_timeout` + `Retry-After: 1`** in the standard envelope.
+- **The load-bearing trick (honors ADR-0001):** the inference runs in a per-app
+  `ThreadPoolExecutor`; the handler waits with `future.result(timeout=T)`, but the concurrency
+  **permit is released by the worker, never the handler** (new `_run_inference` helper). So a
+  timed-out *zombie* inference keeps holding its slot until it actually finishes — the deadline
+  bounds *caller wait*, the cap still bounds *CPU*, and they never decouple (a retry after a
+  timeout hits a full cap → `semantic_busy`). This is precisely the "soft timeout is harmful"
+  failure mode ADR-0001 warned about, avoided by *not* releasing early.
+- **Sharp edge:** `max_workers` is pinned to the cap. Acquire-before-submit means a request
+  with no permit is shed before it can submit, so in-flight workers can never exceed the cap —
+  executor depth tracks the cap with no unbounded thread growth under a timeout storm.
+- **503 not 504:** Concord is the origin doing its own compute, not a gateway awaiting an
+  upstream; a breach is the same "overloaded, retry shortly" condition as `semantic_busy`, so
+  503 keeps client backoff uniform. Distinct `code` keeps the two separable in logs.
+- **Inert paths preserved byte-for-byte:** cap off → inline, no deadline; timeout `0` → ADR-0001
+  synchronous `acquire→run→release`; semantic disabled → `semantic_unavailable` before any of it.
+  Executor created only when cap on **and** timeout > 0; shut down in `lifespan` (`wait=False,
+  cancel_futures=True`). bible-semantic untouched (stays pure/web-free).
+- **Tests** (`test_semantic_timeout.py`): deterministic via a blocking callable on a
+  `threading.Event` the test controls (work never completes → any positive deadline fires) —
+  no sleeps/races. Covers the 503 envelope, the **cap-coupling proof** (zombie holds permit →
+  concurrent request shed `semantic_busy` → succeeds only after the worker drains), timeout-0
+  and cap-0 inert. Docs synced same PR: README Security + Configuration, `.env.example`,
+  docs/SECURITY.md (the "one slow request" bullet flips from "your concern only" to "partly the
+  app's, proxy read-timeout as defense-in-depth"), ADR-0002 Accepted. `make check` green.
+
 ### In-process embedding reference example
 - **Date:** 2026-06-07. `bible-core`'s headline — zero web deps, embeddable in-process — had no
   consumer in the tree. Added `examples/embed_in_process.py`: opens a built `bible.db`, parses a
