@@ -21,6 +21,13 @@ pytestmark = pytest.mark.integration
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSLATIONS = REPO_ROOT / "data" / "translations"
 LEXICON = REPO_ROOT / "data" / "strongs"
+TOKENS = REPO_ROOT / "data" / "strongs"
+
+
+def _consonants(hebrew: str) -> str:
+    """Drop Hebrew points/cantillation — compare a word's consonantal skeleton, which is stable
+    regardless of how vowels/accents are hand-typed in a test literal."""
+    return "".join(c for c in unicodedata.normalize("NFD", hebrew) if not unicodedata.combining(c))
 
 
 def _source_verse(path: Path, abbreviation: str, ch: int, vs: int) -> str | None:
@@ -41,10 +48,10 @@ def test_real_build_matches_source(tmp_path: Path) -> None:
     stats = build_database(db, [TRANSLATIONS])
     conn = sqlite3.connect(db)
 
-    # 14 committed translations: 13 public-domain English + the Greek SBLGNT (CC BY 4.0,
-    # STEPBible). data/private is not scanned here.
-    assert stats.translations == 14
-    assert conn.execute("SELECT COUNT(*) FROM translations").fetchone()[0] == 14
+    # 15 committed translations: 13 public-domain English + the Greek SBLGNT + the Hebrew OSHB
+    # (both CC BY 4.0, STEPBible). data/private is not scanned here.
+    assert stats.translations == 15
+    assert conn.execute("SELECT COUNT(*) FROM translations").fetchone()[0] == 15
     books_with_chapters = conn.execute(
         "SELECT COUNT(*) FROM books WHERE chapter_count IS NOT NULL"
     ).fetchone()[0]
@@ -158,3 +165,62 @@ def test_real_build_loads_word_tokens_both_directions(tmp_path: Path) -> None:
     assert "love" in (agapao.gloss or "")
     # The TR-only αὐτοῦ (#11) is absent from the SBL token stream, like the verse text.
     assert "αὐτοῦ" not in [t.surface_form for t in toks]
+
+
+def test_real_build_loads_the_hebrew_ot(tmp_path: Path) -> None:
+    """The real Hebrew OT (OSHB, from TAHOT) loads as an RTL translation under English/NRSV
+    versification (v6 S5): it agrees with the English on chapter counts (no LoaderError), its
+    tokens + the Hebrew lexicon (TBESH) join, and word study works for an OT verse."""
+    db = tmp_path / "bible.db"
+    stats = build_database(db, [TRANSLATIONS], lexicon_dir=LEXICON, tokens_dir=TOKENS)
+    conn = sqlite3.connect(db)
+
+    meta = conn.execute(
+        "SELECT name, language, direction FROM translations WHERE id='OSHB'"
+    ).fetchone()
+    assert meta == ("Open Scriptures Hebrew Bible", "hbo", "rtl")
+    # English/NRSV versification: Malachi 4 chapters, Joel 3 — matching the English Bibles, which is
+    # why the build did not raise on chapter-count disagreement.
+    assert stats.translations == 15  # type: ignore[attr-defined]
+    for book_id, n in (("MAL", 4), ("JOL", 3)):
+        assert (
+            conn.execute(
+                "SELECT COUNT(DISTINCT chapter) FROM verses "
+                "WHERE translation_id='OSHB' AND book_id=?",
+                (book_id,),
+            ).fetchone()[0]
+            == n
+        )
+    # Genesis 1:1 Hebrew text loads with its pointing/cantillation; its 7 words' consonantal
+    # skeleton begins בראשית ברא אלהים … ("In the beginning God created …").
+    gen = conn.execute(
+        "SELECT text FROM verses WHERE translation_id='OSHB' AND book_id='GEN' "
+        "AND chapter=1 AND verse=1"
+    ).fetchone()[0]
+    assert _consonants(gen).split()[:3] == ["בראשית", "ברא", "אלהים"]
+
+    # Lexicon: H430 = אֱלֹהִים "God" (compare consonants — the lemma carries vowel points).
+    elohim = get_strongs(conn, "H430")
+    assert elohim is not None
+    assert _consonants(elohim.lemma) == "אלהים"
+    assert "God" in elohim.gloss
+    assert elohim.language == "hbo"
+
+    # Strong's → verses: H430 occurs in Genesis 1:1.
+    _, total = get_strongs_verses(conn, "H430", "OSHB", 5, 0)
+    assert total > 0
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM word_tokens "
+            "WHERE strongs_id='H430' AND text_id='OSHB' AND book_id='GEN' AND chapter=1 AND verse=1"
+        ).fetchone()[0]
+        == 1
+    )
+
+    # verse → tokens: Genesis 1:1's Hebrew words, in order, with the root lemma/gloss joined.
+    ref = parse_reference("Genesis 1:1", SqliteBookResolver(conn))
+    toks = get_words_for_reference(conn, ref, "OSHB")
+    assert len(toks) == 7
+    elohim_tok = next(t for t in toks if t.strongs_id == "H430")
+    assert _consonants(elohim_tok.lemma or "") == "אלהים"
+    assert "God" in (elohim_tok.gloss or "")

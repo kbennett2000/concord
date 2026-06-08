@@ -41,12 +41,15 @@ from pathlib import Path
 from typing import Any
 
 SOURCE = "STEP Bible (Tyndale House)"
-LANGUAGE = "grc"  # ISO 639-3, Ancient Greek (no 639-1 code exists)
+# ISO 639-3 language codes, no 639-1 equivalents: grc = Ancient Greek (TBESG), hbo = Ancient Hebrew
+# (TBESH). The two lexicons share an identical column layout, so one parser serves both.
+DEFAULT_LANGUAGE = "grc"
 
-# A lexicon data row's first column is a bare Extended Strong's number: letter + digits and nothing
-# else. Header text, the "Fields:" doc, ``$======`` section markers and the "PERSON(s)" rows (whose
-# first column is a name like ``Herod@Mat.2.1=G2264G`` or ``- Named``) all fail this → skipped.
-_ESTRONG_RE = re.compile(r"^([GH])(\d+)$")
+# A lexicon data row's first column is an Extended Strong's number: letter + digits, optionally a
+# single BDB sub-meaning suffix letter (Hebrew eStrongs like ``H1254a``/``H1254b``; Greek are bare).
+# Header text, the "Fields:" doc, ``$======`` section markers and the "PERSON(s)" rows (whose first
+# column is a name like ``Herod@Mat.2.1=G2264G`` or ``- Named``) all fail this → skipped.
+_ESTRONG_RE = re.compile(r"^([GH])(\d+)[a-zA-Z]?$")
 # HTML in the Meaning column: line breaks become spaces, every other tag (``<b>``, ``<i>``,
 # ``<ref='…'>…</ref>``, ``<re>…</re>`` …) is removed keeping its visible inner text.
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
@@ -73,8 +76,8 @@ def strip_html(meaning: str) -> str:
     return _WS_RE.sub(" ", text).strip()
 
 
-def convert(inputs: list[Path]) -> tuple[list[dict[str, str]], dict[str, int]]:
-    """Read the TBESG file(s) -> a list of lexicon entries + skip stats (first sense per base)."""
+def convert(inputs: list[Path], language: str) -> tuple[list[dict[str, str]], dict[str, int]]:
+    """Read the lexicon file(s) -> a list of entries + skip stats (first sense per base)."""
     by_id: dict[str, dict[str, str]] = {}
     stats = {
         "rows": 0,
@@ -109,7 +112,7 @@ def convert(inputs: list[Path]) -> tuple[list[dict[str, str]], dict[str, int]]:
 
             by_id[strongs_id] = {
                 "strongs_id": strongs_id,
-                "language": LANGUAGE,
+                "language": language,
                 "lemma": lemma,
                 "transliteration": transliteration,
                 "gloss": gloss,
@@ -128,19 +131,24 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         nargs="+",
         default=sorted(Path("data/original").glob("TBESG*.txt")),
-        help="TBESG text file(s) (default: data/original/TBESG*.txt).",
+        help="lexicon text file(s) (default: data/original/TBESG*.txt). Use TBESH*.txt for Hebrew.",
     )
     parser.add_argument("--output", type=Path, default=Path("data/strongs/lexicon.json"))
+    parser.add_argument(
+        "--language",
+        default=DEFAULT_LANGUAGE,
+        help="ISO 639-3 language of the entries (grc for TBESG, hbo for TBESH).",
+    )
     args = parser.parse_args(argv)
 
     if not args.input:
         raise SystemExit(
-            "no TBESG input files found. Download the lexicon from "
+            "no lexicon input files found. Download TBESG (Greek) / TBESH (Hebrew) from "
             "github.com/STEPBible/STEPBible-Data into data/original/ "
             "(see data/SOURCES.md), or pass --input."
         )
 
-    entries, stats = convert(list(args.input))
+    entries, stats = convert(list(args.input), args.language)
     payload: dict[str, Any] = {"source": SOURCE, "entries": entries}
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

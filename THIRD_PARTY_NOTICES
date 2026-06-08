@@ -40,42 +40,47 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0)
   re-derivable and not committed. See data/SOURCES.md.
 
 --------------------------------------------------------------------------------
-Original-language texts — data/translations/SBLGNT.json (SPEC v6)
+Original-language texts — data/translations/SBLGNT.json, OSHB.json (SPEC v6)
 --------------------------------------------------------------------------------
-Work:    Greek New Testament (SBL edition word-selection)
-Source:  STEPBible-Data — TAGNT (Translators Amalgamated Greek NT)
-         https://github.com/STEPBible/STEPBible-Data
+Work:    Greek New Testament (SBL edition word-selection) and the Hebrew Old
+         Testament (Westminster Leningrad Codex tradition, RTL)
+Source:  STEPBible-Data — TAGNT (Amalgamated Greek NT) + TAHOT (Amalgamated
+         Hebrew OT) — https://github.com/STEPBible/STEPBible-Data
 License: Creative Commons Attribution 4.0 International (CC BY 4.0)
 
-  Greek New Testament data created by STEPBible.org based on work at Tyndale
-  House Cambridge, licensed under a Creative Commons Attribution 4.0
-  International (CC BY 4.0) license; the SBLGNT is © 2010 Society of Biblical
-  Literature and Logos Bible Software, CC BY 4.0. Concord keeps the SBL-edition
-  words from STEPBible's amalgamated text and loads them as the SBLGNT
-  translation (data/translations/SBLGNT.json, committed and shipped); the raw
-  TAGNT files are re-derivable and not committed (gitignored + dockerignored
+  Greek/Hebrew text data created by STEPBible.org based on work at Tyndale House
+  Cambridge, licensed under a Creative Commons Attribution 4.0 International
+  (CC BY 4.0) license; the SBLGNT is © 2010 Society of Biblical Literature and
+  Logos Bible Software, CC BY 4.0; the Hebrew descends from the OpenScriptures /
+  Westminster Leningrad Codex text. Concord keeps the SBL-edition words from the
+  Greek amalgamated text (data/translations/SBLGNT.json) and loads the Hebrew OT
+  under its English/NRSV references as an RTL translation
+  (data/translations/OSHB.json). Both committed and shipped; the raw TAGNT/TAHOT
+  files are re-derivable and not committed (gitignored + dockerignored
   data/original/). STEPBible asks that others refer to github.com/STEPBible as
   the canonical source. See data/SOURCES.md.
 
 --------------------------------------------------------------------------------
-Strong's lexicon & tagged tokens — data/strongs/ (SPEC v6)
+Strong's lexicons & tagged tokens — data/strongs/ (SPEC v6)
 --------------------------------------------------------------------------------
-Work:    Greek Strong's lexicon (lemma, transliteration, gloss, definition) and
-         the tagged words of the Greek NT (position, surface, Strong's, morph)
-Source:  STEPBible-Data — TBESG (Translators Brief lexicon of Extended Strongs
-         for Greek) and TAGNT (Translators Amalgamated Greek NT) —
+Work:    Greek + Hebrew Strong's lexicons (lemma, transliteration, gloss,
+         definition) and the tagged words of the Greek NT + Hebrew OT
+         (position, surface, Strong's, morph)
+Source:  STEPBible-Data — TBESG/TBESH (Brief lexicons of Extended Strongs for
+         Greek/Hebrew) and TAGNT/TAHOT (Amalgamated Greek NT / Hebrew OT) —
          https://github.com/STEPBible/STEPBible-Data
 License: Creative Commons Attribution 4.0 International (CC BY 4.0)
 
   Lexicon & tagging data created by STEPBible.org based on work at Tyndale House
-  Cambridge (the Brief lexicon draws on Abbott-Smith), licensed under a Creative
-  Commons Attribution 4.0 International (CC BY 4.0) license. The underlying
-  Strong's numbering (1890) is public domain. Concord keys entries on the
-  collapsed-base Extended Strong's number, strips the definition HTML to plain
-  text, and loads them into the strongs_entries table (data/strongs/lexicon.json);
-  the SBLGNT words become tagged tokens in the word_tokens table
-  (data/strongs/tokens-sblgnt.json). Both committed and shipped; the raw TBESG /
-  TAGNT files are re-derivable and not committed (gitignored + dockerignored
+  Cambridge (the Brief lexicons draw on Abbott-Smith for Greek and BDB for
+  Hebrew), licensed under a Creative Commons Attribution 4.0 International
+  (CC BY 4.0) license. The underlying Strong's numbering (1890) is public domain.
+  Concord keys entries on the collapsed-base Extended Strong's number, strips the
+  definition HTML to plain text, and loads them into the strongs_entries table
+  (data/strongs/lexicon.json, lexicon-hebrew.json); the SBLGNT + OSHB words become
+  tagged tokens in the word_tokens table (data/strongs/tokens-sblgnt.json,
+  tokens-oshb.json). All committed and shipped; the raw TBESG/TBESH/TAGNT/TAHOT
+  files are re-derivable and not committed (gitignored + dockerignored
   data/original/). STEPBible asks that others refer to github.com/STEPBible as
   the canonical source. See data/SOURCES.md.
 

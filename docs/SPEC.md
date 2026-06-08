@@ -385,9 +385,9 @@ intentionally-larger slice is flagged with its reasoning.
 > redirects become a `see_also` pointer with no verses; hierarchical sub-topics and multi-source
 > merging are deferred. See [`docs/adr/ADR-0006-topical-bible.md`](adr/ADR-0006-topical-bible.md).
 >
-> **v6 — word study (in progress).** Strong's lexicon, original-language texts, and per-verse
+> **v6 — word study (shipped).** Strong's lexicons, original-language texts, and per-verse
 > tagged tokens, designed in [`docs/v6/SPEC.md`](v6/SPEC.md). Delivered Greek-NT-first across
-> slices S1–S4 (Hebrew OT in S5), all additive, sourced from STEPBible-Data (CC BY 4.0).
+> slices S1–S4, then the Hebrew OT in S5, all additive, sourced from STEPBible-Data (CC BY 4.0).
 > **S1 (shipped):** the Greek NT loads as an ordinary translation — `data/translations/SBLGNT.json`
 > (the SBL-edition word selection from STEPBible's TAGNT, NFC-normalized; 7,917 verses), queryable
 > via `/v1/verses/{ref}?translation=SBLGNT` with **zero loader changes** (NT chapter counts match
@@ -397,9 +397,11 @@ intentionally-larger slice is flagged with its reasoning.
 > TAGNT → the additive `word_tokens` table, 137,121 tokens) with the bi-directional Strong's↔verse
 > queries in `bible-core`. **S4 (shipped):** the endpoints that expose them — `/v1/strongs/{id}/verses`
 > (the concordance) and `/v1/verses/{ref}/words` (a verse's tagged tokens) — **completing the Greek
-> word-study cut (acceptance ①–③)**. The only remaining slice is **S5 — the Hebrew OT** (`OSHB` +
-> TBESH, behind a versification-grouping relaxation). See
-> [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
+> word-study cut (acceptance ①–③)**. **S5 (shipped) — the Hebrew OT:** `OSHB` (from STEPBible's
+> TAHOT, 23,145 verses) loads as an RTL translation with its tagged tokens, plus the Hebrew lexicon
+> (TBESH). TAHOT is **English/NRSV-versified**, so OSHB's chapter counts match the English Bibles and
+> word study spans OT + NT with **no versification-grouping needed** (only an optional `direction`
+> for RTL). **v6 is complete.** See [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|

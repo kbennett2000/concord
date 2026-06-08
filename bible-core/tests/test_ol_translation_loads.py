@@ -50,9 +50,49 @@ def test_greek_translation_loads_beside_english(tmp_path: Path) -> None:
     assert get_verse_text(conn, "ENG", "JHN", 3, 16) == "For God so loved the world"
 
 
+def test_hebrew_translation_loads_rtl(tmp_path: Path) -> None:
+    """A Hebrew OL text declares ``direction="rtl"`` in its file; the loader reads it and stores it
+    (Hebrew is RTL). Verses load verbatim through the normal path (v6 S5)."""
+    tdir = tmp_path / "translations"
+    write_translation(tdir, translation("ENG", [book("Genesis", 1, [chapter(1, [verse(1, "x")])])]))
+    write_translation(
+        tdir,
+        translation(
+            "HEB",
+            [book("Genesis", 1, [chapter(1, [verse(1, "בְּרֵאשִׁית")])])],
+            language="hbo",
+            direction="rtl",
+        ),
+    )
+    db = tmp_path / "bible.db"
+    build_database(db, [tdir])
+    conn = sqlite3.connect(db)
+    meta = conn.execute("SELECT language, direction FROM translations WHERE id='HEB'").fetchone()
+    assert meta == ("hbo", "rtl")
+    assert get_verse_text(conn, "HEB", "GEN", 1, 1) == "בְּרֵאשִׁית"
+
+
+def test_direction_defaults_to_ltr_when_absent(tmp_path: Path) -> None:
+    """A translation file with no ``direction`` field loads as ltr (the common case)."""
+    tdir = tmp_path / "translations"
+    write_translation(tdir, translation("ENG", [book("Genesis", 1, [chapter(1, [verse(1, "x")])])]))
+    build_database(tmp_path / "bible.db", [tdir])
+    conn = sqlite3.connect(tmp_path / "bible.db")
+    assert conn.execute("SELECT direction FROM translations WHERE id='ENG'").fetchone()[0] == "ltr"
+
+
+def test_invalid_direction_rejected(tmp_path: Path) -> None:
+    tdir = tmp_path / "translations"
+    books = [book("Genesis", 1, [chapter(1, [verse(1, "x")])])]
+    write_translation(tdir, translation("ENG", books, direction="sideways"))
+    with pytest.raises(LoaderError, match="direction"):
+        build_database(tmp_path / "bible.db", [tdir])
+
+
 def test_chapter_count_agreement_still_enforced(tmp_path: Path) -> None:
-    """An OL text that disagrees on chapter count for a shared book is still rejected — the v1
-    versification lock the OT slice (S5) will relax per-versification still holds for now."""
+    """An OL text that disagrees on chapter count for a shared book is still rejected. (The real
+    Hebrew OT avoids this by loading under English/NRSV versification — TAHOT's primary numbering —
+    so its chapter counts match the English Bibles; no per-versification relaxation was needed.)"""
     tdir = tmp_path / "translations"
     write_translation(tdir, translation("ENG", [book("John", 43, [chapter(1, [verse(1, "a")])])]))
     write_translation(

@@ -35,8 +35,11 @@ def test_utility_endpoints_against_real_db(tmp_path: Path) -> None:
             assert book["chapter_count"] == max_chapters[book["id"]]
 
         translations = client.get("/v1/translations").json()["translations"]
-        assert len(translations) == 14  # 13 PD English + the Greek SBLGNT (CC BY, STEPBible)
+        # 13 PD English + the Greek SBLGNT + the Hebrew OSHB (both CC BY, STEPBible)
+        assert len(translations) == 15
         assert all(t["attribution"] for t in translations)
+        oshb = next(t for t in translations if t["id"] == "OSHB")
+        assert (oshb["language"], oshb["direction"]) == ("hbo", "rtl")
 
         ot_verse = client.get("/v1/random", params={"testament": "OT"}).json()["verse"]
         assert by_id[ot_verse["book"]]["testament"] == "OT"

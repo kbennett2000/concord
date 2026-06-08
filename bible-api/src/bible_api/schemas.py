@@ -257,6 +257,7 @@ class Translation(BaseModel):
     id: str
     name: str
     language: str
+    direction: str
     versification: str
     attribution: str | None
 

@@ -686,6 +686,7 @@ class TranslationMeta:
     id: str
     name: str
     language: str
+    direction: str
     versification: str
     attribution: str | None
 
@@ -715,9 +716,10 @@ def get_books(conn: sqlite3.Connection) -> list[BookMeta]:
 def get_translations(conn: sqlite3.Connection) -> list[TranslationMeta]:
     """All loaded translations, ordered by id."""
     return [
-        TranslationMeta(r[0], r[1], r[2], r[3], r[4])
+        TranslationMeta(r[0], r[1], r[2], r[3], r[4], r[5])
         for r in conn.execute(
-            "SELECT id, name, language, versification, attribution FROM translations ORDER BY id"
+            "SELECT id, name, language, direction, versification, attribution "
+            "FROM translations ORDER BY id"
         )
     ]
 
