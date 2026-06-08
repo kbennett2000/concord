@@ -26,6 +26,9 @@ original-language texts — the SBL Greek New Testament (`SBLGNT`) and the Hebre
 - [`GET /v1/places/{id}`](#get-v1placesid)
 - [`GET /v1/places/{id}/verses`](#get-v1placesidverses)
 - [`GET /v1/verses/{ref}/places`](#get-v1versesrefplaces)
+- [`GET /v1/journeys`](#get-v1journeys)
+- [`GET /v1/journeys/{id}`](#get-v1journeysid)
+- [`GET /v1/places/{id}/journeys`](#get-v1placesidjourneys)
 - [`GET /v1/translations/{translation}/notes/{book}/{chapter}`](#get-v1translationstranslationnotesbookchapter)
 - [`GET /v1/notes/search`](#get-v1notessearch)
 - [`GET /v1/topics`](#get-v1topics)
@@ -543,6 +546,96 @@ verses of the passage appears once — ordered by `name` then `id`. A reference 
 returns `200` with `"total": 0` and `"places": []` (never a 404).
 
 **Errors:** `400 unparseable_reference` · `404 unknown_book`. **Caching:** immutable.
+
+## `GET /v1/journeys`
+
+Browse the curated set of biblical journeys — ordered sequences of existing places (Paul's
+missionary journeys, the Exodus), ordered by id.
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `limit` | int | `50` | 1–200. |
+| `offset` | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/journeys'
+```
+```json
+{
+  "limit": 50, "offset": 0, "total": 5,
+  "journeys": [
+    { "id": "exodus", "name": "The Exodus from Egypt",
+      "scripture": "Exodus 12 – Numbers 33", "dating": "13th–15th century BC (debated)",
+      "stop_count": 15 },
+    { "id": "paul-first", "name": "Paul's First Missionary Journey",
+      "scripture": "Acts 13–14", "dating": "c. AD 46–48 (conventional)", "stop_count": 15 }
+  ]
+}
+```
+
+Each summary carries its `scripture` range, an approximate `dating` (`null` when genuinely
+debated), and a `stop_count`. **Caching:** immutable.
+
+## `GET /v1/journeys/{id}`
+
+One journey's full detail: its metadata and its **ordered stops**, each resolved to a real place.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `id` | path | string | The journey slug (e.g. `paul-first`). |
+
+```bash
+$ curl -s 'localhost:8000/v1/journeys/paul-first'
+```
+```json
+{
+  "id": "paul-first", "name": "Paul's First Missionary Journey",
+  "scripture": "Acts 13–14", "dating": "c. AD 46–48 (conventional)",
+  "source": "Itinerary derived from the narrative of Acts 13–14; place identifications and coordinates from OpenBible.info (data/geography).",
+  "note": "One commonly proposed reconstruction following the sequence of Acts. Alternative reconstructions and segment-level routing are not modeled; some legs (e.g. sea crossings) are drawn as direct lines between named stops.",
+  "stops": [
+    { "ordinal": 1, "place_id": "ae41ab4", "name": "Antioch", "friendly_id": "Antioch 1",
+      "latitude": 36.226691, "longitude": 36.171743,
+      "confidence": "high", "status": "identified", "reference": "Acts 13:1" },
+    { "ordinal": 6, "place_id": "a6c704a", "name": "Antioch", "friendly_id": "Antioch 2",
+      "latitude": 38.306667, "longitude": 31.189444,
+      "confidence": "high", "status": "identified", "reference": "Acts 13:14" }
+  ]
+}
+```
+
+**The honesty model.** A journey is **one commonly proposed reconstruction** — `source` cites where
+the route comes from and `note` says so plainly; competing routes and segment-level dating are not
+modeled. Each stop inherits its place's honesty: a stop on a place with no confident location
+carries `null` coordinates (with its `status`), exactly as [`/v1/places/{id}`](#get-v1placesid).
+A revisited place appears once per stop (the `ordinal` order is the itinerary).
+
+**Errors:** `404 unknown_journey`. **Caching:** immutable.
+
+## `GET /v1/places/{id}/journeys`
+
+The inverse lookup: the journeys that pass through a place.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `id` | path | string | The OpenBible place id (e.g. `ae41ab4`). |
+
+```bash
+$ curl -s 'localhost:8000/v1/places/a6c704a/journeys'
+```
+```json
+{
+  "id": "a6c704a", "total": 1,
+  "journeys": [
+    { "id": "paul-first", "name": "Paul's First Missionary Journey",
+      "scripture": "Acts 13–14", "dating": "c. AD 46–48 (conventional)", "stop_count": 15 }
+  ]
+}
+```
+
+A place a journey revisits appears once (deduped); a real place in no journey returns `200` with
+`"total": 0` and `"journeys": []` (never a 404). Unknown place id → `404 unknown_place`.
+**Caching:** immutable.
 
 ## `GET /v1/translations/{translation}/notes/{book}/{chapter}`
 

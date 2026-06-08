@@ -26,6 +26,19 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0)
   Attribution 4.0 International (CC BY 4.0) license.
 
 --------------------------------------------------------------------------------
+Journeys dataset — data/journeys/
+--------------------------------------------------------------------------------
+Work:    Curated biblical itineraries (Paul's missionary journeys, the Exodus)
+License: Itinerary derived from the public-domain text of Scripture; no new
+         third-party data is introduced.
+
+  The journey routes (data/journeys/journeys.json) are hand-curated ordered
+  sequences whose stops reference the OpenBible.info place data credited above —
+  no new geography is minted. The itineraries follow the public-domain biblical
+  narrative; each journey is one commonly proposed reconstruction. See
+  data/SOURCES.md.
+
+--------------------------------------------------------------------------------
 Topical Bible dataset — data/topics/
 --------------------------------------------------------------------------------
 Work:    Nave's Topical Bible (Orville J. Nave, 1897) — public domain

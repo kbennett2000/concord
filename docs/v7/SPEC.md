@@ -129,7 +129,13 @@ coordinates, confidence, status, and the leg's reference. Unknown id → 404 `un
 | V7-S1 | Schema + loader + queries + Paul's first journey | core | `journeys` + `journey_stops` schema; the build-time loader (FK-validated against `places`, fail-loud); the read queries; `data/journeys/journeys.json` (paul-first); provenance + this spec + ADR-0008. Tested independent of HTTP. **No endpoints yet.** |
 | V7-S2 | The two forward endpoints | api | `GET /v1/journeys` + `GET /v1/journeys/{id}`. Acceptance (forward). |
 | V7-S3 | The reverse endpoint | api | `GET /v1/places/{id}/journeys`. Acceptance (reverse). |
-| V7-S4 | Fill the curated set + docs | data, repo | Paul's 2nd & 3rd journeys, the voyage to Rome, the Exodus; README + `docs/API.md`; the "next frontier" update — curated journeys ship, competing routes remain deferred. |
+| V7-S4 | Fill the curated set + docs | data, repo | Paul's 2nd & 3rd journeys, the voyage to Rome, the Exodus (5 journeys, 75 stops); README + `docs/API.md` + `docs/SPEC.md §10` + `THIRD_PARTY_NOTICES`; the "next frontier" update — curated journeys ship, competing routes remain deferred. |
+
+**Status: complete.** All four slices shipped (PRs #62–#65). The curated set is 5 journeys / 75
+stops; the Exodus exercises the honesty model via low/medium-confidence wilderness stations and a
+debated whole-journey dating (its stops carry coordinates in the OpenBible dataset, so the honesty
+surfaces as hedged confidence rather than null coordinates). Competing routes / route variants and
+segment-level dating remain the deferred frontier.
 
 ## 8. Acceptance
 

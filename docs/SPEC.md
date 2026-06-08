@@ -402,6 +402,18 @@ intentionally-larger slice is flagged with its reasoning.
 > (TBESH). TAHOT is **English/NRSV-versified**, so OSHB's chapter counts match the English Bibles and
 > word study spans OT + NT with **no versification-grouping needed** (only an optional `direction`
 > for RTL). **v6 is complete.** See [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
+>
+> **v7 — journeys / routes (shipped).** A curated handful of well-known biblical itineraries
+> (Paul's three missionary journeys, his voyage to Rome, the Exodus) as **ordered sequences of
+> EXISTING places**, designed in [`docs/v7/SPEC.md`](v7/SPEC.md). Additive `journeys` +
+> `journey_stops` tables (the latter a FK into v3's `places` — geography is **referenced, never
+> rebuilt**), three endpoints (`/v1/journeys`, `/v1/journeys/{id}` with embedded ordered stops,
+> `/v1/places/{id}/journeys` reverse), pure SQLite in bible-core. **S1:** schema + loader (FK-
+> validated, fail-loud) + queries + Paul's first journey. **S2:** the two forward endpoints. **S3:**
+> the reverse endpoint. **S4:** the rest of the curated set (5 journeys, 75 stops) + docs. Each
+> journey is **one commonly proposed reconstruction** carrying its `source` + honesty `note`, dated
+> as a whole; competing routes, route variants, and segment-level dating are deliberately deferred.
+> **v7 is complete.** See [`docs/adr/ADR-0008-journeys.md`](adr/ADR-0008-journeys.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|
