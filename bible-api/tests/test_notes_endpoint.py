@@ -2,7 +2,8 @@
 
 Chapter read + ?verse narrowing, the response shape (anchor, char_offset, marker, ordinal,
 nested cross-refs), ordering, the immutable-ETag 304, and the load-bearing honesty split:
-a known translation with NO notes → 200 empty; an unknown translation → 404. No real NET data.
+a known translation with NO notes → 200 empty; an unknown translation → 404. WEB carries
+committed public-domain footnotes (ADR-0004); YLT has none. No real NET data.
 """
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
@@ -113,11 +114,28 @@ def test_non_positive_verse_is_422(client: TestClient) -> None:
 
 
 def test_known_translation_no_notes_is_empty_200(client: TestClient) -> None:
-    """WEB is loaded but has zero notes — the public-image case. 200 empty, NOT 404."""
-    resp = client.get("/v1/translations/WEB/notes/JHN/3")
+    """YLT is loaded but has zero notes — a translation with no notes. 200 empty, NOT 404."""
+    resp = client.get("/v1/translations/YLT/notes/JHN/3")
     assert resp.status_code == 200
     body = resp.json()
-    assert (body["translation"], body["total"], body["notes"]) == ("WEB", 0, [])
+    assert (body["translation"], body["total"], body["notes"]) == ("YLT", 0, [])
+
+
+def test_web_chapter_serves_public_domain_notes(client: TestClient) -> None:
+    """ADR-0004: WEB's own public-domain footnotes ship and read back, not an empty list."""
+    body = client.get("/v1/translations/WEB/notes/GEN/1").json()
+    assert (body["translation"], body["book"], body["chapter"]) == ("WEB", "GEN", 1)
+    assert body["total"] == 2
+    first = body["notes"][0]
+    # Verse-level anchor for v1: char_offset 0, type null, no caller marker, no cross-refs.
+    assert (first["verse"], first["type"], first["char_offset"], first["marker"]) == (
+        1,
+        None,
+        0,
+        None,
+    )
+    assert first["reference"] == "Genesis 1:1"
+    assert first["cross_references"] == []
 
 
 def test_empty_chapter_is_empty_200(client: TestClient) -> None:

@@ -162,11 +162,15 @@ def build_corpus(path: Path) -> None:
         place_verses,
     )
 
-    # Deterministic translator's notes (v4) for the notes endpoint tests. KJV has notes; WEB has
-    # none (so a loaded translation with zero notes returns 200 empty — the public-image case).
+    # Deterministic translator's notes (v4 + ADR-0004) for the notes endpoint tests. KJV has
+    # private-style notes; WEB carries committed public-domain footnotes (ADR-0004: WEB's PD notes
+    # ship in the stock image). YLT has none — a loaded translation with zero notes returns 200
+    # empty (the genuine empty-on-stock case for translations without notes).
     #  - KJV JHN 3:16 → two notes (ordinals 1,2; a tn with two cross-refs + a sn)
     #  - KJV JHN 3:17 → one tc note
     #  - KJV GEN 1:1  → one plain note (NULL type)
+    #  - WEB GEN 1:1, 1:2 → two PD footnotes (type NULL, char_offset 0, marker NULL) mirroring the
+    #    real data/notes/WEB.json shape; vocabulary avoids the search tokens KJV notes use.
     # Notes 5–6 are a v5 notes-search fixture: an identical body in two books (GEN before 1JN
     # canonically) so a query ties on FTS rank and the canonical tiebreak is observable. They sit
     # in chapters no notes-endpoint chapter-read asserts on (GEN 2, 1JN 1), keeping v4 tests intact.
@@ -178,6 +182,8 @@ def build_corpus(path: Path) -> None:
         (4, "KJV", "GEN", 1, 1, None, "A plain footnote with no type.", 3, None, 1),
         (5, "KJV", "GEN", 2, 1, "tn", "A tiebreak fixture note.", 0, None, 1),
         (6, "KJV", "1JN", 1, 1, "tn", "A tiebreak fixture note.", 0, None, 1),
+        (7, "WEB", "GEN", 1, 1, None, "The Hebrew word rendered God is Elohim.", 0, None, 1),
+        (8, "WEB", "GEN", 1, 2, None, "The Greek Septuagint phrasing differs here.", 0, None, 1),
     ]
     # (note_id, to_book_id, to_chapter, to_verse_start, to_verse_end)
     note_cross_refs = [

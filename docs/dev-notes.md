@@ -1330,3 +1330,40 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   `test_dropping_private_dir_removes_exactly_the_private_notes`).
 - **No API/schema/contract change** — purely the build-input mechanism. `bible-core` stays web-free;
   runtime stays offline. Synthetic fixtures only. `make check` green.
+
+### Slice B — the real WEB footnote data + parser
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/B-web-footnote-data`).
+- **Why:** complete roadmap item #1 — `GET /v1/translations/WEB/notes/{book}/{chapter}` now returns
+  the World English Bible's own public-domain footnotes on a **stock** build, instead of an empty
+  list. Builds on Slice A's public notes path (ADR-0004).
+- **What landed:** a committed parser **`scripts/convert_web_footnotes.py`** (sibling to
+  `convert_net_notes.py`) that extracts **footnotes only** (never verse text — no drift) from
+  eBible.org's public-domain **engwebp** USFM into the v4 notes contract, and the derived,
+  **committed `data/notes/WEB.json`** (1,228 footnotes across 65 books). Loaded by the Slice-A
+  mechanism — **no Dockerfile change** (`COPY data/ data/` carries `data/notes/` in; it is not
+  dockerignored).
+- **Scope decisions (ADR-0004 / plan):** verse-level anchor — **`char_offset` 0** (a precise
+  in-verse offset would need aligning engwebp text to Concord's stored WEB text — different
+  derivation/punctuation; fragile, deferred). **`type` null** — WEB footnotes mix textual-variant
+  (NU/TR, 164 of them), alternate-rendering, and measurement notes; no single category is honest,
+  and the contract permits null. **No note cross-references** — parsing referenced verses out of
+  footnote prose is unreliable; skipped for v1 (contract makes them optional). Anchor from the
+  footnote's `\fr` origin ref (else the enclosing `\c`/`\v`); USFM markers/attributes stripped to
+  clean prose; auto-callers `+`/`-` → null marker.
+- **Source / determinism:** `engwebp` USFM (`https://ebible.org/Scriptures/engwebp_usfm.zip`),
+  public domain. The 66 canonical codes are read from `docs/canonical-books.md` (the repo's source
+  of truth — front-matter/glossary files skipped), not invented. Re-running the parser is
+  byte-identical; the loader's id assignment keeps `bible.db` reproducible. Raw USFM is not
+  committed (re-derivable, documented in `data/SOURCES.md`).
+- **Provenance / docs:** new public-notes section + WEB row in `data/SOURCES.md`; a public-domain
+  WEB-footnotes entry in `THIRD_PARTY_NOTICES`; `docs/v4/notes-ingest.md` and `README.md` corrected
+  — the stock image ships WEB's PD footnotes (other translations remain empty-on-stock), with the
+  dual-ignore safety explanation kept intact and the public path added beside it.
+- **Tests:** `bible-core` `test_public_web_style_notes_load` (WEB-shape public file loads,
+  idempotent, type/offset/marker as emitted). `bible-api`: added
+  `test_web_chapter_serves_public_domain_notes` and `test_web_public_domain_note_is_searchable`
+  (WEB notes read back + are FTS-searchable); retargeted the two "zero notes" honesty tests from WEB
+  to **YLT** (a loaded translation that genuinely has none), since WEB now ships notes; apikit fixture
+  gains two WEB PD-shaped notes (vocabulary chosen to leave the existing `q="note"` search totals
+  unchanged). Verified live: public-only build (no `data/private/`) bakes 1,228 WEB notes / 0 NET;
+  full local build bakes WEB + NET. `make check` green.
