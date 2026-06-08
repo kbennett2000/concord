@@ -151,6 +151,24 @@ The **raw `TBESG`/`TAGNT` files are re-derivable and not committed** — they li
 committed and ship. STEPBible asks that others refer to github.com/STEPBible as the canonical source,
 which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
 
+## Journeys / routes (`data/journeys/`)
+
+| Field | Value |
+|---|---|
+| Files | `journeys.json` (curated biblical itineraries as ordered sequences of place-ids) |
+| Source | **Itinerary derived from the public-domain biblical narrative** (e.g. Acts 13–14 for Paul's first journey). Place identifications and coordinates are reused from the geography dataset above (OpenBible.info, CC BY 4.0). |
+| License | The itinerary is the public-domain text of Scripture; the place data carries its own CC BY 4.0 attribution (see Geography above). |
+| Dating | Conventional / approximate scholarly dating, recorded per journey as a whole. |
+
+Journeys (SPEC v7) are a **curated, hand-authored** set of well-known routes — Paul's missionary
+journeys, the Exodus — modeled as **ordered sequences of EXISTING places** (`journeys` +
+`journey_stops` tables, the latter a foreign key into the v3 `places` table). No new geography is
+minted: a stop is a reference into the already-attributed place data. Each journey is **one proposed
+reconstruction** following the sequence of the narrative; it carries a `source` and an honesty
+`note` to that effect. Competing routes, route variants, and per-segment dating debates are
+deliberately **not** modeled. The committed `journeys.json` ships in the image like the geography
+data. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
+
 ## Translator's notes (`data/private/notes/`) — NOT committed
 
 | Field | Value |

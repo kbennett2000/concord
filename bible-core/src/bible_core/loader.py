@@ -87,6 +87,8 @@ class BuildStats:
     topic_verses: int
     strongs_entries: int
     word_tokens: int
+    journeys: int
+    journey_stops: int
     elapsed_seconds: float
 
 
@@ -372,6 +374,7 @@ def build_database(
     topics_dir: Path | None = None,
     lexicon_dir: Path | None = None,
     tokens_dir: Path | None = None,
+    journeys_dir: Path | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
     ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), ``notes_dirs``
@@ -491,6 +494,16 @@ def build_database(
                 else WordTokensStats(0, 0)
             )
 
+            # Journeys loader — same local-import cycle break. Runs LAST: journey_stops are FKs
+            # into places, so load_places must have populated the places table first.
+            from .journeys import JourneyStats, load_journeys
+
+            journey_stats = (
+                load_journeys(conn, journeys_dir)
+                if journeys_dir is not None
+                else JourneyStats(0, 0)
+            )
+
         books_with_verses = conn.execute(
             "SELECT COUNT(*) FROM books WHERE chapter_count IS NOT NULL"
         ).fetchone()[0]
@@ -514,6 +527,8 @@ def build_database(
         topic_verses=topics_stats.topic_verses,
         strongs_entries=strongs_stats.strongs_entries,
         word_tokens=tokens_stats.word_tokens,
+        journeys=journey_stats.journeys,
+        journey_stops=journey_stats.journey_stops,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -561,6 +576,8 @@ def main(argv: list[str] | None = None) -> int:
     # data/strongs/; the lexicon loader reads lexicon*.json, the token loader reads tokens-*.json.
     lexicon_dir = base / "strongs"
     tokens_dir = base / "strongs"
+    # Committed curated journeys (Scripture-derived itineraries over v3 places) — ship like geo.
+    journeys_dir = base / "journeys"
     try:
         stats = build_database(
             Path(args.output),
@@ -571,6 +588,7 @@ def main(argv: list[str] | None = None) -> int:
             topics_dir,
             lexicon_dir,
             tokens_dir,
+            journeys_dir,
         )
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -590,7 +608,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{stats.notes} notes, {stats.note_cross_references} note cross-references, "
             f"{stats.section_headings} section headings, "
             f"{stats.topics} topics, {stats.topic_verses} topic-verse links, "
-            f"{stats.strongs_entries} Strong's entries, {stats.word_tokens} word tokens "
+            f"{stats.strongs_entries} Strong's entries, {stats.word_tokens} word tokens, "
+            f"{stats.journeys} journeys, {stats.journey_stops} journey stops "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0

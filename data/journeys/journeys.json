@@ -1,0 +1,29 @@
+{
+  "journeys": [
+    {
+      "id": "paul-first",
+      "name": "Paul's First Missionary Journey",
+      "scripture": "Acts 13–14",
+      "dating": "c. AD 46–48 (conventional)",
+      "source": "Itinerary derived from the narrative of Acts 13–14; place identifications and coordinates from OpenBible.info (data/geography).",
+      "note": "One commonly proposed reconstruction following the sequence of Acts. Alternative reconstructions and segment-level routing are deliberately not modeled; some legs (e.g. sea crossings) are drawn as direct lines between named stops.",
+      "stops": [
+        {"ordinal": 1, "place_id": "ae41ab4", "reference": "Acts 13:1"},
+        {"ordinal": 2, "place_id": "a6d306d", "reference": "Acts 13:4"},
+        {"ordinal": 3, "place_id": "afa863b", "reference": "Acts 13:5"},
+        {"ordinal": 4, "place_id": "a314765", "reference": "Acts 13:6"},
+        {"ordinal": 5, "place_id": "aff04b8", "reference": "Acts 13:13"},
+        {"ordinal": 6, "place_id": "a6c704a", "reference": "Acts 13:14"},
+        {"ordinal": 7, "place_id": "ae425aa", "reference": "Acts 13:51"},
+        {"ordinal": 8, "place_id": "af0719d", "reference": "Acts 14:6"},
+        {"ordinal": 9, "place_id": "aa401a9", "reference": "Acts 14:20"},
+        {"ordinal": 10, "place_id": "af0719d", "reference": "Acts 14:21"},
+        {"ordinal": 11, "place_id": "ae425aa", "reference": "Acts 14:21"},
+        {"ordinal": 12, "place_id": "a6c704a", "reference": "Acts 14:21"},
+        {"ordinal": 13, "place_id": "aff04b8", "reference": "Acts 14:25"},
+        {"ordinal": 14, "place_id": "ac744c1", "reference": "Acts 14:25"},
+        {"ordinal": 15, "place_id": "ae41ab4", "reference": "Acts 14:26"}
+      ]
+    }
+  ]
+}

@@ -1225,3 +1225,124 @@ def get_words_for_reference(
             params,
         )
     )
+
+
+# --- journeys (v7): curated itineraries over EXISTING places (mirrors the places queries) ---
+
+
+@dataclass(frozen=True)
+class JourneyRow:
+    """One journey's full metadata. ``dating`` is ``None`` when genuinely debated; ``source`` +
+    ``note`` carry the honesty model — this is ONE proposed reconstruction (SPEC v7)."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None
+    source: str
+    note: str
+
+
+@dataclass(frozen=True)
+class JourneySummaryRow:
+    """A journey summary for list/reverse views: metadata minus source/note, plus its stop count."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None
+    stop_count: int
+
+
+@dataclass(frozen=True)
+class JourneyStopRow:
+    """One ordered stop, joined to its place. Coordinates/confidence are ``None`` when the place
+    has no confident location (the v3 honesty model rides along) — the consumer simply can't pin
+    it. ``reference`` is the optional scripture citation for this leg."""
+
+    ordinal: int
+    place_id: str
+    friendly_id: str | None
+    name: str | None
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    status: str | None
+    reference: str | None
+
+
+@dataclass(frozen=True)
+class JourneyPage:
+    """A page of journey summaries plus the total count."""
+
+    rows: tuple[JourneySummaryRow, ...]
+    total: int
+
+
+# A correlated count of a journey's stops, reused by the list/reverse summary queries.
+_STOP_COUNT = "(SELECT COUNT(*) FROM journey_stops js WHERE js.journey_id = j.id)"
+
+
+def list_journeys(conn: sqlite3.Connection, limit: int, offset: int) -> JourneyPage:
+    """Browse journeys (ordered by id — a stable, deterministic page order), with each summary's
+    stop count and the total journey count."""
+    rows = tuple(
+        JourneySummaryRow(r[0], r[1], r[2], r[3], r[4])
+        for r in conn.execute(
+            f"SELECT j.id, j.name, j.scripture, j.dating, {_STOP_COUNT} "
+            "FROM journeys j ORDER BY j.id LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+    )
+    total = conn.execute("SELECT COUNT(*) FROM journeys").fetchone()[0]
+    return JourneyPage(rows=rows, total=total)
+
+
+def get_journey(conn: sqlite3.Connection, journey_id: str) -> JourneyRow | None:
+    """One journey's metadata by its id, or ``None`` if no such journey."""
+    row = conn.execute(
+        "SELECT id, name, scripture, dating, source, note FROM journeys WHERE id = ?",
+        (journey_id,),
+    ).fetchone()
+    return None if row is None else JourneyRow(row[0], row[1], row[2], row[3], row[4], row[5])
+
+
+def count_journey_stops(conn: sqlite3.Connection, journey_id: str) -> int:
+    """How many stops this journey has."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM journey_stops WHERE journey_id = ?", (journey_id,)
+    ).fetchone()[0]
+
+
+def get_journey_stops(conn: sqlite3.Connection, journey_id: str) -> tuple[JourneyStopRow, ...]:
+    """A journey's stops in order, each LEFT JOINed to its place for coords/name/status. No
+    pagination — a curated journey has a handful of stops."""
+    return tuple(
+        JourneyStopRow(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+        for r in conn.execute(
+            "SELECT js.ordinal, js.place_id, p.friendly_id, p.name, p.latitude, p.longitude, "
+            "p.confidence, p.status, js.reference "
+            "FROM journey_stops js LEFT JOIN places p ON p.id = js.place_id "
+            "WHERE js.journey_id = ? ORDER BY js.ordinal",
+            (journey_id,),
+        )
+    )
+
+
+def get_journeys_for_place(
+    conn: sqlite3.Connection, place_id: str
+) -> tuple[JourneySummaryRow, ...]:
+    """The distinct journeys that pass through ``place_id`` (the reverse lookup), ordered by id.
+
+    ``SELECT DISTINCT`` dedups a place a journey revisits (a return leg). No pagination — a place
+    appears in few journeys.
+    """
+    return tuple(
+        JourneySummaryRow(r[0], r[1], r[2], r[3], r[4])
+        for r in conn.execute(
+            f"SELECT DISTINCT j.id, j.name, j.scripture, j.dating, {_STOP_COUNT} "
+            "FROM journeys j JOIN journey_stops js ON js.journey_id = j.id "
+            "WHERE js.place_id = ? ORDER BY j.id",
+            (place_id,),
+        )
+    )
