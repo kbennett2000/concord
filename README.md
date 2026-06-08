@@ -61,8 +61,9 @@ A tutorial written for someone in exactly your shoes is here:
 **[concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web)** — a free,
 five-lesson course that takes you from "what's an API?" to a real app you built yourself,
 running on your own computer. No experience needed. If that "I've never coded" voice is you,
-start there. (The next sections of this README are written for developers — but the course
-was written for you.)
+start there — and when you've finished, **[concord-tutorial-react](https://github.com/kbennett2000/concord-tutorial-react)**
+picks up right where it leaves off and walks you into React. (The next sections of this README
+are written for developers — but the courses were written for you.)
 
 ## Quick start
 
@@ -352,7 +353,7 @@ gets built next.
 
 ## Building on Concord
 
-Concord exists to be built on.
+Concord exists to be built on — and a small but growing ecosystem already runs on it:
 
 - **The app it's for:** [songbird](https://github.com/kbennett2000/songbird) is a polished
   end-user Bible app built on top of Concord — a working desktop client of this `/v1` surface.
@@ -361,10 +362,11 @@ Concord exists to be built on.
   [`examples/embed_in_process.py`](examples/embed_in_process.py) is a runnable example — it
   parses a reference and fetches a verse with no server running, then (if the embedding model
   and vector store are present) does a `bible-semantic` query in-process too.
-- **Learn to build on it:**
-  [concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web) — a
-  five-lesson, beginner-first course (no experience needed) that builds a real app on the
-  `/v1` surface.
+- **Learn to build on it — two courses, from "what's an API?" to reading a real codebase:**
+  **[concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web)** builds your
+  first real app in plain HTML and JavaScript (no experience needed), and
+  **[concord-tutorial-react](https://github.com/kbennett2000/concord-tutorial-react)** picks up
+  from there into React — ending with you reading songbird's own source and finding you can.
 
 The `/v1` prefix means today's responses are a contract. Build against them with confidence.
 
