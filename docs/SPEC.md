@@ -395,8 +395,10 @@ intentionally-larger slice is flagged with its reasoning.
 > `strongs_entries` table, 10,846 entries keyed on the collapsed-base Strong's number), browsable at
 > `/v1/strongs` and `/v1/strongs/{id}`. **S3 (shipped):** the SBLGNT's tagged word tokens (STEPBible
 > TAGNT → the additive `word_tokens` table, 137,121 tokens) with the bi-directional Strong's↔verse
-> queries (`get_strongs_verses` / `get_words_for_reference`) in `bible-core`. The endpoints that
-> expose them (`/v1/strongs/{id}/verses`, `/v1/verses/{ref}/words`) land in S4. See
+> queries in `bible-core`. **S4 (shipped):** the endpoints that expose them — `/v1/strongs/{id}/verses`
+> (the concordance) and `/v1/verses/{ref}/words` (a verse's tagged tokens) — **completing the Greek
+> word-study cut (acceptance ①–③)**. The only remaining slice is **S5 — the Hebrew OT** (`OSHB` +
+> TBESH, behind a versification-grouping relaxation). See
 > [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |

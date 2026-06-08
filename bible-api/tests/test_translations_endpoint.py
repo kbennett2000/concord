@@ -12,7 +12,8 @@ def test_shape_and_order(client: TestClient) -> None:
     body = client.get("/v1/translations").json()
     assert list(body.keys()) == ["translations"]
     translations = body["translations"]
-    assert [t["id"] for t in translations] == ["KJV", "WEB", "YLT"]  # ordered by id
+    # ordered by id; SBLGNT is the Greek NT the word-study endpoints tag
+    assert [t["id"] for t in translations] == ["KJV", "SBLGNT", "WEB", "YLT"]
     assert list(translations[0].keys()) == [
         "id",
         "name",

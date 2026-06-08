@@ -90,8 +90,10 @@ The original-language *text* itself is served by the existing `/v1/verses` and `
   tokens: surface form, collapsed Strong's, morph); `get_strongs_verses` (Strong's→verses) and
   `get_words_for_reference` (verse→tokens, lexicon gloss joined) tested in `bible-core`. No new
   endpoints — those are S4.
-- **V6-S4 — the two remaining endpoints.** `/v1/strongs/{id}/verses` + `/v1/verses/{ref}/words`.
-  Acceptance ② & ③.
+- **V6-S4 — the two remaining endpoints. ✅ (this slice)** `GET /v1/strongs/{id}/verses` (the
+  concordance, with `?text=`/`?translation=`/`include_text` hydration) + `GET /v1/verses/{ref}/words`
+  (the tagged tokens, lexicon gloss joined). API-only — the queries shipped in S3. Acceptance ② & ③.
+  **This completes the Greek word-study cut (S1–S4).**
 - **V6-S5 — Hebrew OT.** `TAHOT` → `OSHB.json` + tokens; `TBESH` → lexicon. Relax
   `_update_chapter_counts` to group by `translations.versification` (Hebrew chapter counts differ
   — Joel 4≠3, Malachi 3≠4); add `direction` (rtl) to the translation JSON format + loader +

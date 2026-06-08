@@ -37,12 +37,14 @@ from bible_core.queries import (
     get_random_verse,
     get_section_headings,
     get_strongs,
+    get_strongs_verses,
     get_topic,
     get_topic_verses,
     get_topics_for_reference,
     get_translations,
     get_verse_text,
     get_verses,
+    get_words_for_reference,
     list_places,
     list_strongs,
     list_topics,
@@ -104,6 +106,8 @@ from .schemas import (
     StrongsDetail,
     StrongsResponse,
     StrongsSummary,
+    StrongsVerse,
+    StrongsVersesResponse,
     TopicDetail,
     TopicsResponse,
     TopicSummary,
@@ -114,6 +118,8 @@ from .schemas import (
     TranslatorNote,
     VersePlacesResponse,
     VerseTopicsResponse,
+    VerseWordsResponse,
+    WordTokenOut,
 )
 from .shaping import shape_grouped, shape_parallel
 
@@ -893,6 +899,9 @@ def verse_topics_endpoint(
 
 # --- Strong's lexicon (mirrors the topical-Bible endpoints) --------------------------
 
+# The default tagged original-language text for the concordance + per-verse word endpoints.
+DEFAULT_WORD_TEXT = "SBLGNT"
+
 # A path id like "g0026" → "G26": upper-case the letter and drop leading zeros so it matches the
 # collapsed-base ids in the lexicon. Anything that isn't a Strong's number is just upper-cased and
 # left to 404.
@@ -950,5 +959,85 @@ def strongs_detail_endpoint(strongs_id: str, request: Request, conn: Conn) -> Re
         gloss=entry.gloss,
         definition=entry.definition,
         source=entry.source,
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/strongs/{strongs_id}/verses")
+def strongs_verses_endpoint(
+    strongs_id: str,
+    request: Request,
+    conn: Conn,
+    text: str | None = None,
+    translation: str | None = None,
+    include_text: bool = True,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    normalized = _normalize_strongs_id(strongs_id)
+    if get_strongs(conn, normalized) is None:
+        raise UnknownStrongsError(strongs_id)
+
+    # `text` is the tagged text searched (default SBLGNT); `translation` hydrates the verse text
+    # (default the API default). Both validate via resolve_translation → 404 on an unknown id.
+    text_id = resolve_translation(request, text or DEFAULT_WORD_TEXT)
+    translation_id = resolve_translation(request, translation) if include_text else None
+    rows, total = get_strongs_verses(conn, normalized, text_id, limit, offset)
+    verses = [
+        StrongsVerse(
+            book=row.book_id,
+            chapter=row.chapter,
+            verse=row.verse,
+            reference=f"{row.book_name} {row.chapter}:{row.verse}",
+            text=(
+                get_verse_text(conn, translation_id, row.book_id, row.chapter, row.verse)
+                if translation_id is not None
+                else None
+            ),
+        )
+        for row in rows
+    ]
+    response = StrongsVersesResponse(
+        strongs_id=normalized,
+        text_id=text_id,
+        translation=translation_id,
+        include_text=include_text,
+        limit=limit,
+        offset=offset,
+        total=total,
+        verses=verses,
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/verses/{ref}/words")
+def verse_words_endpoint(
+    ref: Annotated[str, Path(max_length=MAX_REF_LENGTH)],
+    request: Request,
+    conn: Conn,
+    text: str | None = None,
+) -> Response:
+    # `text` selects the original-language text (default SBLGNT); unknown → 404. parse_reference
+    # raises ParseError (400) / UnknownBookError (404), already wired. A valid ref with no tokens
+    # (e.g. an OT verse for the NT-only SBLGNT) returns 200 with an empty list.
+    text_id = resolve_translation(request, text or DEFAULT_WORD_TEXT)
+    reference = parse_reference(ref, SqliteBookResolver(conn))
+    tokens = get_words_for_reference(conn, reference, text_id)
+    response = VerseWordsResponse(
+        reference=reference.echo,
+        text_id=text_id,
+        total=len(tokens),
+        tokens=[
+            WordTokenOut(
+                position=t.position,
+                surface_form=t.surface_form,
+                strongs_id=t.strongs_id,
+                morph_code=t.morph_code,
+                lemma=t.lemma,
+                transliteration=t.transliteration,
+                gloss=t.gloss,
+            )
+            for t in tokens
+        ],
     )
     return cached_json_response(response, request)

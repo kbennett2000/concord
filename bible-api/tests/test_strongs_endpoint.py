@@ -85,11 +85,100 @@ def test_detail_unknown_404(client: TestClient) -> None:
     assert body["error"]["detail"]["strongs_id"] == "G99999"
 
 
+# --- /v1/strongs/{id}/verses (the concordance) ---------------------------------------
+
+
+def test_strongs_verses_order_and_echo(client: TestClient) -> None:
+    body = client.get("/v1/strongs/G26/verses").json()
+    # G26 is tagged in JHN 4:7 and 4:8 (canonical order); echoes defaults.
+    assert (body["strongs_id"], body["text_id"]) == ("G26", "SBLGNT")
+    assert (body["translation"], body["include_text"], body["total"]) == ("KJV", True, 2)
+    assert [(v["book"], v["chapter"], v["verse"]) for v in body["verses"]] == [
+        ("JHN", 4, 7),
+        ("JHN", 4, 8),
+    ]
+    assert body["verses"][0]["reference"] == "John 4:7"
+    # Default hydration is the API default translation (KJV), which has those verses.
+    assert all(isinstance(v["text"], str) and v["text"] for v in body["verses"])
+
+
+def test_strongs_verses_id_normalized(client: TestClient) -> None:
+    assert client.get("/v1/strongs/g0026/verses").json()["strongs_id"] == "G26"
+
+
+def test_strongs_verses_include_text_false(client: TestClient) -> None:
+    body = client.get("/v1/strongs/G26/verses", params={"include_text": "false"}).json()
+    assert body["translation"] is None
+    assert all(v["text"] is None for v in body["verses"])
+
+
+def test_strongs_verses_missing_text_is_null(client: TestClient) -> None:
+    # G25 is tagged in JHN 3:16, which WEB omits → text null when hydrating with WEB (not an error).
+    body = client.get("/v1/strongs/G25/verses", params={"translation": "WEB"}).json()
+    assert body["total"] == 1
+    assert body["verses"][0]["text"] is None
+
+
+def test_strongs_verses_pagination(client: TestClient) -> None:
+    p1 = client.get("/v1/strongs/G26/verses", params={"limit": 1, "offset": 0}).json()
+    p2 = client.get("/v1/strongs/G26/verses", params={"limit": 1, "offset": 1}).json()
+    assert p1["total"] == p2["total"] == 2
+    assert p1["verses"][0]["verse"] != p2["verses"][0]["verse"]
+
+
+def test_strongs_verses_unknown_404(client: TestClient) -> None:
+    resp = client.get("/v1/strongs/G99999/verses")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "unknown_strongs"
+
+
+def test_strongs_verses_bad_text_404(client: TestClient) -> None:
+    assert client.get("/v1/strongs/G26/verses", params={"text": "NOPE"}).status_code == 404
+
+
+# --- /v1/verses/{ref}/words (the tagged tokens) --------------------------------------
+
+
+def test_verse_words_order_and_lexicon_join(client: TestClient) -> None:
+    body = client.get("/v1/verses/John 3:16/words").json()
+    assert (body["reference"], body["text_id"], body["total"]) == ("John 3:16", "SBLGNT", 3)
+    toks = body["tokens"]
+    assert [t["position"] for t in toks] == [1, 2, 3]
+    # pos2 G25 joins the lexicon (ἀγαπάω / "to love"); pos1 G9999 has no entry → null lemma.
+    assert toks[1]["strongs_id"] == "G25"
+    assert (toks[1]["lemma"], toks[1]["gloss"]) == ("ἀγαπάω", "to love")
+    assert (toks[0]["strongs_id"], toks[0]["lemma"]) == ("G9999", None)
+    # pos3 is untagged: null strongs + morph.
+    assert (toks[2]["strongs_id"], toks[2]["morph_code"]) == (None, None)
+
+
+def test_verse_words_empty_when_no_tokens(client: TestClient) -> None:
+    body = client.get("/v1/verses/Genesis 1:1/words").json()
+    assert (body["total"], body["tokens"]) == (0, [])
+
+
+def test_verse_words_bad_reference_400(client: TestClient) -> None:
+    assert client.get("/v1/verses/NotABook 99:99/words").status_code in (400, 404)
+
+
+def test_verse_words_unparseable_400(client: TestClient) -> None:
+    assert client.get("/v1/verses/@@@/words").status_code == 400
+
+
+def test_verse_words_bad_text_404(client: TestClient) -> None:
+    assert client.get("/v1/verses/John 3:16/words", params={"text": "NOPE"}).status_code == 404
+
+
 # --- caching -------------------------------------------------------------------------
 
 
 def test_immutable_etag_304_all_endpoints(client: TestClient) -> None:
-    for url in ("/v1/strongs", "/v1/strongs/G26"):
+    for url in (
+        "/v1/strongs",
+        "/v1/strongs/G26",
+        "/v1/strongs/G26/verses",
+        "/v1/verses/John 3:16/words",
+    ):
         resp = client.get(url)
         assert resp.headers["cache-control"] == CACHE_CONTROL
         etag = resp.headers["etag"]

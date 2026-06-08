@@ -482,3 +482,51 @@ class StrongsDetail(BaseModel):
     gloss: str
     definition: str
     source: str
+
+
+class StrongsVerse(BaseModel):
+    """One verse where a Strong's number occurs. ``text`` is null when not requested or absent."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    text: str | None
+
+
+class StrongsVersesResponse(BaseModel):
+    """A page of the verses where a Strong's number occurs, echoing the request state.
+
+    ``text_id`` is the tagged text searched (default ``SBLGNT``); ``translation`` is the translation
+    whose text hydrates each verse, null unless ``include_text=true``."""
+
+    strongs_id: str
+    text_id: str
+    translation: str | None
+    include_text: bool
+    limit: int
+    offset: int
+    total: int
+    verses: list[StrongsVerse]
+
+
+class WordTokenOut(BaseModel):
+    """One tagged word of a verse: its surface form plus the joined lexicon lemma/gloss (the
+    lemma/transliteration/gloss are null when untagged or the Strong's has no entry)."""
+
+    position: int
+    surface_form: str
+    strongs_id: str | None
+    morph_code: str | None
+    lemma: str | None
+    transliteration: str | None
+    gloss: str | None
+
+
+class VerseWordsResponse(BaseModel):
+    """The tagged tokens of a reference in an original-language text (the word-study verse view)."""
+
+    reference: str
+    text_id: str
+    total: int
+    tokens: list[WordTokenOut]
