@@ -179,6 +179,29 @@ class NotesResponse(BaseModel):
     notes: list[TranslatorNote]
 
 
+class SectionHeading(BaseModel):
+    """One chapter section heading: the text and the verse it renders before (``before_verse``).
+    ``reference`` is the human anchor (``"John 3:1"``) for client convenience."""
+
+    book: str
+    chapter: int
+    before_verse: int
+    text: str
+    ordinal: int
+    reference: str
+
+
+class HeadingsResponse(BaseModel):
+    """A chapter's section headings, ordered by position. A translation with none for the chapter
+    (e.g. BSB) returns ``headings: []`` (200), not an error."""
+
+    translation: str
+    book: str
+    chapter: int
+    total: int
+    headings: list[SectionHeading]
+
+
 class NoteSearchHit(BaseModel):
     """One note-search match: the note's canonical anchor, owning translation, and a highlighted
     snippet of its body. The note's own ``cross_references`` are omitted for leanness — fetch the

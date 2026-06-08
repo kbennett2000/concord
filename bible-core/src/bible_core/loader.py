@@ -45,6 +45,9 @@ DEFAULT_VERSIFICATION = "standard"
 # (translation_id, book_id, chapter, verse, text)
 VerseRow = tuple[str, str, int, int, str]
 
+# (translation_id, book_id, chapter, before_verse, ordinal, text)
+HeadingRow = tuple[str, str, int, int, int, str]
+
 
 class LoaderError(Exception):
     """Raised when a translation file violates the input contract."""
@@ -61,6 +64,7 @@ class TranslationData:
     versification: str
     attribution: str
     verses: list[VerseRow]
+    headings: list[HeadingRow]
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ class BuildStats:
     place_verse_links_skipped: int
     notes: int
     note_cross_references: int
+    section_headings: int
     elapsed_seconds: float
 
 
@@ -119,6 +124,18 @@ def _get_list(obj: Any, key: str, ctx: str) -> list[Any]:
     return cast("list[Any]", value)
 
 
+def _opt_list(obj: Any, key: str, ctx: str) -> list[Any]:
+    """A list field that may be absent or null (→ empty). Used for optional `headings`."""
+    if not isinstance(obj, dict):
+        raise LoaderError(f"{ctx}: expected a JSON object, got {type(obj).__name__}.")
+    value = cast("dict[str, Any]", obj).get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise LoaderError(f"{ctx}: field {key!r} must be a list, got {type(value).__name__}.")
+    return cast("list[Any]", value)
+
+
 # --- parsing -------------------------------------------------------------------------
 
 
@@ -139,6 +156,7 @@ def parse_translation_file(
         raise LoaderError(f"{path.name}: 'code' is empty.")
 
     rows: list[VerseRow] = []
+    heading_rows: list[HeadingRow] = []
     for book_index, book in enumerate(_get_list(raw, "books", path.name)):
         book_ctx = f"{path.name} books[{book_index}]"
         abbreviation = _get_str(book, "abbreviation", book_ctx)
@@ -165,6 +183,18 @@ def parse_translation_file(
                 text = _get_str(verse, "text", ch_ctx).strip()
                 rows.append((code, book_id, chapter_number, verse_number, text))
 
+            # Section headings already live in the chapter dict; bake them (was discarded).
+            # `ordinal` = 1-based source array order, so a chapter's headings stay stable.
+            for h_ordinal, heading in enumerate(_opt_list(chapter, "headings", ch_ctx), start=1):
+                h_ctx = f"{ch_ctx} headings[{h_ordinal - 1}]"
+                before_verse = _get_int(heading, "before_verse", h_ctx)
+                heading_text = _get_str(heading, "text", h_ctx).strip()
+                if not heading_text:
+                    raise LoaderError(f"{h_ctx}: 'text' is empty.")
+                heading_rows.append(
+                    (code, book_id, chapter_number, before_verse, h_ordinal, heading_text)
+                )
+
     return TranslationData(
         id=code,
         name=name,
@@ -173,6 +203,7 @@ def parse_translation_file(
         versification=DEFAULT_VERSIFICATION,
         attribution=attribution,
         verses=rows,
+        headings=heading_rows,
     )
 
 
@@ -369,6 +400,7 @@ def build_database(
             translations.append(data)
 
         verse_total = 0
+        heading_total = 0
         with conn:
             conn.executemany(
                 "INSERT INTO translations "
@@ -386,6 +418,13 @@ def build_database(
                     t.verses,
                 )
                 verse_total += len(t.verses)
+                conn.executemany(
+                    "INSERT INTO section_headings "
+                    "(translation_id, book_id, chapter, before_verse, ordinal, text) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    t.headings,
+                )
+                heading_total += len(t.headings)
             conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild')")
             _update_chapter_counts(conn)
             cross_ref_count, cross_refs_clamped = load_cross_references(
@@ -428,6 +467,7 @@ def build_database(
         place_verse_links_skipped=geo_stats.verse_links_skipped,
         notes=notes_stats.notes,
         note_cross_references=notes_stats.note_cross_references,
+        section_headings=heading_total,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -486,7 +526,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{stats.verses} verses, {stats.books_with_verses} books, "
             f"{stats.cross_references} cross-references{clamped}, "
             f"{stats.places} places, {stats.place_verses} place-verse links, "
-            f"{stats.notes} notes, {stats.note_cross_references} note cross-references "
+            f"{stats.notes} notes, {stats.note_cross_references} note cross-references, "
+            f"{stats.section_headings} section headings "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0

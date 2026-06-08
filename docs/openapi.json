@@ -1008,6 +1008,62 @@
         "summary": "Translations Endpoint"
       }
     },
+    "/v1/translations/{translation}/headings/{book}/{chapter}": {
+      "get": {
+        "operationId": "headings_endpoint_v1_translations__translation__headings__book___chapter__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "translation",
+            "required": true,
+            "schema": {
+              "title": "Translation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "book",
+            "required": true,
+            "schema": {
+              "title": "Book",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chapter",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Chapter",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Headings Endpoint"
+      }
+    },
     "/v1/translations/{translation}/notes/{book}/{chapter}": {
       "get": {
         "operationId": "notes_endpoint_v1_translations__translation__notes__book___chapter__get",

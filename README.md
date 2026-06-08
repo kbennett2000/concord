@@ -98,7 +98,7 @@ rest are below.
 
 ## What's in the box
 
-Fifteen endpoints. Each is documented in full — with real request/response examples — in
+Sixteen endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -114,6 +114,7 @@ Fifteen endpoints. Each is documented in full — with real request/response exa
 | `GET /v1/verses/{ref}/places` | The places a verse or passage names. |
 | `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
 | `GET /v1/notes/search` | Keyword search over translator's notes — user-supplied, never shipped in the public image. |
+| `GET /v1/translations/{translation}/headings/{book}/{chapter}` | The section headings that anchor a chapter ("The Creation", "The Beatitudes"), per translation. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |

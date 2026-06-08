@@ -367,6 +367,15 @@ intentionally-larger slice is flagged with its reasoning.
 > Semantic search, biblical geography, and translator's notes have their own build plans
 > in [`docs/v2/SPEC.md`](v2/SPEC.md), [`docs/v3/SPEC.md`](v3/SPEC.md), and
 > [`docs/v4/SPEC.md`](v4/SPEC.md) respectively — all shipped.
+>
+> **Post-v4 batch — section headings (shipped).** Chapter section headings ("The Creation",
+> "The Beatitudes") already live in the translation sources (`chapters[].headings[]`, populated for
+> 12 of 13 translations) but were discarded by the loader. They are now baked into an additive
+> `section_headings` table and exposed read-only at
+> `GET /v1/translations/{translation}/headings/{book}/{chapter}` (per-translation; a translation
+> with none, e.g. BSB, returns `[]`). Pure wire-up — no new source, no licensing path; a
+> cross-translation "canonical pericope" notion is interpretive and out of scope. See
+> [`docs/adr/ADR-0005-section-headings-endpoint.md`](adr/ADR-0005-section-headings-endpoint.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|

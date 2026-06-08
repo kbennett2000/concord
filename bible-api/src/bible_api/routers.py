@@ -20,6 +20,7 @@ from bible_core.queries import (
     NoteRow,
     PlaceRow,
     QueryResult,
+    SectionHeadingRow,
     count_place_verses,
     distinct_place_types,
     get_books,
@@ -30,6 +31,7 @@ from bible_core.queries import (
     get_place_verses,
     get_places_for_reference,
     get_random_verse,
+    get_section_headings,
     get_translations,
     get_verse_text,
     get_verses,
@@ -70,6 +72,7 @@ from .schemas import (
     CrossRefResponse,
     CrossRefSource,
     CrossRefTarget,
+    HeadingsResponse,
     NoteCrossReference,
     NoteSearchHit,
     NoteSearchResponse,
@@ -83,6 +86,7 @@ from .schemas import (
     RandomVerse,
     SearchHit,
     SearchResponse,
+    SectionHeading,
     SemanticSearchHit,
     SemanticSearchResponse,
     Translation,
@@ -507,6 +511,45 @@ def notes_endpoint(
         verse=verse,
         total=len(rows),
         notes=[_translator_note(row) for row in rows],
+    )
+    return cached_json_response(response, request)
+
+
+def _section_heading(row: SectionHeadingRow) -> SectionHeading:
+    return SectionHeading(
+        book=row.book_id,
+        chapter=row.chapter,
+        before_verse=row.before_verse,
+        text=row.text,
+        ordinal=row.ordinal,
+        reference=f"{row.book_name} {row.chapter}:{row.before_verse}",
+    )
+
+
+@router.get("/translations/{translation}/headings/{book}/{chapter}")
+def headings_endpoint(
+    translation: str,
+    book: str,
+    request: Request,
+    conn: Conn,
+    chapter: Annotated[int, Path(ge=1)],
+) -> Response:
+    # Mirrors the notes read: unknown translation → 404; unknown book → 404. A KNOWN translation
+    # with no headings for the chapter (e.g. BSB, which ships none) returns 200 with an empty
+    # list — not an error. Headings are an overlay, so an out-of-range chapter likewise returns
+    # empty (no chapter-range validation here).
+    translation_id = resolve_translation(request, translation)
+    info = SqliteBookResolver(conn).resolve(book)
+    if info is None:
+        raise UnknownBookError(f"unrecognised book {book!r}")
+
+    rows = get_section_headings(conn, translation_id, info.id, chapter)
+    response = HeadingsResponse(
+        translation=translation_id,
+        book=info.id,
+        chapter=chapter,
+        total=len(rows),
+        headings=[_section_heading(row) for row in rows],
     )
     return cached_json_response(response, request)
 

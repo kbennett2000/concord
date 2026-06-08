@@ -1330,3 +1330,37 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   `test_dropping_private_dir_removes_exactly_the_private_notes`).
 - **No API/schema/contract change** — purely the build-input mechanism. `bible-core` stays web-free;
   runtime stays offline. Synthetic fixtures only. `make check` green.
+
+## Post-v4 batch — section headings
+
+### Slice — expose chapter section headings (ADR-0005)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/section-headings`).
+- **Why:** the section headings that anchor a chapter ("The Creation", "The Beatitudes") were
+  **already in the bundled translation sources** (`chapters[].headings[]`, shape
+  `{"before_verse": N, "text": "..."}`, populated for 12/13 translations — only BSB has none) but
+  `parse_translation_file` read each chapter and **discarded the headings array**. Pure wire-up:
+  stop discarding data we already read, bake it, expose it. No new source, no parser, **no
+  licensing path** (headings inherit public/private from the translation file, like verse text).
+- **What landed:**
+  - **core:** additive `section_headings` table + `idx_headings_anchor` (schema.py, styled like
+    `translator_notes`); `HeadingRow` + `TranslationData.headings`; the chapter loop now parses
+    `headings[]` tolerantly (`_opt_list`: missing/null → `[]`; loud `LoaderError` on empty text),
+    `ordinal` = 1-based source array order; bulk-inserted in the existing translation transaction
+    (no new `build_database` param). `BuildStats.section_headings` + the summary line report the
+    count. `get_section_headings` (queries.py) mirrors `get_notes`, ordered
+    `before_verse → ordinal → id`.
+  - **api:** `GET /v1/translations/{translation}/headings/{book}/{chapter}` (routers.py) clones
+    `notes_endpoint` — `resolve_translation` (404), `SqliteBookResolver` (404), `chapter >= 1`
+    (422), shared ETag/`Cache-Control`/304. `SectionHeading` + `HeadingsResponse` (schemas.py).
+    A translation/chapter with no headings → **200 `[]`** (e.g. BSB), never 404.
+- **Decision (ADR-0005):** a **dedicated** endpoint (mirrors notes; leaves `/v1/chapters`
+  byte-for-byte unchanged) over an additive `headings` array on `/v1/chapters`. Per-translation;
+  cross-translation "canonical pericope" is interpretive and **out of scope**.
+- **Tests (synthetic only):** `bible-core/tests/test_section_headings_loader.py` (anchor + order,
+  ordinal = source order even when two headings share a `before_verse`, chapter/translation with
+  none → 0, idempotent rebuild); `bible-api/tests/test_headings_endpoint.py` (ordered read, shape,
+  empty-200 for a heading-less translation/chapter, 404/422, ETag 304). `loaderkit` gained a
+  `heading()` builder + `chapter(..., headings=)`; `apikit` seeds WEB JHN 3 (two) + KJV GEN 1 (one),
+  YLT none. OpenAPI regenerated (additive: one new path). `make check` green.
+- **Live check:** real build reports the headings count in the summary; `get_section_headings` for a
+  real chapter returns the expected titles at the right `before_verse`; BSB → empty.
