@@ -1137,3 +1137,89 @@ def get_strongs(conn: sqlite3.Connection, strongs_id: str) -> StrongsEntry | Non
         (strongs_id,),
     ).fetchone()
     return None if row is None else StrongsEntry(*row)
+
+
+# --- tagged word tokens (the Strong's↔verse link, mirrors place_verses) ---------------
+
+
+@dataclass(frozen=True)
+class StrongsVerseRef:
+    """One verse in which a Strong's number occurs (book id + name for reference formatting)."""
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+
+
+@dataclass(frozen=True)
+class WordToken:
+    """One tagged word of an original-language verse, with its lexicon gloss joined in (the lemma/
+    transliteration/gloss are ``None`` when the token is untagged or its Strong's has no entry)."""
+
+    position: int
+    surface_form: str
+    strongs_id: str | None
+    morph_code: str | None
+    lemma: str | None
+    transliteration: str | None
+    gloss: str | None
+
+
+def count_strongs_verses(conn: sqlite3.Connection, strongs_id: str, text_id: str) -> int:
+    """How many distinct verses of ``text_id`` contain ``strongs_id`` (a word may recur in one)."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT book_id, chapter, verse FROM word_tokens "
+        "WHERE strongs_id = ? AND text_id = ?)",
+        (strongs_id, text_id),
+    ).fetchone()[0]
+
+
+def get_strongs_verses(
+    conn: sqlite3.Connection, strongs_id: str, text_id: str, limit: int, offset: int
+) -> tuple[tuple[StrongsVerseRef, ...], int]:
+    """The distinct verses of ``text_id`` where ``strongs_id`` occurs (canonical order) + total."""
+    rows = tuple(
+        StrongsVerseRef(r[0], r[1], r[2], r[3])
+        for r in conn.execute(
+            "SELECT DISTINCT wt.book_id, b.name, wt.chapter, wt.verse "
+            "FROM word_tokens wt JOIN books b ON b.id = wt.book_id "
+            "WHERE wt.strongs_id = ? AND wt.text_id = ? "
+            "ORDER BY b.canonical_order, wt.chapter, wt.verse "
+            "LIMIT ? OFFSET ?",
+            (strongs_id, text_id, limit, offset),
+        )
+    )
+    total = count_strongs_verses(conn, strongs_id, text_id)
+    return rows, total
+
+
+def get_words_for_reference(
+    conn: sqlite3.Connection, reference: Reference, text_id: str
+) -> tuple[WordToken, ...]:
+    """The tagged tokens of ``text_id`` within ``reference``, in book/chapter/verse/position order.
+
+    Each token LEFT JOINs the lexicon, so the lemma/transliteration/gloss come along when the
+    token's Strong's has a collapsed entry (else they are ``None``). A valid reference with no
+    tokens (e.g. an OT verse for a NT-only text) returns an empty tuple.
+    """
+    clauses: list[str] = []
+    params: list[str | int] = [text_id, reference.book_id]
+    for span in reference.spans:
+        predicate, span_params = _span_predicate(span, "wt.chapter", "wt.verse")
+        clauses.append(f"({predicate})")
+        params += span_params
+    where = f"wt.text_id = ? AND wt.book_id = ? AND ({' OR '.join(clauses)})"
+
+    return tuple(
+        WordToken(r[0], r[1], r[2], r[3], r[4], r[5], r[6])
+        for r in conn.execute(
+            "SELECT wt.position, wt.surface_form, wt.strongs_id, wt.morph_code, "
+            "se.lemma, se.transliteration, se.gloss "
+            "FROM word_tokens wt "
+            "LEFT JOIN strongs_entries se ON se.strongs_id = wt.strongs_id "
+            f"WHERE {where} "
+            "ORDER BY wt.chapter, wt.verse, wt.position",
+            params,
+        )
+    )

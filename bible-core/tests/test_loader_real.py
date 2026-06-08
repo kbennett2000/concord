@@ -12,7 +12,9 @@ from pathlib import Path
 
 import pytest
 from bible_core.loader import build_database
-from bible_core.queries import get_strongs
+from bible_core.parser import parse_reference
+from bible_core.queries import get_strongs, get_strongs_verses, get_words_for_reference
+from bible_core.resolver import SqliteBookResolver
 
 pytestmark = pytest.mark.integration
 
@@ -126,3 +128,33 @@ def test_real_build_loads_the_strongs_lexicon(tmp_path: Path) -> None:
     assert "love" in entry.gloss
     assert entry.language == "grc"
     assert "STEPBible" in entry.source or "STEP Bible" in entry.source
+
+
+def test_real_build_loads_word_tokens_both_directions(tmp_path: Path) -> None:
+    """The real SBLGNT tagged tokens load into ``word_tokens`` (v6 S3) and join the lexicon:
+    G25 (ἀγαπάω) occurs in John 3:16, and John 3:16's tokens come back in order with glosses."""
+    db = tmp_path / "bible.db"
+    stats = build_database(db, [TRANSLATIONS], lexicon_dir=LEXICON, tokens_dir=LEXICON)
+    assert stats.word_tokens > 130000
+    conn = sqlite3.connect(db)
+
+    # Strong's → verses: ἠγάπησεν in John 3:16 is G25 (ἀγαπάω), so John 3:16 is among its verses.
+    _, total = get_strongs_verses(conn, "G25", "SBLGNT", 5, 0)
+    assert total > 0
+    john_316 = conn.execute(
+        "SELECT COUNT(*) FROM word_tokens "
+        "WHERE strongs_id='G25' AND text_id='SBLGNT' "
+        "AND book_id='JHN' AND chapter=3 AND verse=16"
+    ).fetchone()[0]
+    assert john_316 == 1
+
+    # verse → tokens: John 3:16 returns its SBL words in order, with lemma/gloss joined.
+    ref = parse_reference("John 3:16", SqliteBookResolver(conn))
+    toks = get_words_for_reference(conn, ref, "SBLGNT")
+    assert [t.position for t in toks][:2] == [1, 2]
+    assert toks[0].surface_form == unicodedata.normalize("NFC", "οὕτως")
+    agapao = next(t for t in toks if t.strongs_id == "G25")
+    assert agapao.lemma == unicodedata.normalize("NFC", "ἀγαπάω")
+    assert "love" in (agapao.gloss or "")
+    # The TR-only αὐτοῦ (#11) is absent from the SBL token stream, like the verse text.
+    assert "αὐτοῦ" not in [t.surface_form for t in toks]
