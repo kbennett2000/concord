@@ -110,26 +110,31 @@ standard, so it loads beside the English Bibles). The **raw `TAGNT` files are re
 committed** — they live under the gitignored + dockerignored `data/original/`; only the derived
 `SBLGNT.json` is committed and ships. STEPBible asks that others refer to github.com/STEPBible as
 the canonical source, which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
-The tagged tokens (`word_tokens`) land in a later v6 slice.
 
-## Strong's lexicon (`data/strongs/`)
+## Strong's lexicon & tagged tokens (`data/strongs/`)
 
 | Field | Value |
 |---|---|
-| File | `data/strongs/lexicon.json` (Strong's number → lemma, transliteration, gloss, definition), derived by [scripts/convert_strongs_lexicon.py](../scripts/convert_strongs_lexicon.py) |
-| Source | STEPBible-Data — `TBESG` (Translators Brief lexicon of Extended Strongs for Greek) — <https://github.com/STEPBible/STEPBible-Data> |
+| Files | `lexicon.json` (Strong's number → lemma, transliteration, gloss, definition) from `TBESG`, derived by [scripts/convert_strongs_lexicon.py](../scripts/convert_strongs_lexicon.py); `tokens-sblgnt.json` (every SBLGNT word → position, surface form, Strong's, morph) from `TAGNT`, derived by [scripts/convert_step_tagnt.py](../scripts/convert_step_tagnt.py) |
+| Source | STEPBible-Data — `TBESG` (Translators Brief lexicon of Extended Strongs for Greek) and `TAGNT` (Translators Amalgamated Greek NT) — <https://github.com/STEPBible/STEPBible-Data> |
 | License | Creative Commons Attribution 4.0 International (CC BY 4.0) |
-| Attribution | **Lexicon data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge (the Brief lexicon draws on Abbott-Smith), licensed CC BY 4.0. The underlying Strong's numbering (1890) is public domain.** |
+| Attribution | **Lexicon & tagging data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge (the Brief lexicon draws on Abbott-Smith), licensed CC BY 4.0. The underlying Strong's numbering (1890) is public domain.** |
 
 The word-study feature (SPEC v6) loads the Greek Strong's lexicon into the additive
 `strongs_entries` table, served by `/v1/strongs` and `/v1/strongs/{id}`. Each entry is keyed on the
 **collapsed-base** Extended Strong's number (`G0026` → `G26`); where TBESG splits a number into
 disambiguated senses (`G0001G`, `G0001H`), the first/primary sense is kept (later slices may expose
-the splits). The HTML in the definition column is stripped to plain text. The **raw `TBESG` file is
-re-derivable and not committed** — it lives under the gitignored + dockerignored `data/original/`;
-only the derived `lexicon.json` is committed and ships. STEPBible asks that others refer to
-github.com/STEPBible as the canonical source, which the attribution above does. See
-[../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
+the splits). The HTML in the definition column is stripped to plain text.
+
+The **tagged tokens** (`word_tokens` table) come from the same `TAGNT` words that form `SBLGNT.json`:
+each kept SBL word becomes a token carrying its 1-based position, surface form, collapsed Strong's
+number (same base as the lexicon, so the two join), and morphology code. The token loader reads the
+`tokens-*.json` files; the lexicon loader reads the other `*.json` files in this directory.
+
+The **raw `TBESG`/`TAGNT` files are re-derivable and not committed** — they live under the gitignored
++ dockerignored `data/original/`; only the derived `lexicon.json` and `tokens-sblgnt.json` are
+committed and ship. STEPBible asks that others refer to github.com/STEPBible as the canonical source,
+which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
 
 ## Translator's notes (`data/private/notes/`) — NOT committed
 

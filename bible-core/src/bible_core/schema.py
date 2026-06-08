@@ -188,6 +188,24 @@ _TABLES: tuple[str, ...] = (
         source          TEXT NOT NULL
     )
     """,
+    # Tagged original-language word tokens (additive). One row per word of an original-language
+    # text (e.g. the SBLGNT): its 1-based position in the verse, surface form, collapsed-base
+    # Strong's number (NULL if untagged; a plain column, no FK — a token's Strong's need not have a
+    # collapsed lexicon entry), and morphology code. The composite PK serves the verse→tokens
+    # direction; idx_word_tokens_strongs serves Strong's→verses, mirroring place_verses.
+    """
+    CREATE TABLE IF NOT EXISTS word_tokens (
+        text_id      TEXT NOT NULL REFERENCES translations (id),
+        book_id      TEXT NOT NULL REFERENCES books (id),
+        chapter      INTEGER NOT NULL,
+        verse        INTEGER NOT NULL,
+        position     INTEGER NOT NULL,
+        surface_form TEXT NOT NULL,
+        strongs_id   TEXT,
+        morph_code   TEXT,
+        PRIMARY KEY (text_id, book_id, chapter, verse, position)
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
@@ -196,6 +214,11 @@ _TABLES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_place_verses_bcv ON place_verses (book_id, chapter, verse)",
     # Supports the verse→topics direction (mirrors idx_place_verses_bcv).
     "CREATE INDEX IF NOT EXISTS idx_topic_verses_bcv ON topic_verses (book_id, chapter, verse)",
+    # Supports the Strong's→verses direction (every verse where a Strong's number appears).
+    "CREATE INDEX IF NOT EXISTS idx_word_tokens_strongs ON word_tokens (strongs_id)",
+    # Supports the verse→tokens direction ("the tagged words of this verse").
+    "CREATE INDEX IF NOT EXISTS idx_word_tokens_bcv "
+    "ON word_tokens (text_id, book_id, chapter, verse)",
     # "all notes for this verse/chapter in this translation" — the Slice-2 read lookup.
     "CREATE INDEX IF NOT EXISTS idx_notes_anchor "
     "ON translator_notes (translation_id, book_id, chapter, verse)",

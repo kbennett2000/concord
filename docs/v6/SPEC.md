@@ -85,9 +85,11 @@ The original-language *text* itself is served by the existing `/v1/verses` and `
   (TBESG → `data/strongs/lexicon.json`, 10,846 entries keyed on the collapsed-base Strong's number)
   + `GET /v1/strongs` & `/v1/strongs/{id}` + `UnknownStrongsError`. Acceptance ①: `/v1/strongs/G26`
   → ἀγάπη "love".
-- **V6-S3 — tokens + queries.** `word_tokens` + loader; extend the parser to emit
-  `data/strongs/tokens-sblgnt.json`; `get_strongs_verses` / `get_words_for_reference` tested in
-  `bible-core`.
+- **V6-S3 — tokens + queries. ✅ (this slice)** `word_tokens` table + `load_word_tokens`;
+  `convert_step_tagnt.py` extended to also emit `data/strongs/tokens-sblgnt.json` (137,121 tagged
+  tokens: surface form, collapsed Strong's, morph); `get_strongs_verses` (Strong's→verses) and
+  `get_words_for_reference` (verse→tokens, lexicon gloss joined) tested in `bible-core`. No new
+  endpoints — those are S4.
 - **V6-S4 — the two remaining endpoints.** `/v1/strongs/{id}/verses` + `/v1/verses/{ref}/words`.
   Acceptance ② & ③.
 - **V6-S5 — Hebrew OT.** `TAHOT` → `OSHB.json` + tokens; `TBESH` → lexicon. Relax

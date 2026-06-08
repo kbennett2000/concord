@@ -86,6 +86,7 @@ class BuildStats:
     topics: int
     topic_verses: int
     strongs_entries: int
+    word_tokens: int
     elapsed_seconds: float
 
 
@@ -364,6 +365,7 @@ def build_database(
     notes_dirs: list[Path] | None = None,
     topics_dir: Path | None = None,
     lexicon_dir: Path | None = None,
+    tokens_dir: Path | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
     ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), ``notes_dirs``
@@ -464,13 +466,23 @@ def build_database(
                 else TopicsStats(0, 0, 0, 0)
             )
 
-            # Strong's-lexicon loader — same local-import cycle break.
-            from .strongs import StrongsStats, load_strongs_entries
+            # Strong's-lexicon + word-tokens loaders — same local-import cycle break.
+            from .strongs import (
+                StrongsStats,
+                WordTokensStats,
+                load_strongs_entries,
+                load_word_tokens,
+            )
 
             strongs_stats = (
                 load_strongs_entries(conn, lexicon_dir)
                 if lexicon_dir is not None
                 else StrongsStats(0)
+            )
+            tokens_stats = (
+                load_word_tokens(conn, tokens_dir, alias_to_book)
+                if tokens_dir is not None
+                else WordTokensStats(0, 0)
             )
 
         books_with_verses = conn.execute(
@@ -495,6 +507,7 @@ def build_database(
         topics=topics_stats.topics,
         topic_verses=topics_stats.topic_verses,
         strongs_entries=strongs_stats.strongs_entries,
+        word_tokens=tokens_stats.word_tokens,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -538,8 +551,10 @@ def main(argv: list[str] | None = None) -> int:
     notes_dirs = [base / "notes", base / "private" / "notes"]
     # Committed topical-Bible dataset (Nave's, CC BY 4.0) — ships in the image like geography.
     topics_dir = base / "topics"
-    # Committed Strong's lexicon (STEPBible TBESG, CC BY 4.0) — ships in the image like topics.
+    # Committed Strong's lexicon + tagged word tokens (STEPBible, CC BY 4.0), both under
+    # data/strongs/; the lexicon loader reads lexicon*.json, the token loader reads tokens-*.json.
     lexicon_dir = base / "strongs"
+    tokens_dir = base / "strongs"
     try:
         stats = build_database(
             Path(args.output),
@@ -549,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
             notes_dirs,
             topics_dir,
             lexicon_dir,
+            tokens_dir,
         )
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -568,7 +584,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{stats.notes} notes, {stats.note_cross_references} note cross-references, "
             f"{stats.section_headings} section headings, "
             f"{stats.topics} topics, {stats.topic_verses} topic-verse links, "
-            f"{stats.strongs_entries} Strong's entries "
+            f"{stats.strongs_entries} Strong's entries, {stats.word_tokens} word tokens "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0

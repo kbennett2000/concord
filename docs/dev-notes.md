@@ -1478,3 +1478,35 @@ completeness* — this milestone is **v6**.
 - **Acceptance ①:** `GET /v1/strongs/G26` → ἀγάπη "love" with full definition. ✔
 - **Live check:** real build → **10,846 Strong's entries**; `/v1/strongs/g0026` → `G26` ἀγάπη love;
   `/v1/strongs?q=love&language=grc` lists G25/G26/…; unknown → `404 unknown_strongs`. `make check` green.
+
+### Slice V6-S3 — tagged word tokens (ADR-0007)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v6-s3-word-tokens`).
+- **Why:** word study needs the per-verse tagged tokens and the Strong's↔verse link — "every verse
+  where G26 appears" and "the tagged words of John 3:16". This slice lands the additive `word_tokens`
+  table + the two bi-directional queries in `bible-core`; the endpoints that expose them are S4.
+- **What landed:**
+  - **parser:** `convert_step_tagnt.py` now emits a **second** file, `data/strongs/tokens-sblgnt.json`
+    (**137,121 tokens**), from the same TAGNT pass that builds `SBLGNT.json`. Each kept SBL word →
+    `{book, chapter, verse, position, surface_form, strongs_id, morph_code}`. The dStrong column
+    (`G0976=N-NSF`) is split into a **collapsed-base** Strong's (`G0976`→`G976`, disambiguation suffix
+    dropped, `G2264G`→`G2264`) and the morph code. Deterministic; **`SBLGNT.json` re-generates
+    byte-identical** (verse text unchanged).
+  - **schema/loader (`core`):** new `word_tokens` table (PK `(text_id, book_id, chapter, verse,
+    position)`; nullable `strongs_id`/`morph_code`; a plain `strongs_id` column, no FK) + two indexes
+    (`idx_word_tokens_strongs` for Strong's→verses, `idx_word_tokens_bcv` for verse→tokens, mirroring
+    place_verses). `load_word_tokens` (resolve book via alias, **skip+count** unresolved, `INSERT OR
+    IGNORE` on the PK); `tokens_dir` threaded through `build_database`/`main` + `BuildStats.word_tokens`
+    + summary. Lexicon and tokens **share `data/strongs/`** — the lexicon loader reads `*.json` minus
+    `tokens-*`, the token loader reads `tokens-*.json`.
+  - **queries (`core`):** `StrongsVerseRef`/`WordToken` + `count_strongs_verses`,
+    `get_strongs_verses(strongs_id, text_id, …)` (DISTINCT verse, canonical order) and
+    `get_words_for_reference(reference, text_id)` (tokens for the ref's spans, ORDER BY
+    chapter/verse/position, LEFT JOIN `strongs_entries` for lemma/translit/gloss; reuses
+    `_span_predicate`).
+- **Tests:** `bible-core/tests/test_word_tokens_loader.py` (synthetic — counts/dedup/skip, both query
+  directions, lexicon join + untagged-null tokens, empty-for-untagged-verse, idempotent, missing dir
+  → 0); `test_loader_real.py` gains `test_real_build_loads_word_tokens_both_directions` (real John 3:16
+  tokens in order with G25→ἀγαπάω gloss; αὐτοῦ absent from the SBL token stream).
+- **Live check:** real build → **137,121 word tokens**; `get_strongs_verses("G26","SBLGNT")` → 106
+  verses; `get_words_for_reference(John 3:16,"SBLGNT")` → 25 ordered tokens with glosses; Gen 1:1
+  (OT, NT-only text) → empty. `make check` green (613 tests).

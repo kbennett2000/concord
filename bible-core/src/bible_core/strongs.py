@@ -30,14 +30,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from .loader import LoaderError
+from .normalize import normalize
 
 # (strongs_id, language, lemma, transliteration, gloss, definition, source)
 StrongsEntryRow = tuple[str, str, str, str, str, str, str]
+# (text_id, book_id, chapter, verse, position, surface_form, strongs_id, morph_code)
+WordTokenRow = tuple[str, str, int, int, int, str, str | None, str | None]
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,14 @@ class StrongsStats:
     """Summary of a completed Strong's-lexicon load."""
 
     strongs_entries: int
+
+
+@dataclass(frozen=True)
+class WordTokensStats:
+    """Summary of a completed word-tokens load."""
+
+    word_tokens: int
+    tokens_skipped: int
 
 
 def _get(obj: Any, key: str, ctx: str) -> Any:
@@ -71,11 +83,36 @@ def _opt_str(obj: Any, key: str, ctx: str) -> str:
     return value
 
 
+def _req_int(obj: Any, key: str, ctx: str) -> int:
+    value = _get(obj, key, ctx)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise LoaderError(f"{ctx}: field {key!r} must be an integer, got {type(value).__name__}.")
+    return value
+
+
+def _nullable_str(obj: Any, key: str, ctx: str) -> str | None:
+    """A string that may be JSON ``null`` (an untagged token's strongs_id / morph_code)."""
+    if not isinstance(obj, dict):
+        raise LoaderError(f"{ctx}: expected a JSON object, got {type(obj).__name__}.")
+    value = cast("dict[str, Any]", obj).get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise LoaderError(f"{ctx}: field {key!r} must be a string or null.")
+    return value
+
+
 def discover_lexicon_files(lexicon_dir: Path) -> list[Path]:
-    """Return every ``*.json`` directly under ``lexicon_dir``, in deterministic order."""
+    """Return every lexicon ``*.json`` directly under ``lexicon_dir``, in deterministic order.
+
+    The ``tokens-*.json`` files (loaded separately into ``word_tokens``) share this directory, so
+    they are excluded here."""
     if not lexicon_dir.is_dir():
         return []
-    return sorted(lexicon_dir.glob("*.json"), key=lambda p: str(p))
+    return sorted(
+        (p for p in lexicon_dir.glob("*.json") if not p.name.startswith("tokens-")),
+        key=lambda p: str(p),
+    )
 
 
 def parse_lexicon_file(path: Path) -> list[StrongsEntryRow]:
@@ -126,3 +163,74 @@ def load_strongs_entries(conn: sqlite3.Connection, lexicon_dir: Path) -> Strongs
         rows,
     )
     return StrongsStats(strongs_entries=len(rows))
+
+
+def discover_token_files(tokens_dir: Path) -> list[Path]:
+    """Return every ``tokens-*.json`` directly under ``tokens_dir``, in deterministic order.
+
+    The ``tokens-`` prefix keeps the lexicon file (``lexicon.json``) and the token files in the
+    same ``data/strongs/`` directory without the two loaders reading each other's files."""
+    if not tokens_dir.is_dir():
+        return []
+    return sorted(tokens_dir.glob("tokens-*.json"), key=lambda p: str(p))
+
+
+def parse_tokens_file(
+    path: Path, alias_to_book: dict[str, str], stats: Counter[str]
+) -> list[WordTokenRow]:
+    """Parse one tokens JSON file into word-token rows; unresolved books are skipped + counted."""
+    try:
+        raw: Any = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise LoaderError(f"{path.name}: invalid JSON ({exc}).") from exc
+
+    text_id = _req_str(raw, "text_id", path.name)
+    tokens = _get(raw, "tokens", path.name)
+    if not isinstance(tokens, list):
+        raise LoaderError(f"{path.name}: 'tokens' must be a list.")
+
+    rows: list[WordTokenRow] = []
+    for index, token in enumerate(cast("list[Any]", tokens)):
+        ctx = f"{path.name} tokens[{index}]"
+        book_id = alias_to_book.get(normalize(_req_str(token, "book", ctx)))
+        if book_id is None:
+            stats["tokens_skipped"] += 1
+            continue
+        chapter = _req_int(token, "chapter", ctx)
+        verse = _req_int(token, "verse", ctx)
+        position = _req_int(token, "position", ctx)
+        if chapter < 1 or verse < 1 or position < 1:
+            raise LoaderError(f"{ctx}: chapter, verse and position must be positive.")
+        rows.append(
+            (
+                text_id,
+                book_id,
+                chapter,
+                verse,
+                position,
+                _req_str(token, "surface_form", ctx),
+                _nullable_str(token, "strongs_id", ctx),
+                _nullable_str(token, "morph_code", ctx),
+            )
+        )
+    return rows
+
+
+def load_word_tokens(
+    conn: sqlite3.Connection, tokens_dir: Path, alias_to_book: dict[str, str]
+) -> WordTokensStats:
+    """Ingest token JSON from ``tokens_dir`` into ``word_tokens``. A missing/empty directory loads
+    nothing — not an error. The composite PK dedups; ``OR IGNORE`` keeps the load robust."""
+    rows: list[WordTokenRow] = []
+    stats: Counter[str] = Counter()
+    for path in discover_token_files(tokens_dir):
+        rows.extend(parse_tokens_file(path, alias_to_book, stats))
+
+    conn.executemany(
+        "INSERT OR IGNORE INTO word_tokens "
+        "(text_id, book_id, chapter, verse, position, surface_form, strongs_id, morph_code) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    inserted = conn.execute("SELECT COUNT(*) FROM word_tokens").fetchone()[0]
+    return WordTokensStats(word_tokens=inserted, tokens_skipped=stats["tokens_skipped"])

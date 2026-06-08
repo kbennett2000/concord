@@ -393,8 +393,11 @@ intentionally-larger slice is flagged with its reasoning.
 > via `/v1/verses/{ref}?translation=SBLGNT` with **zero loader changes** (NT chapter counts match
 > the English NT). **S2 (shipped):** the Greek Strong's lexicon (STEPBible TBESG → the additive
 > `strongs_entries` table, 10,846 entries keyed on the collapsed-base Strong's number), browsable at
-> `/v1/strongs` and `/v1/strongs/{id}`. The tagged tokens (`/v1/verses/{ref}/words`) and lemma/
-> Strong's verse search land in S3–S4. See [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
+> `/v1/strongs` and `/v1/strongs/{id}`. **S3 (shipped):** the SBLGNT's tagged word tokens (STEPBible
+> TAGNT → the additive `word_tokens` table, 137,121 tokens) with the bi-directional Strong's↔verse
+> queries (`get_strongs_verses` / `get_words_for_reference`) in `bible-core`. The endpoints that
+> expose them (`/v1/strongs/{id}/verses`, `/v1/verses/{ref}/words`) land in S4. See
+> [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|

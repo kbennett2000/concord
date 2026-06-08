@@ -3,10 +3,12 @@
 STEPBible-Data (github.com/STEPBible/STEPBible-Data) publishes ``TAGNT`` — every word of the
 standard Greek NT editions (NA28/27, SBL, TR, Byz, Tyndale House, WH, Tregelles) tagged with a
 disambiguated Strong's number, morphology, lemma and gloss, under **CC BY 4.0**. This script
-reads the two TAGNT text files and emits ``data/translations/SBLGNT.json`` — the Greek NT loaded
-as an ordinary Concord translation (the "original-language text as a translation" idea), so
-``/v1/verses/{ref}?translation=SBLGNT`` and ``/v1/translations`` work through the existing
-machinery with no loader changes.
+reads the two TAGNT text files and emits **two** files: ``data/translations/SBLGNT.json`` — the
+Greek NT loaded as an ordinary Concord translation (the "original-language text as a translation"
+idea), so ``/v1/verses/{ref}?translation=SBLGNT`` and ``/v1/translations`` work through the existing
+machinery with no loader changes — and ``data/strongs/tokens-sblgnt.json``, the per-word tagged
+tokens (surface form, collapsed-base Strong's number, morphology) that populate the ``word_tokens``
+table for word study (v6 S3).
 
 **SBL edition selection.** TAGNT is an *amalgamated* text: each word's ``editions`` column lists
 which printed editions contain it (e.g. ``NA28+NA27+Tyn+SBL+WH+Treg+TR+Byz``). We keep only the
@@ -16,11 +18,13 @@ The surface spelling/punctuation is STEPBible's (NA-based), so this is the SBL *
 rather than a byte-faithful reproduction of the printed SBLGNT; the attribution says so.
 
 TAGNT columns (tab-separated; ``Word & Type`` first): ``Mat.1.2#01=NKO`` (reference + word
-index + edition code), ``Greek`` as ``surface (translit)``, ``English``, ``dStrong=Grammar``,
-``lemma=Gloss``, ``editions``, … The reference uses NRSV versification (NT chapter counts are
-standard, so SBLGNT loads alongside the English translations); alternative versification numbers
-trail in ``[]``/``()``/``{}`` after the bare reference and are ignored here. Verse text is the
-SBL words joined in word-index order, transliteration stripped.
+index + edition code), ``Greek`` as ``surface (translit)``, ``English``, ``dStrong=Grammar``
+(e.g. ``G0976=N-NSF`` — the Strong's number and morphology), ``lemma=Gloss``, ``editions``, … The
+reference uses NRSV versification (NT chapter counts are standard, so SBLGNT loads alongside the
+English translations); alternative versification numbers trail in ``[]``/``()``/``{}`` after the
+bare reference and are ignored here. Verse text is the SBL words joined in word-index order,
+transliteration stripped; each word's collapsed Strong's (``G0976`` → ``G976``, disambiguation
+suffix dropped) and morph code go to the tokens file.
 
 Book codes resolve through Concord's own table (``docs/canonical-books.md`` via
 ``bible_core.normalize``) — never invented here; STEPBible's codes (``Mrk``, ``Jhn``, ``Php`` …)
@@ -64,6 +68,10 @@ _REF_RE = re.compile(r"^([A-Za-z0-9]+)\.(\d+)\.(\d+)")
 _POS_RE = re.compile(r"#(\d+)")
 # Trailing transliteration parenthetical on the Greek column, e.g. "κόσμον, (kosmon)".
 _TRANSLIT_RE = re.compile(r"\s*\([^()]*\)\s*$")
+# The Strong's number at the start of the dStrong column, collapsed to its base: the leading letter
+# + the number with leading zeros dropped and any disambiguation suffix ignored (``G2264G`` →
+# ``G2264``).
+_DSTRONG_RE = re.compile(r"^([GH])0*(\d+)")
 # A canonical-books.md row: | # | CODE | Name | Testament | aliases |
 _CANON_ROW = re.compile(
     r"^\|\s*(\d+)\s*\|\s*([A-Z0-9]+)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|([^|]*)\|"
@@ -109,16 +117,32 @@ def _surface(greek_col: str) -> str:
     return unicodedata.normalize("NFC", _TRANSLIT_RE.sub("", greek_col).strip())
 
 
+def _collapse_dstrong(dstrong_col: str) -> tuple[str | None, str | None]:
+    """Split TAGNT's ``dStrong=morph`` cell into ``(collapsed-base Strong's, morph code)``.
+
+    ``G0025=V-AAI-3S`` → ``("G25", "V-AAI-3S")``; the disambiguation suffix is dropped
+    (``G2264G`` → ``G2264``). Returns ``None`` for a part that is absent/unparseable."""
+    raw, _, morph = dstrong_col.partition("=")
+    m = _DSTRONG_RE.match(raw.strip())
+    strongs_id = f"{m.group(1)}{int(m.group(2))}" if m else None
+    return strongs_id, (morph.strip() or None)
+
+
+# A single tagged word: (position, surface_form, strongs_id, morph_code).
+Token = tuple[int, str, str | None, str | None]
+
+
 def convert(
     inputs: list[Path], alias_to_code: dict[str, str]
-) -> tuple[dict[tuple[str, int, int], str], dict[str, int]]:
-    """Read the TAGNT files → ``{(book_id, chapter, verse): text}`` plus skip stats.
+) -> tuple[dict[tuple[str, int, int], dict[int, Token]], dict[str, int]]:
+    """Read the TAGNT files → ``{(book_id, chapter, verse): {position: Token}}`` plus skip stats.
 
-    Verse text is the SBL words joined in word-index order; tokens are deduped by position
+    Each kept SBL word becomes a token (surface form, collapsed Strong's, morph); the verse text
+    is later derived by joining the surfaces in word-index order. Tokens are deduped by position
     (first wins) defensively.
     """
-    # (book_id, chapter, verse) -> {position: surface}
-    verses: dict[tuple[str, int, int], dict[int, str]] = {}
+    # (book_id, chapter, verse) -> {position: (position, surface, strongs_id, morph)}
+    verses: dict[tuple[str, int, int], dict[int, Token]] = {}
     stats = {
         "rows": 0,
         "kept": 0,
@@ -155,18 +179,22 @@ def convert(
                 stats["skipped_empty_surface"] += 1
                 continue
 
+            strongs_id, morph = _collapse_dstrong(cols[3])
             slot = verses.setdefault((book_id, chapter, verse), {})
             if position in slot:
                 stats["skipped_dup_position"] += 1
                 continue
-            slot[position] = surface
+            slot[position] = (position, surface, strongs_id, morph)
             stats["kept"] += 1
 
-    # Collapse each verse's positioned words into running text (word-index order).
-    verse_text: dict[tuple[str, int, int], str] = {
-        ref: " ".join(words[p] for p in sorted(words)) for ref, words in verses.items()
-    }
-    return verse_text, stats
+    return verses, stats
+
+
+def verse_text_from(
+    verses: dict[tuple[str, int, int], dict[int, Token]],
+) -> dict[tuple[str, int, int], str]:
+    """Each verse's SBL words joined as running text in word-index order (token[1] = surface)."""
+    return {ref: " ".join(words[p][1] for p in sorted(words)) for ref, words in verses.items()}
 
 
 def build_payload(
@@ -208,6 +236,31 @@ def build_payload(
     }
 
 
+def build_tokens_payload(
+    verses: dict[tuple[str, int, int], dict[int, Token]], code_to_meta: dict[str, tuple[int, str]]
+) -> dict[str, Any]:
+    """Assemble the tagged-tokens JSON: every SBL word in canonical book/ch/verse/position order.
+
+    ``text_id`` ties the tokens to the ``SBLGNT`` translation loaded from ``build_payload`` above.
+    """
+    tokens: list[dict[str, Any]] = []
+    for ref in sorted(verses, key=lambda r: (code_to_meta[r[0]][0], r[1], r[2])):
+        book_id, chapter, verse = ref
+        for position, surface, strongs_id, morph in (verses[ref][p] for p in sorted(verses[ref])):
+            tokens.append(
+                {
+                    "book": book_id,
+                    "chapter": chapter,
+                    "verse": verse,
+                    "position": position,
+                    "surface_form": surface,
+                    "strongs_id": strongs_id,
+                    "morph_code": morph,
+                }
+            )
+    return {"text_id": CODE, "source": COPYRIGHT, "tokens": tokens}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -218,6 +271,9 @@ def main(argv: list[str] | None = None) -> int:
         help="TAGNT text files (default: data/original/TAGNT*.txt).",
     )
     parser.add_argument("--output", type=Path, default=Path("data/translations/SBLGNT.json"))
+    parser.add_argument(
+        "--tokens-output", type=Path, default=Path("data/strongs/tokens-sblgnt.json")
+    )
     parser.add_argument("--canon", type=Path, default=Path("docs/canonical-books.md"))
     args = parser.parse_args(argv)
 
@@ -228,16 +284,23 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     alias_to_code, code_to_meta = load_book_table(args.canon)
-    verse_text, stats = convert(list(args.input), alias_to_code)
-    payload = build_payload(verse_text, code_to_meta)
+    verses, stats = convert(list(args.input), alias_to_code)
+    payload = build_payload(verse_text_from(verses), code_to_meta)
+    tokens_payload = build_tokens_payload(verses, code_to_meta)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    args.output.write_text(text, encoding="utf-8")
+    args.output.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    args.tokens_output.parent.mkdir(parents=True, exist_ok=True)
+    args.tokens_output.write_text(
+        json.dumps(tokens_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
     n_books = len(payload["books"])
     n_verses = sum(len(c["verses"]) for b in payload["books"] for c in b["chapters"])
     print(f"Wrote {args.output}: {n_books} books, {n_verses} verses, {stats['kept']} SBL words.")
+    print(f"Wrote {args.tokens_output}: {len(tokens_payload['tokens'])} tokens.")
     skipped = {k: v for k, v in stats.items() if k.startswith("skipped_") and v}
     if skipped:
         print(f"  skipped: {skipped}")
