@@ -40,6 +40,24 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0)
   re-derivable and not committed. See data/SOURCES.md.
 
 --------------------------------------------------------------------------------
+Original-language texts — data/translations/SBLGNT.json (SPEC v6)
+--------------------------------------------------------------------------------
+Work:    Greek New Testament (SBL edition word-selection)
+Source:  STEPBible-Data — TAGNT (Translators Amalgamated Greek NT)
+         https://github.com/STEPBible/STEPBible-Data
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+  Greek New Testament data created by STEPBible.org based on work at Tyndale
+  House Cambridge, licensed under a Creative Commons Attribution 4.0
+  International (CC BY 4.0) license; the SBLGNT is © 2010 Society of Biblical
+  Literature and Logos Bible Software, CC BY 4.0. Concord keeps the SBL-edition
+  words from STEPBible's amalgamated text and loads them as the SBLGNT
+  translation (data/translations/SBLGNT.json, committed and shipped); the raw
+  TAGNT files are re-derivable and not committed (gitignored + dockerignored
+  data/original/). STEPBible asks that others refer to github.com/STEPBible as
+  the canonical source. See data/SOURCES.md.
+
+--------------------------------------------------------------------------------
 Translator's notes — capability (SPEC v4), parser, and the NET data
 --------------------------------------------------------------------------------
 Concord can store and serve translator's notes, but it redistributes NONE of the

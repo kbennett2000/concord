@@ -1,8 +1,8 @@
 # Data Sources & Attribution
 
-Provenance and licensing for the data committed to this repo. The committed
-translations are public domain; the cross-reference dataset is included under its own
-license with attribution.
+Provenance and licensing for the data committed to this repo. The committed English
+translations are public domain; the cross-reference, geography, topical, and
+original-language datasets are included under their own licenses with attribution.
 
 **Source PDFs are not in this repo.** The JSON in `data/translations/` was derived from
 source editions; those source files are archived separately. This file records *where
@@ -19,7 +19,8 @@ public record.
 
 One row per committed translation. Source-edition detail below is drawn from each file's
 JSON `copyright` metadata; all are freely redistributable (public domain, except BSB,
-whose publisher dedicates the text to free use/redistribution).
+whose publisher dedicates the text to free use/redistribution, and SBLGNT, CC BY 4.0 —
+see [Original-language texts](#original-language-texts-datatranslationssblgntjson) below).
 
 | ID | Full name | Source edition / origin | Notes |
 |---|---|---|---|
@@ -36,6 +37,7 @@ whose publisher dedicates the text to free use/redistribution).
 | WBT | Webster's Bible Translation | 1833 | Public domain |
 | WEB | World English Bible | Standard public-domain text | Public domain |
 | YLT | Young's Literal Translation | 1898 | Public domain |
+| SBLGNT | SBL Greek New Testament | STEPBible TAGNT (SBL edition word-selection) | **CC BY 4.0** — see below |
 
 > The `attribution` column in the `translations` table is populated from this record
 > (or the translation JSON metadata) during the loader slice.
@@ -87,6 +89,28 @@ extracts **verse-level** references only (chapter-only and unresolvable refs are
 into the committed `data/topics/naves.json`, which the loader (`bible_core.topics`) bakes into the
 `topics` + `topic_verses` tables. The **raw CSV is re-derivable and not committed**; the derived
 JSON is committed and ships. The attribution line **must appear in the README**.
+
+## Original-language texts (`data/translations/SBLGNT.json`)
+
+| Field | Value |
+|---|---|
+| File | `data/translations/SBLGNT.json` — the Greek NT loaded as an ordinary translation, derived by [scripts/convert_step_tagnt.py](../scripts/convert_step_tagnt.py) |
+| Source | STEPBible-Data — `TAGNT` (Translators Amalgamated Greek NT) — <https://github.com/STEPBible/STEPBible-Data> |
+| License | Creative Commons Attribution 4.0 International (CC BY 4.0) |
+| Attribution | **Greek New Testament data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge, licensed CC BY 4.0; the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software, CC BY 4.0.** |
+
+The original-language word-study feature (SPEC v6) loads the Greek NT as a translation so it
+reads through the existing `/v1/verses` and `/v1/translations` machinery. STEPBible's TAGNT is an
+*amalgamated* text marking, per word, which printed editions contain it; the parser keeps only the
+**SBL edition** words (so e.g. the Textus-Receptus-only αὐτοῦ in John 3:16 is dropped and the
+TR/Byz-only John 5:4 is absent) and joins them, NFC-normalized, into verse text. This is the SBL
+*word selection* with STEPBible's (NA-based) spelling, not a byte-faithful reproduction of the
+printed SBLGNT — the `copyright` metadata says so. NRSV versification (NT chapter counts are
+standard, so it loads beside the English Bibles). The **raw `TAGNT` files are re-derivable and not
+committed** — they live under the gitignored + dockerignored `data/original/`; only the derived
+`SBLGNT.json` is committed and ships. STEPBible asks that others refer to github.com/STEPBible as
+the canonical source, which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
+The lexicon (`strongs_entries`) and tagged tokens (`word_tokens`) land in later v5 slices.
 
 ## Translator's notes (`data/private/notes/`) — NOT committed
 

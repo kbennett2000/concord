@@ -39,3 +39,7 @@ Thumbs.db
 
 # Claude Code local settings (shared .claude/ settings stay tracked)
 .claude/settings.local.json
+
+# Raw original-language source files (STEPBible TAGNT/TAHOT/lexicons) — re-derivable,
+# large, not committed; the parsers under scripts/ emit the committed derived JSON.
+data/original/

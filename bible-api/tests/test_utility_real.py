@@ -35,7 +35,7 @@ def test_utility_endpoints_against_real_db(tmp_path: Path) -> None:
             assert book["chapter_count"] == max_chapters[book["id"]]
 
         translations = client.get("/v1/translations").json()["translations"]
-        assert len(translations) == 13  # the committed PD translations
+        assert len(translations) == 14  # 13 PD English + the Greek SBLGNT (CC BY, STEPBible)
         assert all(t["attribution"] for t in translations)
 
         ot_verse = client.get("/v1/random", params={"testament": "OT"}).json()["verse"]
