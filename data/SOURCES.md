@@ -38,6 +38,7 @@ see [Original-language texts](#original-language-texts-datatranslationssblgntjso
 | WEB | World English Bible | Standard public-domain text | Public domain |
 | YLT | Young's Literal Translation | 1898 | Public domain |
 | SBLGNT | SBL Greek New Testament | STEPBible TAGNT (SBL edition word-selection) | **CC BY 4.0** — see below |
+| OSHB | Open Scriptures Hebrew Bible | STEPBible TAHOT (Hebrew OT, RTL) | **CC BY 4.0** — see below |
 
 > The `attribution` column in the `translations` table is populated from this record
 > (or the translation JSON metadata) during the loader slice.
@@ -90,46 +91,60 @@ into the committed `data/topics/naves.json`, which the loader (`bible_core.topic
 `topics` + `topic_verses` tables. The **raw CSV is re-derivable and not committed**; the derived
 JSON is committed and ships. The attribution line **must appear in the README**.
 
-## Original-language texts (`data/translations/SBLGNT.json`)
+## Original-language texts (`data/translations/SBLGNT.json`, `OSHB.json`)
 
 | Field | Value |
 |---|---|
-| File | `data/translations/SBLGNT.json` — the Greek NT loaded as an ordinary translation, derived by [scripts/convert_step_tagnt.py](../scripts/convert_step_tagnt.py) |
-| Source | STEPBible-Data — `TAGNT` (Translators Amalgamated Greek NT) — <https://github.com/STEPBible/STEPBible-Data> |
+| Files | `data/translations/SBLGNT.json` (Greek NT) via [scripts/convert_step_tagnt.py](../scripts/convert_step_tagnt.py); `data/translations/OSHB.json` (Hebrew OT, RTL) via [scripts/convert_step_tahot.py](../scripts/convert_step_tahot.py) |
+| Source | STEPBible-Data — `TAGNT` (Translators Amalgamated Greek NT) + `TAHOT` (Translators Amalgamated Hebrew OT) — <https://github.com/STEPBible/STEPBible-Data> |
 | License | Creative Commons Attribution 4.0 International (CC BY 4.0) |
-| Attribution | **Greek New Testament data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge, licensed CC BY 4.0; the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software, CC BY 4.0.** |
+| Attribution | **Greek/Hebrew text data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge, licensed CC BY 4.0; the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software, CC BY 4.0; the Hebrew is from the OpenScriptures/WLC tradition.** |
 
-The original-language word-study feature (SPEC v6) loads the Greek NT as a translation so it
-reads through the existing `/v1/verses` and `/v1/translations` machinery. STEPBible's TAGNT is an
-*amalgamated* text marking, per word, which printed editions contain it; the parser keeps only the
-**SBL edition** words (so e.g. the Textus-Receptus-only αὐτοῦ in John 3:16 is dropped and the
-TR/Byz-only John 5:4 is absent) and joins them, NFC-normalized, into verse text. This is the SBL
-*word selection* with STEPBible's (NA-based) spelling, not a byte-faithful reproduction of the
-printed SBLGNT — the `copyright` metadata says so. NRSV versification (NT chapter counts are
-standard, so it loads beside the English Bibles). The **raw `TAGNT` files are re-derivable and not
-committed** — they live under the gitignored + dockerignored `data/original/`; only the derived
-`SBLGNT.json` is committed and ships. STEPBible asks that others refer to github.com/STEPBible as
-the canonical source, which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
+The original-language word-study feature (SPEC v6) loads each original-language text as a
+translation so it reads through the existing `/v1/verses` and `/v1/translations` machinery.
+
+**Greek (SBLGNT).** STEPBible's TAGNT is an *amalgamated* text marking, per word, which printed
+editions contain it; the parser keeps only the **SBL edition** words (so e.g. the
+Textus-Receptus-only αὐτοῦ in John 3:16 is dropped and the TR/Byz-only John 5:4 is absent) and
+joins them, NFC-normalized, into verse text. This is the SBL *word selection* with STEPBible's
+(NA-based) spelling, not a byte-faithful reproduction of the printed SBLGNT. NRSV versification
+(NT chapter counts are standard, so it loads beside the English Bibles).
+
+**Hebrew (OSHB).** TAHOT references the OT in **English/NRSV versification** (the Masoretic ref
+trails in brackets); the parser reads the English primary reference, so OSHB's chapter/verse numbers
+match the English Bibles (Malachi 4 chapters, Joel 3) and `?text=OSHB` queries use the same numbers
+as every other endpoint — no cross-scheme mapping (a deliberate non-goal). Loaded `direction="rtl"`,
+`language="hbo"`. Hebrew words keep their pointing and cantillation (STEPBible's `/` morpheme and
+`\` punctuation separators are removed); compound words stay whole. Psalm titles (English verse 0)
+and the occasional empty/variant word are skipped. The Hebrew text descends from the Westminster
+Leningrad Codex via OpenScriptures, corrected by Tyndale scholars.
+
+The **raw `TAGNT`/`TAHOT` files are re-derivable and not committed** — they live under the
+gitignored + dockerignored `data/original/`; only the derived `SBLGNT.json`/`OSHB.json` are
+committed and ship. STEPBible asks that others refer to github.com/STEPBible as the canonical
+source, which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
 
 ## Strong's lexicon & tagged tokens (`data/strongs/`)
 
 | Field | Value |
 |---|---|
-| Files | `lexicon.json` (Strong's number → lemma, transliteration, gloss, definition) from `TBESG`, derived by [scripts/convert_strongs_lexicon.py](../scripts/convert_strongs_lexicon.py); `tokens-sblgnt.json` (every SBLGNT word → position, surface form, Strong's, morph) from `TAGNT`, derived by [scripts/convert_step_tagnt.py](../scripts/convert_step_tagnt.py) |
-| Source | STEPBible-Data — `TBESG` (Translators Brief lexicon of Extended Strongs for Greek) and `TAGNT` (Translators Amalgamated Greek NT) — <https://github.com/STEPBible/STEPBible-Data> |
+| Files | Lexicons: `lexicon.json` (Greek) from `TBESG`, `lexicon-hebrew.json` (Hebrew) from `TBESH`, both via [scripts/convert_strongs_lexicon.py](../scripts/convert_strongs_lexicon.py). Tokens: `tokens-sblgnt.json` from `TAGNT` (via convert_step_tagnt.py), `tokens-oshb.json` from `TAHOT` (via convert_step_tahot.py) |
+| Source | STEPBible-Data — `TBESG`/`TBESH` (Brief lexicons of Extended Strongs for Greek/Hebrew) and `TAGNT`/`TAHOT` (Amalgamated Greek NT / Hebrew OT) — <https://github.com/STEPBible/STEPBible-Data> |
 | License | Creative Commons Attribution 4.0 International (CC BY 4.0) |
-| Attribution | **Lexicon & tagging data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge (the Brief lexicon draws on Abbott-Smith), licensed CC BY 4.0. The underlying Strong's numbering (1890) is public domain.** |
+| Attribution | **Lexicon & tagging data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge (the Brief lexicons draw on Abbott-Smith for Greek and BDB for Hebrew), licensed CC BY 4.0. The underlying Strong's numbering (1890) is public domain.** |
 
-The word-study feature (SPEC v6) loads the Greek Strong's lexicon into the additive
+The word-study feature (SPEC v6) loads the Greek and Hebrew Strong's lexicons into the additive
 `strongs_entries` table, served by `/v1/strongs` and `/v1/strongs/{id}`. Each entry is keyed on the
-**collapsed-base** Extended Strong's number (`G0026` → `G26`); where TBESG splits a number into
-disambiguated senses (`G0001G`, `G0001H`), the first/primary sense is kept (later slices may expose
-the splits). The HTML in the definition column is stripped to plain text.
+**collapsed-base** Extended Strong's number (`G0026` → `G26`; the Hebrew BDB sub-meaning suffix is
+dropped too, `H1254a` → `H1254`); where a number splits into disambiguated senses, the first/primary
+sense is kept (later slices may expose the splits). The HTML in the definition column is stripped to
+plain text. Greek `G`-ids and Hebrew `H`-ids don't collide, so the two lexicon files coexist.
 
-The **tagged tokens** (`word_tokens` table) come from the same `TAGNT` words that form `SBLGNT.json`:
-each kept SBL word becomes a token carrying its 1-based position, surface form, collapsed Strong's
-number (same base as the lexicon, so the two join), and morphology code. The token loader reads the
-`tokens-*.json` files; the lexicon loader reads the other `*.json` files in this directory.
+The **tagged tokens** (`word_tokens` table) come from the same `TAGNT`/`TAHOT` words that form
+`SBLGNT.json`/`OSHB.json`: each word becomes a token carrying its position, surface form, the
+collapsed-base **root** Strong's number (same base as the lexicon, so the two join), and the
+morphology code. The token loader reads the `tokens-*.json` files; the lexicon loader reads the
+other `*.json` files in this directory.
 
 The **raw `TBESG`/`TAGNT` files are re-derivable and not committed** — they live under the gitignored
 + dockerignored `data/original/`; only the derived `lexicon.json` and `tokens-sblgnt.json` are

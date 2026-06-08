@@ -50,8 +50,9 @@ Concord itself is for the builders.
 Maybe. Honestly.
 
 The hardest part of building software is usually the data — getting it, cleaning it,
-organizing it. Concord hands you 13 English Bible translations plus the SBL Greek New
-Testament, fully aligned, ready to query, in a single tiny request. The "hard part" is
+organizing it. Concord hands you 13 English Bible translations plus the original-language
+texts — the SBL Greek New Testament and the Hebrew Old Testament — fully aligned, ready to
+query, in a single tiny request. The "hard part" is
 already done.
 
 What's left is just *asking it questions* and *showing the answers*. Both of those are more
@@ -203,16 +204,23 @@ curl 'localhost:8000/v1/strongs?q=love&language=grc'   # ἀγαπάω (G25), �
 curl 'localhost:8000/v1/strongs/G26'                   # ἀγάπη — "love", with full definition
 ```
 
-And the link runs **both ways**, over the **SBL Greek New Testament** (loaded as a translation,
-`?translation=SBLGNT`): ask a Strong's number for every verse it appears in, or ask a verse for its
-tagged Greek words — each with its lemma, morphology, and gloss.
+And the link runs **both ways**, over the **SBL Greek New Testament** and the **Hebrew Old
+Testament** (each loaded as a translation — `?translation=SBLGNT` / `?translation=OSHB`): ask a
+Strong's number for every verse it appears in, or ask a verse for its tagged original-language words
+— each with its lemma, morphology, and gloss. Greek (`G…`) and Hebrew (`H…`) share one lexicon.
 
 ```bash
 curl 'localhost:8000/v1/strongs/G26/verses'            # every verse with ἀγάπη — a concordance
 curl 'localhost:8000/v1/verses/John+3:16/words'        # the tagged Greek tokens of John 3:16
+curl 'localhost:8000/v1/strongs/H430/verses'           # every verse with אֱלֹהִים ("God")
+curl 'localhost:8000/v1/verses/Genesis+1:1/words'      # the tagged Hebrew tokens of Genesis 1:1
 ```
 
-Aligning each English word to its underlying Greek token is deliberately out of scope.
+The right text is chosen automatically — Hebrew (`OSHB`) for an `H…` id or an OT reference, Greek
+(`SBLGNT`) for a `G…` id or an NT reference — and `?text=` overrides it. The Hebrew OT uses
+English/NRSV verse numbers (so it lines up with the English Bibles) and is served right-to-left
+(`direction: "rtl"` in `/v1/translations`). Aligning each English word to its underlying
+Greek/Hebrew token is deliberately out of scope.
 
 ## Configuration
 
@@ -342,9 +350,10 @@ and the checklist for public exposure are in [`docs/SECURITY.md`](docs/SECURITY.
 ## The data
 
 Concord bundles **13 public-domain English translations** (KJV, WEB, ASV, YLT, BSB, and others
-— see `GET /v1/translations` for the full list), each with its own public-domain notice, plus
-the **SBL Greek New Testament** as a queryable original-language text (`?translation=SBLGNT`).
-Full provenance is in [`data/SOURCES.md`](data/SOURCES.md).
+— see `GET /v1/translations` for the full list), each with its own public-domain notice, plus the
+original-language texts — the **SBL Greek New Testament** (`?translation=SBLGNT`) and the **Hebrew
+Old Testament** (`?translation=OSHB`, right-to-left). Full provenance is in
+[`data/SOURCES.md`](data/SOURCES.md).
 
 Cross-references come from the OpenBible.info dataset (344,799 of them):
 
@@ -360,10 +369,12 @@ via a machine-readable compilation (5,319 topics):
 
 > Topical data from Nave's Topical Bible (public domain; 1897), via [BradyStephenson/bible-data](https://github.com/BradyStephenson/bible-data), licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.
 
-The Greek New Testament (`SBLGNT`) is derived from STEPBible's Translators Amalgamated Greek NT
-(7,917 verses, the SBL-edition word selection):
+The original-language texts and the Strong's lexicons come from STEPBible — the Greek NT (`SBLGNT`,
+7,917 verses, the SBL-edition word selection) from the Amalgamated Greek NT, and the Hebrew OT
+(`OSHB`, 23,145 verses) from the Amalgamated Hebrew OT (Westminster Leningrad Codex tradition,
+loaded under English/NRSV verse numbers, right-to-left):
 
-> Greek New Testament data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge, licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license; the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software, CC BY 4.0.
+> Original-language and lexicon data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge, licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license; the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software, CC BY 4.0.
 
 Some translations aren't public-domain and can't be redistributed. Concord supports them
 through a gitignored `data/private/` directory: drop a non-distributable translation's JSON
@@ -435,12 +446,14 @@ The `/v1` prefix means today's responses are a contract. Build against them with
 - **Code:** MIT © 2026 Kris Bennett — see [`LICENSE`](LICENSE).
 - **Bundled translations:** the 13 English translations are public domain — see
   [`data/SOURCES.md`](data/SOURCES.md).
-- **Greek New Testament (SBLGNT):** [STEPBible-Data](https://github.com/STEPBible/STEPBible-Data)
+- **Original-language texts (SBLGNT, OSHB):** [STEPBible-Data](https://github.com/STEPBible/STEPBible-Data)
   (Tyndale House Cambridge), licensed under Creative Commons Attribution 4.0 International
-  (CC BY 4.0); the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software.
-- **Strong's lexicon (Greek):** [STEPBible-Data](https://github.com/STEPBible/STEPBible-Data)
-  (Tyndale House Cambridge; the Brief lexicon draws on Abbott-Smith), licensed under Creative
-  Commons Attribution 4.0 International (CC BY 4.0). The Strong's numbering (1890) is public domain.
+  (CC BY 4.0); the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software; the
+  Hebrew descends from the OpenScriptures / Westminster Leningrad Codex text.
+- **Strong's lexicons (Greek + Hebrew):** [STEPBible-Data](https://github.com/STEPBible/STEPBible-Data)
+  (Tyndale House Cambridge; the Brief lexicons draw on Abbott-Smith for Greek and BDB for Hebrew),
+  licensed under Creative Commons Attribution 4.0 International (CC BY 4.0). The Strong's numbering
+  (1890) is public domain.
 - **Cross-references:** [OpenBible.info](https://www.openbible.info/labs/cross-references/),
   licensed under Creative Commons Attribution (CC BY).
 - **Place data:** [OpenBible.info Bible-Geocoding-Data](https://github.com/openbibleinfo/Bible-Geocoding-Data),

@@ -85,9 +85,10 @@ def test_star_searches_all_loaded(client: TestClient) -> None:
     body = client.get(
         "/v1/search", params={"q": "gen", "translations": "*", "book": "genesis"}
     ).json()
-    # sorted, all loaded — incl. the Greek SBLGNT, which has no Genesis verse so it carries no
-    # match for this hit (a translation lacking the verse is simply absent from `matches`).
-    assert body["translations"] == ["KJV", "SBLGNT", "WEB", "YLT"]
+    # sorted, all loaded — incl. the Greek SBLGNT and Hebrew OSHB, which have no English Genesis
+    # verse so they carry no match for this hit (a translation lacking the verse is absent from
+    # `matches`).
+    assert body["translations"] == ["KJV", "OSHB", "SBLGNT", "WEB", "YLT"]
     assert set(body["hits"][0]["matches"].keys()) == {"KJV", "WEB", "YLT"}
 
 

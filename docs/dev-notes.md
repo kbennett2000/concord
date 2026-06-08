@@ -1539,3 +1539,48 @@ completeness* — this milestone is **v6**.
   `?include_text=false` → null text; `/v1/verses/John 3:16/words` → 25 tokens (ἠγάπησεν → G25, gloss
   "to love"); `/v1/verses/Genesis 1:1/words` → 200 empty; unknown id → 404; bad ref → 400.
   `make check` green; `docs/openapi.json` regenerated (two new paths).
+
+### Slice V6-S5 — the Hebrew OT (ADR-0007) — completes v6
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v6-s5-hebrew-ot`).
+- **Why:** extend word study to the OT — load the Hebrew OT (**OSHB**, from STEPBible's **TAHOT**) as
+  an RTL translation with tagged tokens, plus the Hebrew Strong's lexicon (**TBESH**). Final v6 slice.
+- **Key finding (reshaped the slice):** TAHOT references the OT in **English/NRSV versification**
+  (the Masoretic ref trails in brackets, e.g. `Mal.4.6(3.24)#10=L`). Parsing the **English** primary
+  ref makes OSHB's chapter counts match the English Bibles (Malachi 4, Joel 3) → the
+  `_update_chapter_counts` versification-grouping relaxation that ADR-0007 earmarked for S5 turned out
+  **unnecessary** (it assumed MT numbering). The only loader change is reading an optional `direction`
+  for RTL. (User-approved: English/NRSV alignment; commit the derived JSON.)
+- **What landed:**
+  - **parser:** `scripts/convert_step_tahot.py` (new; reuses `load_book_table` from
+    `convert_step_tagnt.py`) reads the 4 TAHOT files → `data/translations/OSHB.json` (39 books,
+    **23,145 verses**, `language="hbo"`, `direction="rtl"`) + `data/strongs/tokens-oshb.json`
+    (**305,102 tokens**). English ref parsed (bracket ignored); **verse-0 Psalm titles skipped**
+    (478); surface = col1 with `/`+`\` separators removed, NFC; `strongs_id` = collapsed-base **root**
+    dStrong (col8, `H0853_A`→`H853`); `morph_code` = the root element of the grammar column. Compound
+    words stay whole-word (prefix/suffix sub-tokens deferred). Deterministic.
+  - **lexicon:** `convert_strongs_lexicon.py` gained `--language`/`--output`; TBESH (same columns as
+    TBESG) → `data/strongs/lexicon-hebrew.json` (**8,723 entries**, `hbo`). The eStrong collapse now
+    drops a trailing BDB suffix letter (`H1254a`→`H1254`) so Hebrew tokens join the lexicon; Greek
+    ids are bare so `lexicon.json` re-generates **byte-identical**.
+  - **loader:** `parse_translation_file` reads an optional `direction` (∈ `{ltr,rtl}`, default `ltr`);
+    **no `_update_chapter_counts` change**. OSHB tokens/lexicon load through the existing
+    `tokens_dir`/`lexicon_dir` (both already glob `data/strongs/`). H- and G-ids don't collide.
+  - **api:** `direction` added to `TranslationMeta` + `get_translations` + the `Translation` schema +
+    `/v1/translations`. No new endpoints. **Smart `?text=` defaulting** (a small enhancement beyond
+    the S4 `SBLGNT`-only default, so the OT works without a param): `/v1/strongs/{id}/verses` defaults
+    the text by the id's language (`H…` → OSHB, else SBLGNT); `/v1/verses/{ref}/words` defaults by the
+    reference's testament (OT → OSHB, NT → SBLGNT). An explicit `?text=` overrides.
+  - **loaderkit:** `translation(...)` gained optional `direction`/`versification` kwargs.
+- **Tests:** `test_ol_translation_loads.py` (a Hebrew `rtl` translation loads; `direction` read +
+  persisted; default `ltr`; invalid direction rejected; the chapter-count lock still enforced);
+  `test_loader_real.py` gains `test_real_build_loads_the_hebrew_ot` (OSHB rtl/hbo; Malachi 4 / Joel 3
+  chapters; Genesis 1:1 Hebrew; H430 = אֱלֹהִים "God"; H430→Gen 1:1; Gen 1:1 → 7 tokens with root
+  lemma/gloss). Translation-count assertions **14→15** (`test_loader_real`, `test_utility_real`);
+  `test_translations_endpoint` asserts the `direction` field.
+- **Acceptance (OT):** `/v1/strongs/H430` → אֱלֹהִים "God"; `/v1/strongs/H430/verses` → occurrences;
+  `/v1/verses/Genesis 1:1/words?text=OSHB` → tagged Hebrew tokens. ✔
+- **Live check:** full real build → **19 translations** (13 Eng + SBLGNT + OSHB + 4 local private),
+  **19,569 Strong's entries**, **442,223 word tokens**, no chapter-count conflict. `make check` green;
+  `docs/openapi.json` regenerated (`Translation` gains `direction`). **v6 complete.**
+- **Data size:** `OSHB.json` ~7.4 MB, `tokens-oshb.json` ~59 MB, `lexicon-hebrew.json` ~3 MB —
+  committed derived JSON (raw TAHOT/TBESH stay in the gitignored/dockerignored `data/original/`).

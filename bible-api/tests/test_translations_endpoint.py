@@ -12,15 +12,18 @@ def test_shape_and_order(client: TestClient) -> None:
     body = client.get("/v1/translations").json()
     assert list(body.keys()) == ["translations"]
     translations = body["translations"]
-    # ordered by id; SBLGNT is the Greek NT the word-study endpoints tag
-    assert [t["id"] for t in translations] == ["KJV", "SBLGNT", "WEB", "YLT"]
+    # ordered by id; SBLGNT (Greek NT) + OSHB (Hebrew OT) are the word-study original-language texts
+    assert [t["id"] for t in translations] == ["KJV", "OSHB", "SBLGNT", "WEB", "YLT"]
+    assert {t["id"]: t["direction"] for t in translations}["OSHB"] == "rtl"
     assert list(translations[0].keys()) == [
         "id",
         "name",
         "language",
+        "direction",
         "versification",
         "attribution",
     ]
+    assert all(t["direction"] in ("ltr", "rtl") for t in translations)
 
 
 def test_metadata(client: TestClient) -> None:

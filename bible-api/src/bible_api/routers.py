@@ -603,6 +603,7 @@ def translations_endpoint(request: Request, conn: Conn) -> Response:
             id=t.id,
             name=t.name,
             language=t.language,
+            direction=t.direction,
             versification=t.versification,
             attribution=t.attribution,
         )
@@ -899,8 +900,12 @@ def verse_topics_endpoint(
 
 # --- Strong's lexicon (mirrors the topical-Bible endpoints) --------------------------
 
-# The default tagged original-language text for the concordance + per-verse word endpoints.
-DEFAULT_WORD_TEXT = "SBLGNT"
+# The default tagged original-language text per language: the Greek NT for the NT, the Hebrew OT for
+# the OT. The concordance picks by the Strong's id's letter (H… → Hebrew); the per-verse endpoint
+# picks by the reference's testament. An explicit ?text= always overrides.
+DEFAULT_GREEK_TEXT = "SBLGNT"
+DEFAULT_HEBREW_TEXT = "OSHB"
+DEFAULT_WORD_TEXT = DEFAULT_GREEK_TEXT
 
 # A path id like "g0026" → "G26": upper-case the letter and drop leading zeros so it matches the
 # collapsed-base ids in the lexicon. Anything that isn't a Strong's number is just upper-cased and
@@ -978,9 +983,11 @@ def strongs_verses_endpoint(
     if get_strongs(conn, normalized) is None:
         raise UnknownStrongsError(strongs_id)
 
-    # `text` is the tagged text searched (default SBLGNT); `translation` hydrates the verse text
-    # (default the API default). Both validate via resolve_translation → 404 on an unknown id.
-    text_id = resolve_translation(request, text or DEFAULT_WORD_TEXT)
+    # `text` is the tagged text searched; it defaults by the id's language (H… → Hebrew OT, else
+    # Greek NT) so `/strongs/H430/verses` finds its OT occurrences without an explicit ?text=.
+    # `translation` hydrates the verse text (the API default). Both validate (404 on unknown id).
+    default_text = DEFAULT_HEBREW_TEXT if normalized.startswith("H") else DEFAULT_GREEK_TEXT
+    text_id = resolve_translation(request, text or default_text)
     translation_id = resolve_translation(request, translation) if include_text else None
     rows, total = get_strongs_verses(conn, normalized, text_id, limit, offset)
     verses = [
@@ -1017,11 +1024,19 @@ def verse_words_endpoint(
     conn: Conn,
     text: str | None = None,
 ) -> Response:
-    # `text` selects the original-language text (default SBLGNT); unknown → 404. parse_reference
-    # raises ParseError (400) / UnknownBookError (404), already wired. A valid ref with no tokens
-    # (e.g. an OT verse for the NT-only SBLGNT) returns 200 with an empty list.
-    text_id = resolve_translation(request, text or DEFAULT_WORD_TEXT)
+    # parse_reference raises ParseError (400) / UnknownBookError (404), already wired.
     reference = parse_reference(ref, SqliteBookResolver(conn))
+    # `text` selects the original-language text; it defaults by the reference's testament (OT → the
+    # Hebrew OT, NT → the Greek NT) so `/verses/Genesis 1:1/words` finds Hebrew tokens with no
+    # ?text=. An explicit ?text= overrides; unknown → 404. A valid ref with no tokens → 200 empty.
+    if text and text.strip():
+        text_id = resolve_translation(request, text)
+    else:
+        row = conn.execute(
+            "SELECT testament FROM books WHERE id = ?", (reference.book_id,)
+        ).fetchone()
+        default_text = DEFAULT_HEBREW_TEXT if row and row[0] == "OT" else DEFAULT_GREEK_TEXT
+        text_id = resolve_translation(request, default_text)
     tokens = get_words_for_reference(conn, reference, text_id)
     response = VerseWordsResponse(
         reference=reference.echo,

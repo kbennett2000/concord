@@ -90,14 +90,18 @@ The original-language *text* itself is served by the existing `/v1/verses` and `
   tokens: surface form, collapsed Strong's, morph); `get_strongs_verses` (Strong's→verses) and
   `get_words_for_reference` (verse→tokens, lexicon gloss joined) tested in `bible-core`. No new
   endpoints — those are S4.
-- **V6-S4 — the two remaining endpoints. ✅ (this slice)** `GET /v1/strongs/{id}/verses` (the
-  concordance, with `?text=`/`?translation=`/`include_text` hydration) + `GET /v1/verses/{ref}/words`
-  (the tagged tokens, lexicon gloss joined). API-only — the queries shipped in S3. Acceptance ② & ③.
-  **This completes the Greek word-study cut (S1–S4).**
-- **V6-S5 — Hebrew OT.** `TAHOT` → `OSHB.json` + tokens; `TBESH` → lexicon. Relax
-  `_update_chapter_counts` to group by `translations.versification` (Hebrew chapter counts differ
-  — Joel 4≠3, Malachi 3≠4); add `direction` (rtl) to the translation JSON format + loader +
-  `/v1/translations`.
+- **V6-S4 — the two remaining endpoints. ✅** `GET /v1/strongs/{id}/verses` (the concordance, with
+  `?text=`/`?translation=`/`include_text` hydration) + `GET /v1/verses/{ref}/words` (the tagged
+  tokens, lexicon gloss joined). API-only — the queries shipped in S3. Acceptance ② & ③. Completes
+  the Greek word-study cut (S1–S4).
+- **V6-S5 — Hebrew OT. ✅ (this slice — completes v6)** `TAHOT` → `OSHB.json` (23,145 verses) +
+  `tokens-oshb.json` (305,102 tokens); `TBESH` → `lexicon-hebrew.json` (8,723 entries). **Key
+  finding:** TAHOT references the OT in **English/NRSV versification** (Masoretic in brackets), so
+  parsing the English ref makes OSHB's chapter counts match the English Bibles (Malachi 4, Joel 3) —
+  **no `_update_chapter_counts` relaxation was needed** (the original plan's assumption of MT
+  versification didn't hold). The only loader change: read an optional `direction` from the
+  translation JSON (Hebrew is `rtl`) and expose it on `/v1/translations`. Word study (`/v1/strongs/*`,
+  `/v1/verses/{ref}/words?text=OSHB`) now spans OT + NT.
 
 ## 6. Out of scope (held)
 

@@ -136,6 +136,18 @@ def test_strongs_verses_bad_text_404(client: TestClient) -> None:
     assert client.get("/v1/strongs/G26/verses", params={"text": "NOPE"}).status_code == 404
 
 
+def test_strongs_verses_hebrew_default_text(client: TestClient) -> None:
+    # A Hebrew id (H…) defaults to the Hebrew text (OSHB); H430 occurs in GEN 1:1 + 1:2.
+    body = client.get("/v1/strongs/H430/verses").json()
+    assert body["text_id"] == "OSHB"
+    assert [(v["book"], v["chapter"], v["verse"]) for v in body["verses"]] == [
+        ("GEN", 1, 1),
+        ("GEN", 1, 2),
+    ]
+    # Forcing the Greek text finds nothing (H430 is not in the Greek NT).
+    assert client.get("/v1/strongs/H430/verses", params={"text": "SBLGNT"}).json()["total"] == 0
+
+
 # --- /v1/verses/{ref}/words (the tagged tokens) --------------------------------------
 
 
@@ -153,8 +165,19 @@ def test_verse_words_order_and_lexicon_join(client: TestClient) -> None:
 
 
 def test_verse_words_empty_when_no_tokens(client: TestClient) -> None:
-    body = client.get("/v1/verses/Genesis 1:1/words").json()
+    # John 4:1 (NT → defaults to SBLGNT) has no seeded tokens → 200 empty (not an error).
+    body = client.get("/v1/verses/John 4:1/words").json()
     assert (body["total"], body["tokens"]) == (0, [])
+
+
+def test_verse_words_default_text_by_testament(client: TestClient) -> None:
+    # An OT reference defaults to the Hebrew text (OSHB) with no explicit ?text=.
+    body = client.get("/v1/verses/Genesis 1:1/words").json()
+    assert body["text_id"] == "OSHB"
+    elohim = next(t for t in body["tokens"] if t["strongs_id"] == "H430")
+    assert elohim["gloss"] == "God"
+    # An NT reference defaults to the Greek text (SBLGNT).
+    assert client.get("/v1/verses/John 3:16/words").json()["text_id"] == "SBLGNT"
 
 
 def test_verse_words_bad_reference_400(client: TestClient) -> None:

@@ -47,6 +47,14 @@ def build_corpus(path: Path) -> None:
         "VALUES (?, ?, ?, ?, ?, ?)",
         ("SBLGNT", "SBL Greek New Testament", "grc", "ltr", "standard", "CC BY 4.0, STEPBible."),
     )
+    # The Hebrew OT, the original-language text the word-study endpoints tag for OT verses (id
+    # "OSHB", grc→hbo, RTL). Like SBLGNT it carries no synthetic verses; it must be a loaded
+    # translation so testament/id-based ?text= defaulting (OT → OSHB) resolves.
+    conn.execute(
+        "INSERT INTO translations (id, name, language, direction, versification, attribution) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("OSHB", "Open Scriptures Hebrew Bible", "hbo", "rtl", "standard", "CC BY 4.0, STEPBible."),
+    )
 
     rows: list[tuple[str, str, int, int, str]] = []
 
@@ -279,6 +287,11 @@ def build_corpus(path: Path) -> None:
         ("SBLGNT", "JHN", 3, 16, 3, "γὰρ", None, None),
         ("SBLGNT", "JHN", 4, 7, 1, "ἀγάπη", "G26", "N-NSF"),
         ("SBLGNT", "JHN", 4, 8, 1, "ἀγάπη", "G26", "N-NSF"),
+        # Hebrew tokens (text_id OSHB) for the OT word-study path — H430 (אֱלֹהִים) joins the H430
+        # lexicon entry seeded above and occurs in GEN 1:1 + 1:2 (the Strong's→verses direction).
+        ("OSHB", "GEN", 1, 1, 1, "בְּרֵאשִׁית", "H7225", "Ncfsa"),
+        ("OSHB", "GEN", 1, 1, 3, "אֱלֹהִים", "H430", "Ncmpa"),
+        ("OSHB", "GEN", 1, 2, 1, "אֱלֹהִים", "H430", "Ncmpa"),
     ]
     conn.executemany(
         "INSERT INTO word_tokens "

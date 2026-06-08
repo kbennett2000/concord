@@ -1,8 +1,9 @@
 # Concord API reference
 
 Every endpoint, with real request/response examples. All examples were captured from a
-running instance loaded with the 13 bundled public-domain English translations plus the SBL
-Greek New Testament (`SBLGNT`).
+running instance loaded with the 13 bundled public-domain English translations plus the
+original-language texts — the SBL Greek New Testament (`SBLGNT`) and the Hebrew Old Testament
+(`OSHB`, right-to-left).
 
 - **Base URL:** `http://<host>:<port>` (default `http://localhost:8000`)
 - **Versioning:** data endpoints live under `/v1`. That prefix is a stability contract.
@@ -815,7 +816,7 @@ with an English translation's text.
 | Param | In | Type | Default | Notes |
 |---|---|---|---|---|
 | `id` | path | string | — | A Strong's number (normalized; e.g. `G26`). Unknown → `404 unknown_strongs`. |
-| `text` | query | string | `SBLGNT` | The tagged original-language text to search. Unknown → `404`. |
+| `text` | query | string | by id | The tagged text to search. Defaults by the id's language — `OSHB` for `H…`, `SBLGNT` for `G…`. Unknown → `404`. |
 | `translation` | query | string | default translation | Hydrates each verse's text; used only when `include_text=true`. |
 | `include_text` | query | bool | `true` | When `false`, `text` is null and `translation` is echoed as null. |
 | `limit` | query | int | `50` | 1–200. |
@@ -849,7 +850,7 @@ the lexicon.
 | Param | In | Type | Default | Notes |
 |---|---|---|---|---|
 | `ref` | path | string | — | A reference per the [grammar](#reference-grammar) (URL-encode spaces). |
-| `text` | query | string | `SBLGNT` | The tagged original-language text. Unknown → `404`. |
+| `text` | query | string | by testament | The tagged text. Defaults by the reference's testament — `OSHB` for OT, `SBLGNT` for NT. Unknown → `404`. |
 
 ```bash
 $ curl -s 'localhost:8000/v1/verses/John%203:16/words'
@@ -931,13 +932,17 @@ $ curl -s 'localhost:8000/v1/translations'
 {
   "translations": [
     { "id": "AKJV", "name": "American King James Version", "language": "en",
-      "versification": "standard", "attribution": "The American King James Version is in the public domain." },
+      "direction": "ltr", "versification": "standard", "attribution": "The American King James Version is in the public domain." },
+    { "id": "OSHB", "name": "Open Scriptures Hebrew Bible", "language": "hbo",
+      "direction": "rtl", "versification": "standard", "attribution": "Hebrew Old Testament … CC BY 4.0 …" },
     ...
   ]
 }
 ```
 
-**Caching:** immutable.
+`direction` is `ltr` for everything except the Hebrew OT (`OSHB`), which is `rtl`. The
+original-language texts (`SBLGNT`, `OSHB`) are ordinary translations — usable as `?translation=` on
+`/v1/verses` and as `?text=` on the word-study endpoints. **Caching:** immutable.
 
 ## `GET /healthz`
 

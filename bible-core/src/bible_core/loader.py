@@ -159,6 +159,12 @@ def parse_translation_file(
     if not code:
         raise LoaderError(f"{path.name}: 'code' is empty.")
 
+    # Optional reading direction (RTL for Hebrew); defaults to ltr when absent. (`raw` is a dict —
+    # the required-field reads above would have raised otherwise.)
+    direction = raw.get("direction", DEFAULT_DIRECTION)
+    if direction not in ("ltr", "rtl"):
+        raise LoaderError(f"{path.name}: 'direction' must be 'ltr' or 'rtl', got {direction!r}.")
+
     rows: list[VerseRow] = []
     heading_rows: list[HeadingRow] = []
     for book_index, book in enumerate(_get_list(raw, "books", path.name)):
@@ -203,7 +209,7 @@ def parse_translation_file(
         id=code,
         name=name,
         language=language,
-        direction=DEFAULT_DIRECTION,
+        direction=direction,
         versification=DEFAULT_VERSIFICATION,
         attribution=attribution,
         verses=rows,

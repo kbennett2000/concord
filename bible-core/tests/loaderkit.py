@@ -48,14 +48,22 @@ def translation(
     name: str = "Test Version",
     language: str = "en",
     attribution: str = "Public domain.",
+    direction: str | None = None,
+    versification: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "code": code,
         "name": name,
         "language": language,
         "copyright": attribution,
         "books": books,
     }
+    # Optional fields are written only when set, so the common case mirrors a minimal file.
+    if direction is not None:
+        payload["direction"] = direction
+    if versification is not None:
+        payload["versification"] = versification
+    return payload
 
 
 def write_translation(
