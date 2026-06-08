@@ -15,8 +15,21 @@ def verse(number: int, text: str) -> dict[str, Any]:
     return {"number": number, "text": text, "is_red_letter": False}
 
 
-def chapter(number: int, verses: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"number": number, "verses": verses, "headings": [], "footnotes": []}
+def heading(before_verse: int, text: str) -> dict[str, Any]:
+    return {"before_verse": before_verse, "text": text}
+
+
+def chapter(
+    number: int,
+    verses: list[dict[str, Any]],
+    headings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "verses": verses,
+        "headings": headings or [],
+        "footnotes": [],
+    }
 
 
 def book(abbreviation: str, order_index: int, chapters: list[dict[str, Any]]) -> dict[str, Any]:

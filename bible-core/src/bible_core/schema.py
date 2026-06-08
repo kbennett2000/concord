@@ -134,6 +134,22 @@ _TABLES: tuple[str, ...] = (
         to_verse_end   INTEGER
     )
     """,
+    # Section headings (additive). A heading anchors a CHAPTER position — it renders BEFORE
+    # `before_verse` — keyed by `translation_id` because headings are translation-specific
+    # (editorial choices differ per translation; one translation may carry none, e.g. BSB).
+    # `ordinal` preserves source array order when a chapter has several. The data already
+    # lives in the translation JSON (`chapters[].headings[]`); the loader bakes it here.
+    """
+    CREATE TABLE IF NOT EXISTS section_headings (
+        id             INTEGER PRIMARY KEY,
+        translation_id TEXT NOT NULL REFERENCES translations (id),
+        book_id        TEXT NOT NULL REFERENCES books (id),
+        chapter        INTEGER NOT NULL,
+        before_verse   INTEGER NOT NULL,
+        text           TEXT NOT NULL,
+        ordinal        INTEGER NOT NULL
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
@@ -145,6 +161,9 @@ _TABLES: tuple[str, ...] = (
     "ON translator_notes (translation_id, book_id, chapter, verse)",
     # A note's cross-references.
     "CREATE INDEX IF NOT EXISTS idx_note_xref_note ON note_cross_references (note_id)",
+    # "all headings for this chapter in this translation" — the chapter-read lookup.
+    "CREATE INDEX IF NOT EXISTS idx_headings_anchor "
+    "ON section_headings (translation_id, book_id, chapter)",
 )
 
 # FTS5 virtual tables, external-content linked to their content table's INTEGER PK.

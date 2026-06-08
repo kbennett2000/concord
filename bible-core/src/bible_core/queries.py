@@ -544,6 +544,40 @@ def get_notes(
 
 
 @dataclass(frozen=True)
+class SectionHeadingRow:
+    """One section heading: the chapter position it precedes (``before_verse``) and its text."""
+
+    book_id: str
+    book_name: str
+    chapter: int
+    before_verse: int
+    text: str
+    ordinal: int
+
+
+def get_section_headings(
+    conn: sqlite3.Connection,
+    translation_id: str,
+    book_id: str,
+    chapter: int,
+) -> tuple[SectionHeadingRow, ...]:
+    """Section headings for a chapter in a translation, ordered before_verse → ordinal → id.
+
+    Unpaginated — a chapter's headings are bounded (mirrors ``get_notes``). A translation with no
+    headings for the chapter (e.g. BSB) simply returns ``()`` — the caller serves that as an empty
+    list (200), never a 404.
+    """
+    sql = (
+        "SELECT h.book_id, b.name, h.chapter, h.before_verse, h.text, h.ordinal "
+        "FROM section_headings h JOIN books b ON b.id = h.book_id "
+        "WHERE h.translation_id = ? AND h.book_id = ? AND h.chapter = ? "
+        "ORDER BY h.before_verse, h.ordinal, h.id"
+    )
+    rows = conn.execute(sql, (translation_id, book_id, chapter)).fetchall()
+    return tuple(SectionHeadingRow(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows)
+
+
+@dataclass(frozen=True)
 class NoteSearchHit:
     """One note-search match: its canonical anchor, owning translation, and highlighted snippet.
 

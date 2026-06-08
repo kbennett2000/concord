@@ -197,5 +197,21 @@ def build_corpus(path: Path) -> None:
     )
     conn.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
 
+    # Deterministic section headings for the headings endpoint tests. WEB carries headings on
+    # JHN 3 (two, to prove order); KJV carries one on GEN 1; YLT carries NONE (the empty-on-stock
+    # case, like the real BSB). before_verse anchors the heading; ordinal is source array order.
+    # (translation_id, book_id, chapter, before_verse, text, ordinal)
+    headings = [
+        ("WEB", "JHN", 3, 1, "Jesus Teaches Nicodemus", 1),
+        ("WEB", "JHN", 3, 16, "God's Love", 2),
+        ("KJV", "GEN", 1, 1, "The Creation", 1),
+    ]
+    conn.executemany(
+        "INSERT INTO section_headings "
+        "(translation_id, book_id, chapter, before_verse, text, ordinal) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        headings,
+    )
+
     conn.commit()
     conn.close()
