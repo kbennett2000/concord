@@ -1677,3 +1677,31 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **`make check` green** (659 passed). Both acceptance halves now pass.
 - **Scope held:** curated set beyond `paul-first` + README/`docs/API.md`/`docs/SPEC.md §10` remain
   S4.
+
+### Slice V7-S4 — the curated set + docs (ADR-0008) — v7 complete
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v7-s4-curated-set-docs`).
+- **Why:** fill out the curated handful and complete the docs — the slice that flips journeys from
+  "next frontier" to "shipped" in the README and SPEC.
+- **What landed:**
+  - **data:** `data/journeys/journeys.json` grows from 1 → **5 journeys, 75 stops** — Paul's
+    Second (17), Third (16), the Voyage to Rome (12), and the Exodus (15), joining Paul's First
+    (15). Every stop's `place_id` verified against the committed geography (the loader fails loud
+    otherwise); itineraries follow the biblical narrative, place-ids reuse v3's OpenBible data.
+  - **honesty in practice:** the Exodus is one proposed reconstruction with a **debated**
+    whole-journey dating; its wilderness stations are *tentatively* identified — in the OpenBible
+    data they carry coordinates at **low/medium confidence** (e.g. Pi-hahiroth 103, Etham 135), so
+    the honesty surfaces as hedged confidence rather than null coords. (The S1 spec's "null-coord
+    Exodus stops" guess didn't match the dataset; framed accurately instead.)
+  - **tests:** `test_journeys_loader_real.py` gains curated-set coverage (5 journeys, ids/order),
+    the reverse now asserts Syrian Antioch → [paul-first, paul-second, paul-third] (it starts all
+    three) with Paphos unique to paul-first, and an Exodus honesty test (debated dating; every stop
+    resolves; ≥1 low/medium-confidence station).
+  - **docs:** README — journeys added to "What's in the box" (+3 endpoints; count corrected to 27)
+    and a new "Journeys" section; the "What Concord doesn't do (yet)" bullet **flipped** from
+    "named next frontier" to "curated journeys shipped in v7; competing routes deferred".
+    `docs/API.md` — three new endpoint sections + Contents. `docs/SPEC.md §10` — v7 milestone note.
+    `THIRD_PARTY_NOTICES` — journeys cross-ref (no new third-party data; routes are PD Scripture
+    over already-credited place data). `docs/v7/SPEC.md` — marked complete.
+- **`make check` green**; real build summary reports **5 journeys, 75 journey stops**. Live-verified
+  all three endpoints against a real build (list → 5; each journey's ordered stops resolve to real
+  coords; reverse dedups). **v7 is complete.**

@@ -100,7 +100,7 @@ rest are below.
 
 ## What's in the box
 
-Twenty endpoints. Each is documented in full — with real request/response examples — in
+Twenty-seven endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -114,6 +114,9 @@ Twenty endpoints. Each is documented in full — with real request/response exam
 | `GET /v1/places/{id}` | One place's detail — coordinates, confidence, and how honestly it's located. |
 | `GET /v1/places/{id}/verses` | The verses that mention a place. |
 | `GET /v1/verses/{ref}/places` | The places a verse or passage names. |
+| `GET /v1/journeys` | Browse the curated biblical journeys (Paul's missionary journeys, the Exodus). |
+| `GET /v1/journeys/{id}` | One journey — its ordered stops resolving to real places, plus source and dating. |
+| `GET /v1/places/{id}/journeys` | The journeys that pass through a place (the reverse lookup). |
 | `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
 | `GET /v1/notes/search` | Keyword search over translator's notes — user-supplied, never shipped in the public image. |
 | `GET /v1/translations/{translation}/headings/{book}/{chapter}` | The section headings that anchor a chapter ("The Creation", "The Beatitudes"), per translation. |
@@ -221,6 +224,26 @@ The right text is chosen automatically — Hebrew (`OSHB`) for an `H…` id or a
 English/NRSV verse numbers (so it lines up with the English Bibles) and is served right-to-left
 (`direction: "rtl"` in `/v1/translations`). Aligning each English word to its underlying
 Greek/Hebrew token is deliberately out of scope.
+
+### Journeys
+
+`GET /v1/journeys` answers *where did they go*. A curated handful of well-known biblical
+itineraries — **Paul's three missionary journeys, his voyage to Rome, and the Exodus** — each an
+**ordered sequence of existing places**, so a map client can draw the route as a polyline.
+
+```bash
+curl 'localhost:8000/v1/journeys'                 # the curated set
+curl 'localhost:8000/v1/journeys/paul-first'      # 15 ordered stops, Antioch → ... → Antioch
+curl 'localhost:8000/v1/places/a6c704a/journeys'  # which journeys pass through Pisidian Antioch
+```
+
+Journeys **reuse the geography** — every stop is a reference into the same place data (and its
+honesty model), never new geography — so a stop the map can't pin (a low-confidence wilderness
+station on the Exodus) is surfaced honestly rather than invented. And it stays honest about the
+route itself: each journey is **one commonly proposed reconstruction**, carrying its `source` and a
+`note` saying so, dated as a whole. Competing routes, route variants, and segment-level dating are
+deliberately out of scope. The itineraries follow the biblical narrative; the link runs **both
+ways** (`/v1/places/{id}/journeys` is the reverse). Full parameters are in [`docs/API.md`](docs/API.md).
 
 ## Configuration
 
@@ -390,14 +413,14 @@ runtime.
 
 ## What Concord doesn't do (yet)
 
-Concord is deliberately scoped. Semantic search landed in v2 and geography in v3; a few things
-still haven't made a release, on purpose:
+Concord is deliberately scoped. Semantic search landed in v2, geography in v3, and a curated
+journeys layer in v7; a few things still haven't made a release, on purpose:
 
-- **Journeys and routes.** The named next frontier — ordered sequences like Paul's missionary
-  journeys or the Exodus, with the competing routes scholars propose for each. It's a distinct
-  data-and-modeling problem, and it *builds on* v3's geography (the stable place ids and
-  disambiguation exist precisely so a journeys layer can reference this place data rather than
-  rebuild it). A future version.
+- **Competing routes for the journeys.** The curated journeys (Paul's missionary journeys, the
+  Exodus) shipped in v7 as **one commonly proposed reconstruction each** — ordered sequences of
+  existing places, reusing v3's geography rather than rebuilding it. What's deliberately *not*
+  modeled is the **competing routes** scholars propose, route variants, and segment-level dating —
+  a distinct research problem, deferred to its own future layer.
 - **Catholic and deuterocanonical books.** The schema is ready for them, but the data, naming
   conventions, and Vulgate psalm-numbering mapping are all distinct work that didn't belong in
   a clean release. Future work.

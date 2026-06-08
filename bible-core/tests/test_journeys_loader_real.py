@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 from bible_core.loader import build_database
-from bible_core.queries import get_journey, get_journey_stops, get_journeys_for_place
+from bible_core.queries import (
+    get_journey,
+    get_journey_stops,
+    get_journeys_for_place,
+    list_journeys,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -64,8 +69,41 @@ def test_every_stop_resolves_to_a_real_place_with_coords(tmp_path: Path) -> None
         assert s.status == "identified"
 
 
-def test_reverse_lists_paul_first_for_a_stop(tmp_path: Path) -> None:
+def test_reverse_lists_journeys_for_a_stop(tmp_path: Path) -> None:
     conn = _build(tmp_path)
-    rows = get_journeys_for_place(conn, "ae41ab4")  # Syrian Antioch
-    assert [j.id for j in rows] == ["paul-first"]
-    assert rows[0].stop_count == 15
+    # Syrian Antioch starts the first three journeys → all three listed, ordered by id.
+    shared = get_journeys_for_place(conn, "ae41ab4")
+    assert [j.id for j in shared] == ["paul-first", "paul-second", "paul-third"]
+    # Paphos is unique to the first journey.
+    paphos = get_journeys_for_place(conn, "a314765")
+    assert [j.id for j in paphos] == ["paul-first"]
+    assert paphos[0].stop_count == 15
+
+
+def test_curated_set_loaded(tmp_path: Path) -> None:
+    conn = _build(tmp_path)
+    page = list_journeys(conn, 50, 0)
+    assert page.total == 5
+    assert [j.id for j in page.rows] == [
+        "exodus",
+        "paul-first",
+        "paul-rome",
+        "paul-second",
+        "paul-third",
+    ]
+
+
+def test_exodus_honesty_model(tmp_path: Path) -> None:
+    """The Exodus is one proposed reconstruction with a debated whole-journey dating, and many
+    of its wilderness stations are tentatively identified — surfaced via confidence, not hidden."""
+    conn = _build(tmp_path)
+    journey = get_journey(conn, "exodus")
+    assert journey is not None
+    assert journey.dating is not None
+    assert "debated" in journey.dating.lower()  # whole-journey dating is hedged, not faked
+    stops = get_journey_stops(conn, "exodus")
+    assert len(stops) == 15
+    # every stop resolves to a real place (FK held)
+    assert all(s.name is not None for s in stops)
+    # the honesty model is genuinely exercised: at least one station carries low/medium confidence
+    assert any(s.confidence in ("low", "medium") for s in stops)
