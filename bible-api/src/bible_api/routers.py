@@ -34,6 +34,7 @@ from bible_core.queries import (
     get_cross_references,
     get_journey,
     get_journey_stops,
+    get_journeys_for_place,
     get_notes,
     get_place,
     get_place_verses,
@@ -102,6 +103,7 @@ from .schemas import (
     NoteSearchResponse,
     NotesResponse,
     PlaceDetail,
+    PlaceJourneysResponse,
     PlacesResponse,
     PlaceSummary,
     PlaceVerse,
@@ -784,6 +786,22 @@ def place_verses_endpoint(
         offset=offset,
         total=total,
         verses=verses,
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/places/{place_id}/journeys")
+def place_journeys_endpoint(place_id: str, request: Request, conn: Conn) -> Response:
+    # The inverse of the journeys' stop list (SPEC v7 §6): which journeys pass through this place.
+    # Unknown place id → 404 unknown_place (reusing v3's error); a real place in no journey → 200
+    # with an empty list.
+    if get_place(conn, place_id) is None:
+        raise UnknownPlaceError(place_id)
+    rows = get_journeys_for_place(conn, place_id)
+    response = PlaceJourneysResponse(
+        id=place_id,
+        total=len(rows),
+        journeys=[_journey_summary(j) for j in rows],
     )
     return cached_json_response(response, request)
 

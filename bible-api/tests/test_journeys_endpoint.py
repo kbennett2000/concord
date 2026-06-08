@@ -61,12 +61,12 @@ def test_detail_ordered_stops_and_honesty_fields(client: TestClient) -> None:
     # the one-reconstruction flag: source + note both present
     assert body["source"] == "Acts (test)."
     assert body["note"].startswith("One proposed reconstruction")
-    # ordered stops, with the revisit preserved (p_ant1 at ordinals 2 and 4)
+    # ordered stops, with revisits preserved (p_ant1 at 2 & 3, p_jeru at 1 & 4)
     assert [(s["ordinal"], s["place_id"]) for s in body["stops"]] == [
         (1, "p_jeru"),
         (2, "p_ant1"),
-        (3, "p_ant2"),
-        (4, "p_ant1"),
+        (3, "p_ant1"),
+        (4, "p_jeru"),
     ]
     first = body["stops"][0]
     assert list(first.keys()) == STOP_KEYS
@@ -95,11 +95,50 @@ def test_detail_unknown_journey_404(client: TestClient) -> None:
     assert body["error"]["detail"] == {"journey_id": "nope"}
 
 
+# --- reverse: /v1/places/{id}/journeys -----------------------------------------------
+
+
+def test_reverse_lists_journeys_through_a_place(client: TestClient) -> None:
+    body = client.get("/v1/places/p_ant1/journeys").json()
+    assert body["id"] == "p_ant1"
+    assert body["total"] == 1
+    j = body["journeys"][0]
+    assert (j["id"], j["stop_count"]) == ("j_paul", 4)
+    assert list(j.keys()) == SUMMARY_KEYS
+
+
+def test_reverse_dedups_a_revisited_place(client: TestClient) -> None:
+    # p_jeru is visited twice by j_paul (ordinals 1 and 4) → one row, not two.
+    body = client.get("/v1/places/p_jeru/journeys").json()
+    assert [j["id"] for j in body["journeys"]] == ["j_paul"]
+    assert body["total"] == 1
+
+
+def test_reverse_unknown_place_stop_resolves(client: TestClient) -> None:
+    # p_nod is an unknown place but still a real place row → its journey is listed.
+    body = client.get("/v1/places/p_nod/journeys").json()
+    assert [j["id"] for j in body["journeys"]] == ["j_wander"]
+
+
+def test_reverse_real_place_in_no_journey_is_empty(client: TestClient) -> None:
+    # p_ant2 exists but no journey passes through it → 200 with an empty list (not 404).
+    response = client.get("/v1/places/p_ant2/journeys")
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["id"], body["total"], body["journeys"]) == ("p_ant2", 0, [])
+
+
+def test_reverse_unknown_place_404(client: TestClient) -> None:
+    response = client.get("/v1/places/nope/journeys")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "unknown_place"
+
+
 # --- caching -------------------------------------------------------------------------
 
 
 def test_immutable_etag_304(client: TestClient) -> None:
-    for url in ("/v1/journeys", "/v1/journeys/j_paul"):
+    for url in ("/v1/journeys", "/v1/journeys/j_paul", "/v1/places/p_ant1/journeys"):
         response = client.get(url)
         assert response.headers["cache-control"] == CACHE_CONTROL
         etag = response.headers["etag"]

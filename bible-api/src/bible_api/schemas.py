@@ -580,3 +580,11 @@ class JourneyDetail(BaseModel):
     source: str
     note: str
     stops: list[JourneyStop]
+
+
+class PlaceJourneysResponse(BaseModel):
+    """The journeys that pass through a place (the inverse lookup): the full deduped set."""
+
+    id: str
+    total: int
+    journeys: list[JourneySummary]

@@ -1654,3 +1654,26 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **`make check` green** (654 passed). No endpoints changed; OpenAPI diff is two new paths.
 - **Scope held:** still no curated set beyond `paul-first` and no README/`docs/API.md` (S4); the
   reverse endpoint is S3.
+
+### Slice V7-S3 — the reverse endpoint (ADR-0008)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v7-s3-place-journeys-reverse`).
+- **Why:** the inverse lookup — which journeys pass through a place — completing the second half
+  of the acceptance. API-only: the core query `get_journeys_for_place` already landed in S1.
+- **What landed:**
+  - **schemas:** `PlaceJourneysResponse(id, total, journeys: list[JourneySummary])` — mirrors
+    `VersePlacesResponse`.
+  - **routers:** `GET /v1/places/{id}/journeys` — verifies the place exists (`get_place` →
+    `UnknownPlaceError`, reusing v3's 404), then `get_journeys_for_place` → summaries. A real
+    place in no journey returns 200 with an empty list (not 404).
+  - **tests:** reverse cases added to `test_journeys_endpoint.py` (lists journeys through a place,
+    dedups a revisited place, an unknown-place stop's journey resolves, real-place-in-no-journey →
+    200 empty, unknown place → 404 `unknown_place`, ETag 304). `apikit`'s `j_paul` now revisits
+    `p_jeru` (ordinals 1 & 4) instead of stopping at `p_ant2`, leaving `p_ant2` journey-less for
+    the empty-reverse case (stop_count stays 4). `docs/openapi.json` regenerated (one new path).
+- **Acceptance (reverse):** `/v1/places/{a paul-first stop}/journeys` lists paul-first. ✔
+  Live-verified against a real build: `ae41ab4` (Syrian Antioch) → `[paul-first]` (15 stops);
+  `a6c704a` (Pisidian Antioch) → `[paul-first]`; `a15257a` (Jerusalem, off-route) → 200 empty;
+  unknown → 404 `unknown_place`; ETag/immutable + 304.
+- **`make check` green** (659 passed). Both acceptance halves now pass.
+- **Scope held:** curated set beyond `paul-first` + README/`docs/API.md`/`docs/SPEC.md §10` remain
+  S4.

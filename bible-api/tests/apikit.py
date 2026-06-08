@@ -180,7 +180,8 @@ def build_corpus(path: Path) -> None:
     )
 
     # Deterministic journeys (v7) over the existing places, for the journeys endpoints:
-    #  - j_paul: ordered stops with a REVISIT (p_ant1 at ordinals 2 and 4) → reverse dedup
+    #  - j_paul: ordered stops with REVISITS (p_jeru at 1 & 4, p_ant1 at 2 & 3) → reverse dedup;
+    #    leaves p_ant2 in NO journey → the reverse-empty (200) case
     #  - j_wander: a single stop on p_nod (unknown place) → null-coord stop path; null dating
     # Ordered by id: j_paul before j_wander.
     # (id, name, scripture, dating, source, note)
@@ -206,8 +207,8 @@ def build_corpus(path: Path) -> None:
     journey_stops = [
         ("j_paul", 1, "p_jeru", "Acts 13:1"),
         ("j_paul", 2, "p_ant1", "Acts 13:14"),
-        ("j_paul", 3, "p_ant2", "Acts 14:21"),
-        ("j_paul", 4, "p_ant1", "Acts 14:26"),  # revisit p_ant1
+        ("j_paul", 3, "p_ant1", "Acts 14:21"),  # revisit p_ant1
+        ("j_paul", 4, "p_jeru", "Acts 14:26"),  # return to p_jeru
         ("j_wander", 1, "p_nod", "Genesis 4:16"),  # unknown place → null coords
     ]
     conn.executemany(
