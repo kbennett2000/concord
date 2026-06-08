@@ -26,6 +26,10 @@ running instance loaded with the 13 bundled public-domain translations.
 - [`GET /v1/verses/{ref}/places`](#get-v1versesrefplaces)
 - [`GET /v1/translations/{translation}/notes/{book}/{chapter}`](#get-v1translationstranslationnotesbookchapter)
 - [`GET /v1/notes/search`](#get-v1notessearch)
+- [`GET /v1/topics`](#get-v1topics)
+- [`GET /v1/topics/{id}`](#get-v1topicsid)
+- [`GET /v1/topics/{id}/verses`](#get-v1topicsidverses)
+- [`GET /v1/verses/{ref}/topics`](#get-v1versesreftopics)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
 - [`GET /v1/translations`](#get-v1translations)
@@ -645,6 +649,108 @@ state on the public image (no notes loaded) and for any query with no matches.
 the valid types) · `400 unknown_book` (filter) · `400 invalid_search_query` (malformed FTS5 —
 `detail.fts5_error`) · `422 invalid_parameter` (missing/empty `q`, `limit` out of 1–100).
 **Caching:** immutable.
+
+## `GET /v1/topics`
+
+Browse topical-Bible subjects from [Nave's Topical Bible](https://github.com/BradyStephenson/bible-data)
+(public domain, 1897). Optionally filter by name substring (`q`, case-insensitive) and `section`
+(the A–Z index letter). Ordered by `name`, then `id`.
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `q` | query | string | — | Case-insensitive name substring. |
+| `section` | query | string | — | The A–Z index letter (e.g. `F`). |
+| `limit` | query | int | `50` | 1–200. |
+| `offset` | query | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/topics?q=faith&limit=2'
+```
+```json
+{
+  "q": "faith", "section": null, "limit": 2, "offset": 0, "total": 4,
+  "topics": [
+    { "id": "faith", "name": "FAITH", "section": "F", "see_also": null },
+    { "id": "faithfulness", "name": "FAITHFULNESS", "section": "F", "see_also": null }
+  ]
+}
+```
+
+`see_also` is the id of another topic when this one is a "See X" redirect (Nave's points
+`ANXIETY` at `CARE`); such topics carry no verses of their own. **Caching:** immutable.
+
+## `GET /v1/topics/{id}`
+
+One topic's detail, including its `verse_count` (0 for a redirect).
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `id` | path | string | A topic id (slug). Unknown → `404 unknown_topic`. |
+
+```bash
+$ curl -s 'localhost:8000/v1/topics/care'
+```
+```json
+{ "id": "care", "name": "CARE", "section": "C", "see_also": null, "verse_count": 53 }
+```
+
+**Errors:** `404 unknown_topic` (`detail.topic_id`). **Caching:** immutable.
+
+## `GET /v1/topics/{id}/verses`
+
+The verses curated under a topic, in canonical order, optionally hydrated with text.
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `id` | path | string | — | A topic id. Unknown → `404 unknown_topic`. |
+| `translation` | query | string | default translation | Used only when `include_text=true`. |
+| `include_text` | query | bool | `true` | When `false`, `text` is null and `translation` is echoed as null. |
+| `limit` | query | int | `50` | 1–200. |
+| `offset` | query | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/topics/care/verses?translation=KJV&limit=2'
+```
+```json
+{
+  "id": "care", "translation": "KJV", "include_text": true, "limit": 2, "offset": 0, "total": 53,
+  "verses": [
+    { "book": "PSA", "chapter": 37, "verse": 5, "reference": "Psalms 37:5",
+      "text": "Commit thy way unto the LORD; trust also in him; and he shall bring it to pass." },
+    { "book": "PSA", "chapter": 39, "verse": 6, "reference": "Psalms 39:6", "text": "…" }
+  ]
+}
+```
+
+A verse absent in the chosen translation hydrates as `text: null` (not an error). A redirect or
+empty topic returns `"total": 0`, `"verses": []`. **Errors:** `404 unknown_topic`.
+**Caching:** immutable.
+
+## `GET /v1/verses/{ref}/topics`
+
+The inverse lookup: the topics that cite any verse in `{ref}` — a verse, a range, or a chapter.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `ref` | path | string | A reference per the [grammar](#reference-grammar) (URL-encode spaces). |
+
+```bash
+$ curl -s 'localhost:8000/v1/verses/Philippians%204:6/topics'
+```
+```json
+{
+  "reference": "Philippians 4:6", "total": 5,
+  "topics": [
+    { "id": "care", "name": "CARE", "section": "C", "see_also": null },
+    { "id": "commandments", "name": "COMMANDMENTS", "section": "C", "see_also": null },
+    { "id": "prayer", "name": "PRAYER", "section": "P", "see_also": null }
+  ]
+}
+```
+
+The **deduped union** across the reference's range, ordered by `name` then `id`. A reference citing
+no topic returns `200` with `"total": 0`, `"topics": []`. **Errors:** `400 unparseable_reference` ·
+`404 unknown_book`. **Caching:** immutable.
 
 ## `GET /v1/random`
 

@@ -71,6 +71,23 @@ to the repo with the attribution above. The geography loader (`bible_core.geo`) 
 §4); the bulk of the dataset's scholarly apparatus is deliberately not used. The attribution
 line **must appear in the README** (Slice V3-S2).
 
+## Topical Bible (`data/topics/`)
+
+| Field | Value |
+|---|---|
+| Files | `naves.json` (topics → curated verse links), derived by [scripts/convert_naves_topics.py](../scripts/convert_naves_topics.py) |
+| Work | Nave's Topical Bible (Orville J. Nave, 1897) — the underlying topical work is **public domain** |
+| Source edition | BradyStephenson/bible-data — `NavesTopicalDictionary.csv` — <https://github.com/BradyStephenson/bible-data> |
+| License | Creative Commons Attribution 4.0 International (CC BY 4.0) over the compilation |
+| Attribution | **Topical data from [Nave's Topical Bible](https://github.com/BradyStephenson/bible-data) (public domain; 1897), via BradyStephenson/bible-data, licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.** |
+
+The 1897 work is public domain; the machine-readable compilation is CC BY 4.0, redistributable
+with attribution (same treatment as the cross-reference and geography datasets above). The parser
+extracts **verse-level** references only (chapter-only and unresolvable refs are skipped + counted)
+into the committed `data/topics/naves.json`, which the loader (`bible_core.topics`) bakes into the
+`topics` + `topic_verses` tables. The **raw CSV is re-derivable and not committed**; the derived
+JSON is committed and ships. The attribution line **must appear in the README**.
+
 ## Translator's notes (`data/private/notes/`) — NOT committed
 
 | Field | Value |

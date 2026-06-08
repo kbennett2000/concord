@@ -21,7 +21,9 @@ from bible_core.queries import (
     PlaceRow,
     QueryResult,
     SectionHeadingRow,
+    TopicRow,
     count_place_verses,
+    count_topic_verses,
     distinct_place_types,
     get_books,
     get_chapter,
@@ -32,10 +34,14 @@ from bible_core.queries import (
     get_places_for_reference,
     get_random_verse,
     get_section_headings,
+    get_topic,
+    get_topic_verses,
+    get_topics_for_reference,
     get_translations,
     get_verse_text,
     get_verses,
     list_places,
+    list_topics,
     reference_exists,
     search_notes,
     search_verses,
@@ -63,6 +69,7 @@ from .errors import (
     SemanticTimeoutError,
     SemanticUnavailableError,
     UnknownPlaceError,
+    UnknownTopicError,
     UnknownTranslationError,
 )
 from .schemas import (
@@ -89,10 +96,16 @@ from .schemas import (
     SectionHeading,
     SemanticSearchHit,
     SemanticSearchResponse,
+    TopicDetail,
+    TopicsResponse,
+    TopicSummary,
+    TopicVerse,
+    TopicVersesResponse,
     Translation,
     TranslationsResponse,
     TranslatorNote,
     VersePlacesResponse,
+    VerseTopicsResponse,
 )
 from .shaping import shape_grouped, shape_parallel
 
@@ -762,5 +775,109 @@ def verse_places_endpoint(
         reference=reference.echo,
         total=page.total,
         places=[_place_summary(p) for p in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+# --- topical Bible (mirrors the places endpoints) ------------------------------------
+
+
+def _topic_summary(topic: TopicRow) -> TopicSummary:
+    return TopicSummary(
+        id=topic.id, name=topic.name, section=topic.section, see_also=topic.see_also
+    )
+
+
+@router.get("/topics")
+def topics_endpoint(
+    request: Request,
+    conn: Conn,
+    q: str | None = None,
+    section: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    q_filter = q.strip() if q and q.strip() else None
+    section_filter = section.strip() if section and section.strip() else None
+    page = list_topics(conn, q_filter, section_filter, limit, offset)
+    response = TopicsResponse(
+        q=q_filter,
+        section=section_filter,
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        topics=[_topic_summary(t) for t in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/topics/{topic_id}")
+def topic_detail_endpoint(topic_id: str, request: Request, conn: Conn) -> Response:
+    topic = get_topic(conn, topic_id)
+    if topic is None:
+        raise UnknownTopicError(topic_id)
+    response = TopicDetail(
+        id=topic.id,
+        name=topic.name,
+        section=topic.section,
+        see_also=topic.see_also,
+        verse_count=count_topic_verses(conn, topic.id),
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/topics/{topic_id}/verses")
+def topic_verses_endpoint(
+    topic_id: str,
+    request: Request,
+    conn: Conn,
+    translation: str | None = None,
+    include_text: bool = True,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    if get_topic(conn, topic_id) is None:
+        raise UnknownTopicError(topic_id)
+
+    translation_id = resolve_translation(request, translation) if include_text else None
+    rows, total = get_topic_verses(conn, topic_id, limit, offset)
+    verses = [
+        TopicVerse(
+            book=row.book_id,
+            chapter=row.chapter,
+            verse=row.verse,
+            reference=f"{row.book_name} {row.chapter}:{row.verse}",
+            text=(
+                get_verse_text(conn, translation_id, row.book_id, row.chapter, row.verse)
+                if translation_id is not None
+                else None
+            ),
+        )
+        for row in rows
+    ]
+    response = TopicVersesResponse(
+        id=topic_id,
+        translation=translation_id,
+        include_text=include_text,
+        limit=limit,
+        offset=offset,
+        total=total,
+        verses=verses,
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/verses/{ref}/topics")
+def verse_topics_endpoint(
+    ref: Annotated[str, Path(max_length=MAX_REF_LENGTH)], request: Request, conn: Conn
+) -> Response:
+    # parse_reference raises ParseError (400) / UnknownBookError (404), already wired. A valid
+    # ref citing no topic returns 200 with an empty list.
+    reference = parse_reference(ref, SqliteBookResolver(conn))
+    page = get_topics_for_reference(conn, reference)
+    response = VerseTopicsResponse(
+        reference=reference.echo,
+        total=page.total,
+        topics=[_topic_summary(t) for t in page.rows],
     )
     return cached_json_response(response, request)

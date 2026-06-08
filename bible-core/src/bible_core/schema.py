@@ -150,12 +150,38 @@ _TABLES: tuple[str, ...] = (
         ordinal        INTEGER NOT NULL
     )
     """,
+    # Topical Bible (additive). A topic is a curated subject (Nave's Topical Bible); `see_also`
+    # points to another topic's id for a "See X" redirect (those carry no verses). Translation-
+    # agnostic — topics index canonical verse coordinates, not a translation's text.
+    """
+    CREATE TABLE IF NOT EXISTS topics (
+        id       TEXT PRIMARY KEY,
+        name     TEXT NOT NULL,
+        section  TEXT NOT NULL,
+        see_also TEXT,
+        source   TEXT NOT NULL
+    )
+    """,
+    # One row per (topic, verse). The composite PK dedups verse links for free and serves BOTH
+    # directions: topic→verses (WHERE topic_id = ?) and verse→topics (the index below), exactly
+    # as place_verses serves both directions.
+    """
+    CREATE TABLE IF NOT EXISTS topic_verses (
+        topic_id TEXT NOT NULL REFERENCES topics (id),
+        book_id  TEXT NOT NULL REFERENCES books (id),
+        chapter  INTEGER NOT NULL,
+        verse    INTEGER NOT NULL,
+        PRIMARY KEY (topic_id, book_id, chapter, verse)
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
     "ON cross_references (from_book_id, from_chapter, from_verse)",
     # Supports the verse→places direction (mirrors idx_xref_from).
     "CREATE INDEX IF NOT EXISTS idx_place_verses_bcv ON place_verses (book_id, chapter, verse)",
+    # Supports the verse→topics direction (mirrors idx_place_verses_bcv).
+    "CREATE INDEX IF NOT EXISTS idx_topic_verses_bcv ON topic_verses (book_id, chapter, verse)",
     # "all notes for this verse/chapter in this translation" — the Slice-2 read lookup.
     "CREATE INDEX IF NOT EXISTS idx_notes_anchor "
     "ON translator_notes (translation_id, book_id, chapter, verse)",

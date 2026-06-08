@@ -83,6 +83,8 @@ class BuildStats:
     notes: int
     note_cross_references: int
     section_headings: int
+    topics: int
+    topic_verses: int
     elapsed_seconds: float
 
 
@@ -359,10 +361,12 @@ def build_database(
     cross_ref_dirs: list[Path] | None = None,
     geo_dir: Path | None = None,
     notes_dirs: list[Path] | None = None,
+    topics_dir: Path | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
-    ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), and ``notes_dirs``
-    (translator's-notes JSON). Idempotent — same inputs, byte-identical db.
+    ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), ``notes_dirs``
+    (translator's-notes JSON), and ``topics_dir`` (topical-Bible JSON). Idempotent — same
+    inputs, byte-identical db.
 
     ``notes_dirs`` is normally ``[data/notes, data/private/notes]`` (ADR-0004): the first is the
     committed public-domain notes that ship in the image; the second holds user-supplied,
@@ -449,6 +453,15 @@ def build_database(
                 else NotesStats(0, 0, {})
             )
 
+            # Topics loader — same local-import cycle break (topics.py imports LoaderError).
+            from .topics import TopicsStats, load_topics
+
+            topics_stats = (
+                load_topics(conn, topics_dir, alias_to_book)
+                if topics_dir is not None
+                else TopicsStats(0, 0, 0, 0)
+            )
+
         books_with_verses = conn.execute(
             "SELECT COUNT(*) FROM books WHERE chapter_count IS NOT NULL"
         ).fetchone()[0]
@@ -468,6 +481,8 @@ def build_database(
         notes=notes_stats.notes,
         note_cross_references=notes_stats.note_cross_references,
         section_headings=heading_total,
+        topics=topics_stats.topics,
+        topic_verses=topics_stats.topic_verses,
         elapsed_seconds=time.perf_counter() - start,
     )
 
@@ -509,8 +524,12 @@ def main(argv: list[str] | None = None) -> int:
     # The latter is dual-ignored, so the public build has no `private/` and bakes zero private
     # notes — only the committed public ones.
     notes_dirs = [base / "notes", base / "private" / "notes"]
+    # Committed topical-Bible dataset (Nave's, CC BY 4.0) — ships in the image like geography.
+    topics_dir = base / "topics"
     try:
-        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs, geo_dir, notes_dirs)
+        stats = build_database(
+            Path(args.output), data_dirs, cross_ref_dirs, geo_dir, notes_dirs, topics_dir
+        )
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -527,7 +546,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{stats.cross_references} cross-references{clamped}, "
             f"{stats.places} places, {stats.place_verses} place-verse links, "
             f"{stats.notes} notes, {stats.note_cross_references} note cross-references, "
-            f"{stats.section_headings} section headings "
+            f"{stats.section_headings} section headings, "
+            f"{stats.topics} topics, {stats.topic_verses} topic-verse links "
             f"in {stats.elapsed_seconds:.2f}s."
         )
     return 0

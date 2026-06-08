@@ -71,6 +71,18 @@ class UnknownPlaceError(Exception):
         return {"place_id": self.place_id}
 
 
+class UnknownTopicError(Exception):
+    """A requested topic id (a path resource) is not in the topics table → 404."""
+
+    def __init__(self, topic_id: str) -> None:
+        super().__init__(f"unknown topic {topic_id!r}")
+        self.topic_id = topic_id
+
+    @property
+    def detail(self) -> dict[str, Any]:
+        return {"topic_id": self.topic_id}
+
+
 class FilterError(Exception):
     """A query-param *filter* value did not match a known value (e.g. ``?type=``/``?status=``).
 
@@ -159,6 +171,10 @@ async def _handle_unknown_place(_request: Request, exc: Exception) -> Response:
     return _error_response(404, "unknown_place", str(exc), cast(UnknownPlaceError, exc).detail)
 
 
+async def _handle_unknown_topic(_request: Request, exc: Exception) -> Response:
+    return _error_response(404, "unknown_topic", str(exc), cast(UnknownTopicError, exc).detail)
+
+
 async def _handle_filter(_request: Request, exc: Exception) -> Response:
     filter_exc = cast(FilterError, exc)
     return _error_response(400, filter_exc.code, str(exc), filter_exc.detail)
@@ -182,5 +198,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SemanticBusyError, _handle_semantic_busy)
     app.add_exception_handler(SemanticTimeoutError, _handle_semantic_timeout)
     app.add_exception_handler(UnknownPlaceError, _handle_unknown_place)
+    app.add_exception_handler(UnknownTopicError, _handle_unknown_topic)
     app.add_exception_handler(FilterError, _handle_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)
