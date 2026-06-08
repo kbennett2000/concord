@@ -376,6 +376,14 @@ intentionally-larger slice is flagged with its reasoning.
 > with none, e.g. BSB, returns `[]`). Pure wire-up — no new source, no licensing path; a
 > cross-translation "canonical pericope" notion is interpretive and out of scope. See
 > [`docs/adr/ADR-0005-section-headings-endpoint.md`](adr/ADR-0005-section-headings-endpoint.md).
+>
+> **Post-v4 batch — topical Bible (shipped).** A browsable, bi-directional topical Bible cloning
+> the geography (places) pattern: additive `topics` + `topic_verses` tables and the endpoints
+> `GET /v1/topics`, `/v1/topics/{id}`, `/v1/topics/{id}/verses`, `/v1/verses/{ref}/topics`. Data is
+> **Nave's Topical Bible** (1897, public domain) via a CC BY 4.0 compilation, committed under
+> `data/topics/` and parsed by `scripts/convert_naves_topics.py`. Flat topics; Nave's "See X"
+> redirects become a `see_also` pointer with no verses; hierarchical sub-topics and multi-source
+> merging are deferred. See [`docs/adr/ADR-0006-topical-bible.md`](adr/ADR-0006-topical-bible.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|

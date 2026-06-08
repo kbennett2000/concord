@@ -386,3 +386,66 @@ class VersePlacesResponse(BaseModel):
     reference: str
     total: int
     places: list[PlaceSummary]
+
+
+class TopicSummary(BaseModel):
+    """A topic's summary. ``see_also`` is another topic's id for a 'See X' redirect (those carry
+    no verses of their own), else null."""
+
+    id: str
+    name: str
+    section: str
+    see_also: str | None
+
+
+class TopicsResponse(BaseModel):
+    """A page of topics: the echoed filter/pagination state, total count, and summaries."""
+
+    q: str | None
+    section: str | None
+    limit: int
+    offset: int
+    total: int
+    topics: list[TopicSummary]
+
+
+class TopicDetail(BaseModel):
+    """A single topic's full detail plus its verse count (0 for a 'See X' redirect)."""
+
+    id: str
+    name: str
+    section: str
+    see_also: str | None
+    verse_count: int
+
+
+class TopicVerse(BaseModel):
+    """One verse curated under a topic. ``text`` is null when not requested or absent."""
+
+    book: str
+    chapter: int
+    verse: int
+    reference: str
+    text: str | None
+
+
+class TopicVersesResponse(BaseModel):
+    """A page of the verses curated under a topic, echoing the request state.
+
+    ``translation`` is null unless ``include_text=true``."""
+
+    id: str
+    translation: str | None
+    include_text: bool
+    limit: int
+    offset: int
+    total: int
+    verses: list[TopicVerse]
+
+
+class VerseTopicsResponse(BaseModel):
+    """The topics a verse or range appears under (the inverse lookup): the full deduped union."""
+
+    reference: str
+    total: int
+    topics: list[TopicSummary]

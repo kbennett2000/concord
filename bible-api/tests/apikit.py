@@ -213,5 +213,34 @@ def build_corpus(path: Path) -> None:
         headings,
     )
 
+    # Deterministic topical Bible (Nave's pattern) for the topics endpoint tests:
+    #  - ANXIETY → a "See CARE" redirect: see_also='care', zero verses (the redirect case)
+    #  - CARE → GEN 1:1, JHN 3:16 (WEB omits → include_text null path), 1JN 1:1
+    #  - CREATION → GEN 1:1, GEN 1:2
+    #  - LOVE → JHN 3:16  (so JHN 3:16 reverse-maps to CARE + LOVE, ordered by name)
+    # (id, name, section, see_also, source)
+    topics = [
+        ("anxiety", "ANXIETY", "A", "care", "Nave's Topical Bible"),
+        ("care", "CARE", "C", None, "Nave's Topical Bible"),
+        ("creation", "CREATION", "C", None, "Nave's Topical Bible"),
+        ("love", "LOVE", "L", None, "Nave's Topical Bible"),
+    ]
+    topic_verses = [
+        ("care", "GEN", 1, 1),
+        ("care", "JHN", 3, 16),  # WEB omits this verse → include_text null path
+        ("care", "1JN", 1, 1),
+        ("creation", "GEN", 1, 1),
+        ("creation", "GEN", 1, 2),
+        ("love", "JHN", 3, 16),
+    ]
+    conn.executemany(
+        "INSERT INTO topics (id, name, section, see_also, source) VALUES (?, ?, ?, ?, ?)",
+        topics,
+    )
+    conn.executemany(
+        "INSERT INTO topic_verses (topic_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)",
+        topic_verses,
+    )
+
     conn.commit()
     conn.close()

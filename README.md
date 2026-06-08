@@ -98,7 +98,7 @@ rest are below.
 
 ## What's in the box
 
-Sixteen endpoints. Each is documented in full — with real request/response examples — in
+Twenty endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -115,6 +115,10 @@ Sixteen endpoints. Each is documented in full — with real request/response exa
 | `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
 | `GET /v1/notes/search` | Keyword search over translator's notes — user-supplied, never shipped in the public image. |
 | `GET /v1/translations/{translation}/headings/{book}/{chapter}` | The section headings that anchor a chapter ("The Creation", "The Beatitudes"), per translation. |
+| `GET /v1/topics` | Browse topical-Bible subjects (Nave's), filtered by name or section. |
+| `GET /v1/topics/{id}` | One topic's detail — its verse count and any "see also" redirect. |
+| `GET /v1/topics/{id}/verses` | The verses curated under a topic, optionally with text. |
+| `GET /v1/verses/{ref}/topics` | The topics a verse or passage appears under. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -165,6 +169,22 @@ backwards.
 
 The data is OpenBible.info's, **1,340 places** linked across the canon. The full parameters — the
 filters, pagination, and the honest null-coordinate response — are in [`docs/API.md`](docs/API.md).
+
+### Topics
+
+`GET /v1/topics` answers *what about*. Browse curated subjects — "Faith", "Care", "The Creation" —
+from **Nave's Topical Bible** (5,319 topics), and the link runs **both ways**: ask a topic for its
+verses, or ask a verse for the topics it appears under.
+
+```bash
+curl 'localhost:8000/v1/topics?q=anxiety'              # finds ANXIETY (→ see_also: care)
+curl 'localhost:8000/v1/verses/Philippians+4:6/topics' # Care, Prayer, Thankfulness, ...
+```
+
+Nave's own "See X" cross-references are preserved: a redirect topic carries a `see_also` pointer
+and no verses of its own (so `anxiety` points you to `care`, where the verses live). The full
+parameters — name/section filters, pagination, and `include_text` — are in
+[`docs/API.md`](docs/API.md).
 
 ## Configuration
 
@@ -306,6 +326,11 @@ Place coordinates and the place↔verse links come from OpenBible.info's Bible-G
 
 > Place data courtesy of [OpenBible.info](https://github.com/openbibleinfo/Bible-Geocoding-Data), licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.
 
+Topical browsing comes from Nave's Topical Bible (Orville J. Nave, 1897 — public domain),
+via a machine-readable compilation (5,319 topics):
+
+> Topical data from Nave's Topical Bible (public domain; 1897), via [BradyStephenson/bible-data](https://github.com/BradyStephenson/bible-data), licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.
+
 Some translations aren't public-domain and can't be redistributed. Concord supports them
 through a gitignored `data/private/` directory: drop a non-distributable translation's JSON
 there and the loader picks it up automatically on a local build, while it never enters the
@@ -378,6 +403,9 @@ The `/v1` prefix means today's responses are a contract. Build against them with
 - **Cross-references:** [OpenBible.info](https://www.openbible.info/labs/cross-references/),
   licensed under Creative Commons Attribution (CC BY).
 - **Place data:** [OpenBible.info Bible-Geocoding-Data](https://github.com/openbibleinfo/Bible-Geocoding-Data),
+  licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+- **Topical data:** Nave's Topical Bible (public domain; 1897), via
+  [BradyStephenson/bible-data](https://github.com/BradyStephenson/bible-data),
   licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
 - **Embedding model:** [`ibm-granite/granite-embedding-311m-multilingual-r2`](https://huggingface.co/ibm-granite/granite-embedding-311m-multilingual-r2),
   Apache 2.0 © IBM.

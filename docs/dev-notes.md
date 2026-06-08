@@ -1364,3 +1364,42 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   YLT none. OpenAPI regenerated (additive: one new path). `make check` green.
 - **Live check:** real build reports the headings count in the summary; `get_section_headings` for a
   real chapter returns the expected titles at the right `before_verse`; BSB → empty.
+
+### Slice — topical Bible (ADR-0006)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/topical-bible`).
+- **Why:** add a browsable, bi-directional topical Bible (topics → curated verse lists; verse →
+  the topics it appears under). Structurally **the geography/places feature again**, so it was
+  cloned end-to-end rather than designed anew.
+- **Source:** Nave's Topical Bible (Orville J. Nave, 1897, **public domain**) via
+  BradyStephenson/bible-data `NavesTopicalDictionary.csv` (**CC BY 4.0** compilation — same
+  treatment as the OpenBible cross-ref/geography data). 5,319 topics; the CSV `entry` column carries
+  refs in prose using USFM-style codes.
+- **What landed:**
+  - **core:** additive `topics` + `topic_verses` tables + `idx_topic_verses_bcv` (schema.py, cloning
+    `places`/`place_verses`); `bible_core.topics.load_topics` (cloning `geo.load_places`), wired into
+    `build_database(topics_dir=…)`; `main()` scans `data/topics`; `BuildStats.topics`/`topic_verses`
+    + summary line. `queries.py` adds `TopicRow`/`TopicPage`/`TopicVerseRef` + `list_topics`/
+    `get_topic`/`count_topic_verses`/`get_topic_verses`/`get_topics_for_reference` (cloning the place
+    queries, reusing `_span_predicate` + `get_verse_text`).
+  - **data/parser:** `scripts/convert_naves_topics.py` (sibling to `convert_web_footnotes.py`)
+    extracts **verse-level** refs into committed `data/topics/naves.json` (5,319 topics, 586
+    redirects, 138,138 links). Book codes resolve via the canonical-books alias table (+ a tiny
+    `1JHN→1JN` override family); chapter-only/cross-chapter/prose tokens skipped + counted (only 188
+    unresolved, all the prose words "So"/"with"). Deterministic (byte-identical re-run). Raw CSV
+    not committed.
+  - **api:** `GET /v1/topics` (q/section filters, pagination), `/v1/topics/{id}` (detail +
+    verse_count + see_also), `/v1/topics/{id}/verses` (include_text + translation + pagination),
+    `/v1/verses/{ref}/topics` (reverse) — cloning the place endpoints; `UnknownTopicError` → 404
+    `unknown_topic`. Topic*/Verse* Pydantic models clone the Place* ones.
+- **Decisions (ADR-0006):** **flat** topics (Nave's sub-headings flattened into one verse union);
+  "See X" redirects → a `see_also` pointer with **0 verses** (faithful; `q=anxiety` finds ANXIETY →
+  `see_also: care`, and the verses live under CARE). Hierarchical sub-topics, multi-source merging,
+  and chapter-level links deferred.
+- **Tests (synthetic only):** `bible-core/tests/test_topics_loader.py` (counts, PK dedup, skipped
+  unresolved link, redirect 0-verses, both directions, ordering, idempotent); `bible-api/tests/
+  test_topics_endpoint.py` (browse/filters/pagination, detail, include_text true/false + missing-
+  verse null, redirect empty, reverse union, 404 unknown_topic, 400/404 ref errors, ETag 304).
+  `apikit` seeds CARE/CREATION/LOVE + an ANXIETY redirect. OpenAPI regenerated (4 additive paths).
+- **Live check:** real build → 5,319 topics / 138,138 topic-verse links; `q=anxiety` →
+  ANXIETY (`see_also: care`); CARE carries Phil 4:6; `/verses/Phil 4:6/topics` → CARE, COMMANDMENTS,
+  PRAYER, THANKFULNESS, TROUBLE. `make check` green.

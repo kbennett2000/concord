@@ -912,3 +912,134 @@ def get_places_for_reference(conn: sqlite3.Connection, reference: Reference) -> 
 def distinct_place_types(conn: sqlite3.Connection) -> list[str]:
     """The set of place ``type`` values present, sorted — for validating a ``?type=`` filter."""
     return [r[0] for r in conn.execute("SELECT DISTINCT type FROM places ORDER BY type")]
+
+
+# --- topical Bible (mirrors the places queries) --------------------------------------
+
+
+@dataclass(frozen=True)
+class TopicRow:
+    """One topic. ``see_also`` is the id of another topic for a 'See X' redirect, else None."""
+
+    id: str
+    name: str
+    section: str
+    see_also: str | None
+
+
+@dataclass(frozen=True)
+class TopicPage:
+    """A page of topics plus the total match count."""
+
+    rows: tuple[TopicRow, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class TopicVerseRef:
+    """One verse curated under a topic (book id + name for reference formatting)."""
+
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+
+
+_TOPIC_COLS = ("id", "name", "section", "see_also")
+_TOPIC_SELECT = ", ".join(_TOPIC_COLS)
+
+
+def _row_to_topic(r: sqlite3.Row) -> TopicRow:
+    return TopicRow(r[0], r[1], r[2], r[3])
+
+
+def list_topics(
+    conn: sqlite3.Connection,
+    q: str | None,
+    section: str | None,
+    limit: int,
+    offset: int,
+) -> TopicPage:
+    """Browse topics, optionally filtered by name substring (``q``) and ``section`` letter.
+
+    Ordered ``name, id`` (a stable tiebreak so same-named topics paginate deterministically);
+    ``total`` is a separate count over the same filter.
+    """
+    clauses: list[str] = []
+    params: list[str] = []
+    if q is not None and q.strip():
+        clauses.append("name LIKE '%' || ? || '%'")  # case-insensitive for ASCII names
+        params.append(q.strip())
+    if section is not None and section.strip():
+        clauses.append("section = ?")
+        params.append(section.strip())
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    rows = tuple(
+        _row_to_topic(r)
+        for r in conn.execute(
+            f"SELECT {_TOPIC_SELECT} FROM topics{where} ORDER BY name, id LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+    )
+    total = conn.execute(f"SELECT COUNT(*) FROM topics{where}", params).fetchone()[0]
+    return TopicPage(rows=rows, total=total)
+
+
+def get_topic(conn: sqlite3.Connection, topic_id: str) -> TopicRow | None:
+    """One topic by its stable id, or ``None`` if no such topic."""
+    row = conn.execute(f"SELECT {_TOPIC_SELECT} FROM topics WHERE id = ?", (topic_id,)).fetchone()
+    return None if row is None else _row_to_topic(row)
+
+
+def count_topic_verses(conn: sqlite3.Connection, topic_id: str) -> int:
+    """How many verses are curated under this topic."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM topic_verses WHERE topic_id = ?", (topic_id,)
+    ).fetchone()[0]
+
+
+def get_topic_verses(
+    conn: sqlite3.Connection, topic_id: str, limit: int, offset: int
+) -> tuple[tuple[TopicVerseRef, ...], int]:
+    """The verses curated under ``topic_id``, in canonical order, plus the total count."""
+    rows = tuple(
+        TopicVerseRef(r[0], r[1], r[2], r[3])
+        for r in conn.execute(
+            "SELECT tv.book_id, b.name, tv.chapter, tv.verse "
+            "FROM topic_verses tv JOIN books b ON b.id = tv.book_id "
+            "WHERE tv.topic_id = ? "
+            "ORDER BY b.canonical_order, tv.chapter, tv.verse "
+            "LIMIT ? OFFSET ?",
+            (topic_id, limit, offset),
+        )
+    )
+    total = count_topic_verses(conn, topic_id)
+    return rows, total
+
+
+def get_topics_for_reference(conn: sqlite3.Connection, reference: Reference) -> TopicPage:
+    """The distinct topics that cite any verse in ``reference`` (the union across its spans).
+
+    The inverse of ``get_topic_verses``. ``SELECT DISTINCT`` dedups a topic that cites several
+    verses of the range; ordered ``name, id``. No pagination (a reference cites few topics).
+    """
+    clauses: list[str] = []
+    params: list[str | int] = [reference.book_id]
+    for span in reference.spans:
+        predicate, span_params = _span_predicate(span, "tv.chapter", "tv.verse")
+        clauses.append(f"({predicate})")
+        params += span_params
+    where = f"tv.book_id = ? AND ({' OR '.join(clauses)})"
+
+    cols = ", ".join(f"t.{c}" for c in _TOPIC_COLS)
+    rows = tuple(
+        _row_to_topic(r)
+        for r in conn.execute(
+            f"SELECT DISTINCT {cols} "
+            "FROM topics t JOIN topic_verses tv ON tv.topic_id = t.id "
+            f"WHERE {where} ORDER BY t.name, t.id",
+            params,
+        )
+    )
+    return TopicPage(rows=rows, total=len(rows))
