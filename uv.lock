@@ -50,7 +50,7 @@ wheels = [
 
 [[package]]
 name = "bible-api"
-version = "1.0.2"
+version = "1.2.0"
 source = { editable = "bible-api" }
 dependencies = [
     { name = "bible-core" },
