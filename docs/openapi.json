@@ -1112,6 +1112,108 @@
         "summary": "Strongs Detail Endpoint"
       }
     },
+    "/v1/strongs/{strongs_id}/verses": {
+      "get": {
+        "operationId": "strongs_verses_endpoint_v1_strongs__strongs_id__verses_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strongs_id",
+            "required": true,
+            "schema": {
+              "title": "Strongs Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "text",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Text"
+            }
+          },
+          {
+            "in": "query",
+            "name": "translation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Translation"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_text",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Text",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Strongs Verses Endpoint"
+      }
+    },
     "/v1/topics": {
       "get": {
         "operationId": "topics_endpoint_v1_topics_get",
@@ -1605,6 +1707,60 @@
           }
         },
         "summary": "Verse Topics Endpoint"
+      }
+    },
+    "/v1/verses/{ref}/words": {
+      "get": {
+        "operationId": "verse_words_endpoint_v1_verses__ref__words_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "title": "Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "text",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Text"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verse Words Endpoint"
       }
     }
   }

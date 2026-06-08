@@ -38,6 +38,15 @@ def build_corpus(path: Path) -> None:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (translation_id, name, "en", "ltr", "standard", "Public domain."),
         )
+    # The Greek NT, the original-language text the word-study endpoints tag (id "SBLGNT", grc). It
+    # carries no synthetic verses here — the word-study endpoints read word_tokens, and the
+    # /strongs/{id}/verses hydration uses an English translation — but it must be a loaded
+    # translation so `?text=SBLGNT` resolves.
+    conn.execute(
+        "INSERT INTO translations (id, name, language, direction, versification, attribution) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("SBLGNT", "SBL Greek New Testament", "grc", "ltr", "standard", "CC BY 4.0, STEPBible."),
+    )
 
     rows: list[tuple[str, str, int, int, str]] = []
 
@@ -256,6 +265,26 @@ def build_corpus(path: Path) -> None:
         "(strongs_id, language, lemma, transliteration, gloss, definition, source) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
         strongs_entries,
+    )
+
+    # Deterministic SBLGNT word tokens for the /strongs/{id}/verses + /verses/{ref}/words tests:
+    #  - JHN 3:16: G9999 (no lexicon entry → null lemma join), G25 (joins ἀγαπάω), and an untagged
+    #    word (null strongs/morph) — exercises ordering + the lexicon LEFT JOIN.
+    #  - G26 in JHN 4:7 and 4:8 → two distinct verses for the Strong's→verses concordance (KJV has
+    #    those verses, so include_text hydrates; ?translation=WEB on JHN 3:16 → text null).
+    # (text_id, book_id, chapter, verse, position, surface_form, strongs_id, morph_code)
+    word_tokens = [
+        ("SBLGNT", "JHN", 3, 16, 1, "θεὸς", "G9999", "N-NSM"),
+        ("SBLGNT", "JHN", 3, 16, 2, "ἠγάπησεν", "G25", "V-AAI-3S"),
+        ("SBLGNT", "JHN", 3, 16, 3, "γὰρ", None, None),
+        ("SBLGNT", "JHN", 4, 7, 1, "ἀγάπη", "G26", "N-NSF"),
+        ("SBLGNT", "JHN", 4, 8, 1, "ἀγάπη", "G26", "N-NSF"),
+    ]
+    conn.executemany(
+        "INSERT INTO word_tokens "
+        "(text_id, book_id, chapter, verse, position, surface_form, strongs_id, morph_code) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        word_tokens,
     )
 
     conn.commit()

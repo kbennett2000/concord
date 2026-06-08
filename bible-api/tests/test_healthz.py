@@ -15,7 +15,7 @@ def test_healthz_reports_real_counts(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["translation_count"] == 3  # KJV, WEB, YLT in the test corpus
+    assert body["translation_count"] == 4  # KJV, WEB, YLT + the Greek SBLGNT
     # 59 (John 3, WEB omits one) + 30 (John 4) + 9 (Gen 1) + 9 (1 John 1) = 107
     assert body["verse_count"] == 107
     assert body["cross_ref_count"] == 5  # seeded by apikit.build_corpus

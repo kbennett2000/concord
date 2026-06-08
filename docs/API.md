@@ -33,6 +33,8 @@ Greek New Testament (`SBLGNT`).
 - [`GET /v1/verses/{ref}/topics`](#get-v1versesreftopics)
 - [`GET /v1/strongs`](#get-v1strongs)
 - [`GET /v1/strongs/{id}`](#get-v1strongsid)
+- [`GET /v1/strongs/{id}/verses`](#get-v1strongsidverses)
+- [`GET /v1/verses/{ref}/words`](#get-v1versesrefwords)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
 - [`GET /v1/translations`](#get-v1translations)
@@ -804,6 +806,70 @@ $ curl -s 'localhost:8000/v1/strongs/G26'
 ```
 
 **Errors:** `404 unknown_strongs` (`detail.strongs_id`). **Caching:** immutable.
+
+## `GET /v1/strongs/{id}/verses`
+
+The verses where a Strong's number occurs (a concordance), in canonical order, optionally hydrated
+with an English translation's text.
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `id` | path | string | — | A Strong's number (normalized; e.g. `G26`). Unknown → `404 unknown_strongs`. |
+| `text` | query | string | `SBLGNT` | The tagged original-language text to search. Unknown → `404`. |
+| `translation` | query | string | default translation | Hydrates each verse's text; used only when `include_text=true`. |
+| `include_text` | query | bool | `true` | When `false`, `text` is null and `translation` is echoed as null. |
+| `limit` | query | int | `50` | 1–200. |
+| `offset` | query | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/strongs/G26/verses?limit=2'
+```
+```json
+{
+  "strongs_id": "G26", "text_id": "SBLGNT", "translation": "KJV", "include_text": true,
+  "limit": 2, "offset": 0, "total": 106,
+  "verses": [
+    { "book": "MAT", "chapter": 24, "verse": 12, "reference": "Matthew 24:12", "text": "…" },
+    { "book": "LUK", "chapter": 11, "verse": 42, "reference": "Luke 11:42", "text": "…" }
+  ]
+}
+```
+
+`text_id` is the tagged text searched (the SBL Greek NT); `translation` is the English text used to
+hydrate each verse (the default translation unless overridden). A verse absent in the chosen
+translation hydrates as `text: null`. **Errors:** `404 unknown_strongs`; `404` unknown `text`.
+**Caching:** immutable.
+
+## `GET /v1/verses/{ref}/words`
+
+The tagged original-language tokens of a reference — the word-study verse view. Each token carries
+its surface form, Strong's number, morphology code, and the lemma/transliteration/gloss joined from
+the lexicon.
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `ref` | path | string | — | A reference per the [grammar](#reference-grammar) (URL-encode spaces). |
+| `text` | query | string | `SBLGNT` | The tagged original-language text. Unknown → `404`. |
+
+```bash
+$ curl -s 'localhost:8000/v1/verses/John%203:16/words'
+```
+```json
+{
+  "reference": "John 3:16", "text_id": "SBLGNT", "total": 25,
+  "tokens": [
+    { "position": 1, "surface_form": "οὕτως", "strongs_id": "G3779", "morph_code": "ADV",
+      "lemma": "οὕτως", "transliteration": "houtōs", "gloss": "thus(-ly)" },
+    { "position": 3, "surface_form": "ἠγάπησεν", "strongs_id": "G25", "morph_code": "V-AAI-3S",
+      "lemma": "ἀγαπάω", "transliteration": "agapaō", "gloss": "to love" }
+  ]
+}
+```
+
+A token's `lemma`/`transliteration`/`gloss` are null when it is untagged or its Strong's has no
+lexicon entry. A valid reference with no tokens (e.g. an OT verse for the NT-only SBLGNT) returns
+`200` with `"total": 0`, `"tokens": []`. **Errors:** `400 unparseable_reference` · `404 unknown_book`
+· `404` unknown `text`. **Caching:** immutable.
 
 ## `GET /v1/random`
 

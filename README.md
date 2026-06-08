@@ -122,6 +122,8 @@ Twenty endpoints. Each is documented in full — with real request/response exam
 | `GET /v1/verses/{ref}/topics` | The topics a verse or passage appears under. |
 | `GET /v1/strongs` | Browse the Strong's lexicon, filtered by lemma/transliteration/gloss or language. |
 | `GET /v1/strongs/{id}` | One Strong's entry — lemma, transliteration, gloss, and full definition. |
+| `GET /v1/strongs/{id}/verses` | The verses where a Strong's number occurs (a concordance), optionally with text. |
+| `GET /v1/verses/{ref}/words` | The tagged original-language tokens of a verse — surface, Strong's, morph, gloss. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -201,8 +203,16 @@ curl 'localhost:8000/v1/strongs?q=love&language=grc'   # ἀγαπάω (G25), �
 curl 'localhost:8000/v1/strongs/G26'                   # ἀγάπη — "love", with full definition
 ```
 
-This pairs with the **SBL Greek New Testament** loaded as a translation (`?translation=SBLGNT`);
-tagged original-language tokens per verse, and lemma/Strong's verse search, follow in later slices.
+And the link runs **both ways**, over the **SBL Greek New Testament** (loaded as a translation,
+`?translation=SBLGNT`): ask a Strong's number for every verse it appears in, or ask a verse for its
+tagged Greek words — each with its lemma, morphology, and gloss.
+
+```bash
+curl 'localhost:8000/v1/strongs/G26/verses'            # every verse with ἀγάπη — a concordance
+curl 'localhost:8000/v1/verses/John+3:16/words'        # the tagged Greek tokens of John 3:16
+```
+
+Aligning each English word to its underlying Greek token is deliberately out of scope.
 
 ## Configuration
 

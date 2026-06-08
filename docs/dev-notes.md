@@ -1510,3 +1510,32 @@ completeness* — this milestone is **v6**.
 - **Live check:** real build → **137,121 word tokens**; `get_strongs_verses("G26","SBLGNT")` → 106
   verses; `get_words_for_reference(John 3:16,"SBLGNT")` → 25 ordered tokens with glosses; Gen 1:1
   (OT, NT-only text) → empty. `make check` green (613 tests).
+
+### Slice V6-S4 — the two remaining endpoints (ADR-0007)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v6-s4-strongs-endpoints`).
+- **Why:** expose the S3 queries over HTTP — the concordance ("every verse where G26 appears") and
+  the per-verse tagged tokens ("the Greek words of John 3:16"). **Completes the Greek word-study cut
+  (acceptance ①–③).** API-only; mirrors the topical-Bible endpoints.
+- **What landed:**
+  - **api (`routers.py`):** `GET /v1/strongs/{id}/verses` (normalize id → 404 `unknown_strongs` if
+    no lexicon entry; `?text=` selects the tagged text [default `SBLGNT`], `?translation=` +
+    `include_text` hydrate the verse text via `resolve_translation`/`get_verse_text` like
+    `/topics/{id}/verses`; pagination) and `GET /v1/verses/{ref}/words` (`?text=` default `SBLGNT`;
+    `parse_reference` → 400/404; a valid ref with no tokens → 200 empty). Both via
+    `cached_json_response`. `?text=`/`?translation=` reuse `resolve_translation` — `text or "SBLGNT"`
+    makes SBLGNT the token-set default while still 404-ing a bad id. Added `DEFAULT_WORD_TEXT`.
+  - **schemas:** `StrongsVerse`, `StrongsVersesResponse`, `WordTokenOut`, `VerseWordsResponse`.
+    No new error types (`UnknownStrongsError` + reference/translation errors already exist).
+  - **tests/corpus:** `apikit.build_corpus` now seeds the **SBLGNT** translation (grc, no synthetic
+    verses needed) + a handful of `word_tokens` (JHN 3:16 with G25 / a no-entry G9999 / an untagged
+    word; G26 in JHN 4:7-8). `test_strongs_endpoint.py` covers order/echo, id-normalize,
+    include_text true/false, missing-text→null (WEB omits JHN 3:16), pagination, 404s, the lexicon
+    join (null lemma for a no-entry token), empty-200, 400 unparseable, bad `?text=`→404, ETag/304.
+    Bumped `test_healthz` (3→4) and `test_translations_endpoint` (KJV/**SBLGNT**/WEB/YLT) for the
+    added Greek translation.
+- **Acceptance ② & ③:** `/v1/strongs/G26/verses` → its occurrences; `/v1/verses/John 3:16/words` →
+  the tagged Greek tokens. ✔
+- **Live check:** real build → `/v1/strongs/G26/verses` returns 106 verses (KJV-hydrated by default);
+  `?include_text=false` → null text; `/v1/verses/John 3:16/words` → 25 tokens (ἠγάπησεν → G25, gloss
+  "to love"); `/v1/verses/Genesis 1:1/words` → 200 empty; unknown id → 404; bad ref → 400.
+  `make check` green; `docs/openapi.json` regenerated (two new paths).
