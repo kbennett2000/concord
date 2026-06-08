@@ -110,7 +110,26 @@ standard, so it loads beside the English Bibles). The **raw `TAGNT` files are re
 committed** — they live under the gitignored + dockerignored `data/original/`; only the derived
 `SBLGNT.json` is committed and ships. STEPBible asks that others refer to github.com/STEPBible as
 the canonical source, which the attribution above does. See [../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
-The lexicon (`strongs_entries`) and tagged tokens (`word_tokens`) land in later v5 slices.
+The tagged tokens (`word_tokens`) land in a later v6 slice.
+
+## Strong's lexicon (`data/strongs/`)
+
+| Field | Value |
+|---|---|
+| File | `data/strongs/lexicon.json` (Strong's number → lemma, transliteration, gloss, definition), derived by [scripts/convert_strongs_lexicon.py](../scripts/convert_strongs_lexicon.py) |
+| Source | STEPBible-Data — `TBESG` (Translators Brief lexicon of Extended Strongs for Greek) — <https://github.com/STEPBible/STEPBible-Data> |
+| License | Creative Commons Attribution 4.0 International (CC BY 4.0) |
+| Attribution | **Lexicon data created by [STEPBible.org](https://github.com/STEPBible/STEPBible-Data) based on work at Tyndale House Cambridge (the Brief lexicon draws on Abbott-Smith), licensed CC BY 4.0. The underlying Strong's numbering (1890) is public domain.** |
+
+The word-study feature (SPEC v6) loads the Greek Strong's lexicon into the additive
+`strongs_entries` table, served by `/v1/strongs` and `/v1/strongs/{id}`. Each entry is keyed on the
+**collapsed-base** Extended Strong's number (`G0026` → `G26`); where TBESG splits a number into
+disambiguated senses (`G0001G`, `G0001H`), the first/primary sense is kept (later slices may expose
+the splits). The HTML in the definition column is stripped to plain text. The **raw `TBESG` file is
+re-derivable and not committed** — it lives under the gitignored + dockerignored `data/original/`;
+only the derived `lexicon.json` is committed and ships. STEPBible asks that others refer to
+github.com/STEPBible as the canonical source, which the attribution above does. See
+[../THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
 
 ## Translator's notes (`data/private/notes/`) — NOT committed
 

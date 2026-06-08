@@ -174,6 +174,20 @@ _TABLES: tuple[str, ...] = (
         PRIMARY KEY (topic_id, book_id, chapter, verse)
     )
     """,
+    # Strong's lexicon (additive). One row per collapsed-base Strong's number (e.g. "G26"): the
+    # lemma, transliteration, a brief gloss and the full definition. Translation-agnostic — the
+    # word-token link from verses to these entries lands in a later slice.
+    """
+    CREATE TABLE IF NOT EXISTS strongs_entries (
+        strongs_id      TEXT PRIMARY KEY,
+        language        TEXT NOT NULL,
+        lemma           TEXT NOT NULL,
+        transliteration TEXT NOT NULL,
+        gloss           TEXT NOT NULL,
+        definition      TEXT NOT NULL,
+        source          TEXT NOT NULL
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "

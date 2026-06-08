@@ -12,11 +12,13 @@ from pathlib import Path
 
 import pytest
 from bible_core.loader import build_database
+from bible_core.queries import get_strongs
 
 pytestmark = pytest.mark.integration
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSLATIONS = REPO_ROOT / "data" / "translations"
+LEXICON = REPO_ROOT / "data" / "strongs"
 
 
 def _source_verse(path: Path, abbreviation: str, ch: int, vs: int) -> str | None:
@@ -108,3 +110,19 @@ def test_real_build_loads_greek_nt_as_a_translation(tmp_path: Path) -> None:
         ).fetchone()[0]
         == 0
     )
+
+
+def test_real_build_loads_the_strongs_lexicon(tmp_path: Path) -> None:
+    """The real STEPBible Greek lexicon (TBESG) loads into ``strongs_entries`` (v6 S2): the
+    canonical G26 entry is ἀγάπη, glossed 'love'."""
+    db = tmp_path / "bible.db"
+    stats = build_database(db, [TRANSLATIONS], lexicon_dir=LEXICON)
+    assert stats.strongs_entries > 10000
+    conn = sqlite3.connect(db)
+    entry = get_strongs(conn, "G26")
+    assert entry is not None
+    assert entry.lemma == unicodedata.normalize("NFC", "ἀγάπη")
+    assert entry.transliteration == "agapē"
+    assert "love" in entry.gloss
+    assert entry.language == "grc"
+    assert "STEPBible" in entry.source or "STEP Bible" in entry.source

@@ -7,6 +7,7 @@ the shared shaper into whichever ``?format=`` was requested.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -21,6 +22,7 @@ from bible_core.queries import (
     PlaceRow,
     QueryResult,
     SectionHeadingRow,
+    StrongsRow,
     TopicRow,
     count_place_verses,
     count_topic_verses,
@@ -34,6 +36,7 @@ from bible_core.queries import (
     get_places_for_reference,
     get_random_verse,
     get_section_headings,
+    get_strongs,
     get_topic,
     get_topic_verses,
     get_topics_for_reference,
@@ -41,6 +44,7 @@ from bible_core.queries import (
     get_verse_text,
     get_verses,
     list_places,
+    list_strongs,
     list_topics,
     reference_exists,
     search_notes,
@@ -69,6 +73,7 @@ from .errors import (
     SemanticTimeoutError,
     SemanticUnavailableError,
     UnknownPlaceError,
+    UnknownStrongsError,
     UnknownTopicError,
     UnknownTranslationError,
 )
@@ -96,6 +101,9 @@ from .schemas import (
     SectionHeading,
     SemanticSearchHit,
     SemanticSearchResponse,
+    StrongsDetail,
+    StrongsResponse,
+    StrongsSummary,
     TopicDetail,
     TopicsResponse,
     TopicSummary,
@@ -879,5 +887,68 @@ def verse_topics_endpoint(
         reference=reference.echo,
         total=page.total,
         topics=[_topic_summary(t) for t in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+# --- Strong's lexicon (mirrors the topical-Bible endpoints) --------------------------
+
+# A path id like "g0026" → "G26": upper-case the letter and drop leading zeros so it matches the
+# collapsed-base ids in the lexicon. Anything that isn't a Strong's number is just upper-cased and
+# left to 404.
+_STRONGS_ID_RE = re.compile(r"([GH])0*(\d+)", re.IGNORECASE)
+
+
+def _normalize_strongs_id(raw: str) -> str:
+    m = _STRONGS_ID_RE.fullmatch(raw.strip())
+    return f"{m.group(1).upper()}{m.group(2)}" if m else raw.strip().upper()
+
+
+def _strongs_summary(entry: StrongsRow) -> StrongsSummary:
+    return StrongsSummary(
+        strongs_id=entry.strongs_id,
+        language=entry.language,
+        lemma=entry.lemma,
+        transliteration=entry.transliteration,
+        gloss=entry.gloss,
+    )
+
+
+@router.get("/strongs")
+def strongs_endpoint(
+    request: Request,
+    conn: Conn,
+    q: str | None = None,
+    language: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    q_filter = q.strip() if q and q.strip() else None
+    language_filter = language.strip() if language and language.strip() else None
+    page = list_strongs(conn, q_filter, language_filter, limit, offset)
+    response = StrongsResponse(
+        q=q_filter,
+        language=language_filter,
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        entries=[_strongs_summary(e) for e in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/strongs/{strongs_id}")
+def strongs_detail_endpoint(strongs_id: str, request: Request, conn: Conn) -> Response:
+    entry = get_strongs(conn, _normalize_strongs_id(strongs_id))
+    if entry is None:
+        raise UnknownStrongsError(strongs_id)
+    response = StrongsDetail(
+        strongs_id=entry.strongs_id,
+        language=entry.language,
+        lemma=entry.lemma,
+        transliteration=entry.transliteration,
+        gloss=entry.gloss,
+        definition=entry.definition,
+        source=entry.source,
     )
     return cached_json_response(response, request)

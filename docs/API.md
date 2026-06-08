@@ -31,6 +31,8 @@ Greek New Testament (`SBLGNT`).
 - [`GET /v1/topics/{id}`](#get-v1topicsid)
 - [`GET /v1/topics/{id}/verses`](#get-v1topicsidverses)
 - [`GET /v1/verses/{ref}/topics`](#get-v1versesreftopics)
+- [`GET /v1/strongs`](#get-v1strongs)
+- [`GET /v1/strongs/{id}`](#get-v1strongsid)
 - [`GET /v1/random`](#get-v1random)
 - [`GET /v1/books`](#get-v1books)
 - [`GET /v1/translations`](#get-v1translations)
@@ -752,6 +754,56 @@ $ curl -s 'localhost:8000/v1/verses/Philippians%204:6/topics'
 The **deduped union** across the reference's range, ordered by `name` then `id`. A reference citing
 no topic returns `200` with `"total": 0`, `"topics": []`. **Errors:** `400 unparseable_reference` ·
 `404 unknown_book`. **Caching:** immutable.
+
+## `GET /v1/strongs`
+
+Browse the Strong's lexicon (the Greek lexicon from [STEPBible](https://github.com/STEPBible/STEPBible-Data),
+CC BY 4.0). Optionally filter by `q` (a case-insensitive substring of the lemma, transliteration,
+or gloss) and `language` (`grc` for Greek). Ordered by Strong's number within language.
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `q` | query | string | — | Substring of lemma, transliteration, or gloss. |
+| `language` | query | string | — | ISO 639-3 code (`grc`). |
+| `limit` | query | int | `50` | 1–200. |
+| `offset` | query | int | `0` | ≥ 0. |
+
+```bash
+$ curl -s 'localhost:8000/v1/strongs?q=love&language=grc&limit=2'
+```
+```json
+{
+  "q": "love", "language": "grc", "limit": 2, "offset": 0, "total": 18,
+  "entries": [
+    { "strongs_id": "G25", "language": "grc", "lemma": "ἀγαπάω", "transliteration": "agapaō", "gloss": "to love" },
+    { "strongs_id": "G26", "language": "grc", "lemma": "ἀγάπη", "transliteration": "agapē", "gloss": "love" }
+  ]
+}
+```
+
+**Caching:** immutable.
+
+## `GET /v1/strongs/{id}`
+
+One lexicon entry in full, including the definition. The id is normalized — the leading letter is
+upper-cased and any zero-padding dropped, so `g0026`, `g26`, and `G26` all resolve to `G26`.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `id` | path | string | A Strong's number (e.g. `G26`). Unknown → `404 unknown_strongs`. |
+
+```bash
+$ curl -s 'localhost:8000/v1/strongs/G26'
+```
+```json
+{
+  "strongs_id": "G26", "language": "grc", "lemma": "ἀγάπη", "transliteration": "agapē",
+  "gloss": "love", "definition": "ἀγάπη, -ης, ἡ … love, goodwill, esteem. …",
+  "source": "STEP Bible (Tyndale House)"
+}
+```
+
+**Errors:** `404 unknown_strongs` (`detail.strongs_id`). **Caching:** immutable.
 
 ## `GET /v1/random`
 

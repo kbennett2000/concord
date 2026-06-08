@@ -58,6 +58,24 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0)
   the canonical source. See data/SOURCES.md.
 
 --------------------------------------------------------------------------------
+Strong's lexicon — data/strongs/lexicon.json (SPEC v6)
+--------------------------------------------------------------------------------
+Work:    Greek Strong's lexicon (lemma, transliteration, gloss, definition)
+Source:  STEPBible-Data — TBESG (Translators Brief lexicon of Extended Strongs
+         for Greek) — https://github.com/STEPBible/STEPBible-Data
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+  Lexicon data created by STEPBible.org based on work at Tyndale House Cambridge
+  (the Brief lexicon draws on Abbott-Smith), licensed under a Creative Commons
+  Attribution 4.0 International (CC BY 4.0) license. The underlying Strong's
+  numbering (1890) is public domain. Concord keys entries on the collapsed-base
+  Extended Strong's number, strips the definition HTML to plain text, and loads
+  them into the strongs_entries table (data/strongs/lexicon.json, committed and
+  shipped); the raw TBESG file is re-derivable and not committed (gitignored +
+  dockerignored data/original/). STEPBible asks that others refer to
+  github.com/STEPBible as the canonical source. See data/SOURCES.md.
+
+--------------------------------------------------------------------------------
 Translator's notes — capability (SPEC v4), parser, and the NET data
 --------------------------------------------------------------------------------
 Concord can store and serve translator's notes, but it redistributes NONE of the

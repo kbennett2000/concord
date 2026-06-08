@@ -77,12 +77,13 @@ The original-language *text* itself is served by the existing `/v1/verses` and `
 
 ## 5. Slices
 
-- **V6-S1 — Greek NT as a translation. ✅ (this slice)** `scripts/convert_step_tagnt.py` →
+- **V6-S1 — Greek NT as a translation. ✅** `scripts/convert_step_tagnt.py` →
   `data/translations/SBLGNT.json` (7,917 verses, the SBL-edition word selection from TAGNT,
   NFC-normalized). No schema change. `/v1/verses/John 3:16?translation=SBLGNT` returns the Greek;
   `/v1/translations` lists it.
-- **V6-S2 — lexicon.** `strongs_entries` + loader + `convert_strongs_lexicon.py` (TBESG) +
-  `GET /v1/strongs` & `/v1/strongs/{id}` + `UnknownStrongsError`. Acceptance ①: `/v1/strongs/G26`
+- **V6-S2 — lexicon. ✅ (this slice)** `strongs_entries` + loader + `convert_strongs_lexicon.py`
+  (TBESG → `data/strongs/lexicon.json`, 10,846 entries keyed on the collapsed-base Strong's number)
+  + `GET /v1/strongs` & `/v1/strongs/{id}` + `UnknownStrongsError`. Acceptance ①: `/v1/strongs/G26`
   → ἀγάπη "love".
 - **V6-S3 — tokens + queries.** `word_tokens` + loader; extend the parser to emit
   `data/strongs/tokens-sblgnt.json`; `get_strongs_verses` / `get_words_for_reference` tested in
