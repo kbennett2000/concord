@@ -1627,3 +1627,30 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **Scope held:** competing routes / route variants, per-segment dating, and geometry rendering are
   deferred (SPEC v7 §3). Endpoints land in S2 (forward) / S3 (reverse); the rest of the curated set
   (Paul's 2nd/3rd, the voyage to Rome, the Exodus) + README/`docs/API.md` land in S4.
+
+### Slice V7-S2 — the two forward endpoints (ADR-0008)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v7-s2-journeys-endpoints`).
+- **Why:** expose the S1 core layer over HTTP — the forward half of the acceptance. Clones the
+  places endpoints exactly (`cached_json_response` ETag/304, the error envelope).
+- **What landed:**
+  - **schemas:** `JourneySummary` (id, name, scripture, dating, stop_count), `JourneysResponse`
+    (limit, offset, total, journeys), `JourneyStop` (ordinal, place_id, name, friendly_id, lat,
+    lon, confidence, status, reference), `JourneyDetail` (metadata incl. **source** + **note** —
+    the one-reconstruction flag — plus embedded ordered stops).
+  - **errors:** `UnknownJourneyError` → 404 `unknown_journey` (clones `UnknownPlaceError`).
+  - **routers:** `GET /v1/journeys` (paginated summaries) + `GET /v1/journeys/{id}` (detail with
+    embedded ordered stops, each resolving to its place-id with coords/status — the v3 honesty
+    model rides along, so an unknown-place stop has null coords). `_journey_summary`/`_journey_stop`
+    shapers mirror `_place_summary`.
+  - **tests:** `bible-api/tests/test_journeys_endpoint.py` (list order/echo/pagination, detail
+    ordered stops + revisit preserved + honesty fields, null-coord stop, 404 unknown_journey,
+    ETag 304); `apikit` seeds two journeys over the existing places (`j_paul` with a `p_ant1`
+    revisit; `j_wander` a single `p_nod` unknown-place stop). `docs/openapi.json` regenerated
+    (two new paths).
+- **Acceptance (forward):** `/v1/journeys/paul-first` → 15 ordered stops resolving to real
+  place-ids with coords + source/dating + the `note` flag. ✔ Live-verified against a real build:
+  list → `[paul-first]`; detail → 15 stops, stop 1 = Antioch (36.23, 36.17) identified, start ==
+  return (`ae41ab4`), all stops have coords, ETag/immutable + 304, unknown → 404 `unknown_journey`.
+- **`make check` green** (654 passed). No endpoints changed; OpenAPI diff is two new paths.
+- **Scope held:** still no curated set beyond `paul-first` and no README/`docs/API.md` (S4); the
+  reverse endpoint is S3.

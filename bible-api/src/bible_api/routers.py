@@ -17,6 +17,8 @@ import structlog
 from bible_core.parser import UnknownBookError, parse_reference
 from bible_core.queries import (
     CrossRefRow,
+    JourneyStopRow,
+    JourneySummaryRow,
     NoteCrossRefRow,
     NoteRow,
     PlaceRow,
@@ -30,6 +32,8 @@ from bible_core.queries import (
     get_books,
     get_chapter,
     get_cross_references,
+    get_journey,
+    get_journey_stops,
     get_notes,
     get_place,
     get_place_verses,
@@ -45,6 +49,7 @@ from bible_core.queries import (
     get_verse_text,
     get_verses,
     get_words_for_reference,
+    list_journeys,
     list_places,
     list_strongs,
     list_topics,
@@ -74,6 +79,7 @@ from .errors import (
     SemanticBusyError,
     SemanticTimeoutError,
     SemanticUnavailableError,
+    UnknownJourneyError,
     UnknownPlaceError,
     UnknownStrongsError,
     UnknownTopicError,
@@ -87,6 +93,10 @@ from .schemas import (
     CrossRefSource,
     CrossRefTarget,
     HeadingsResponse,
+    JourneyDetail,
+    JourneysResponse,
+    JourneyStop,
+    JourneySummary,
     NoteCrossReference,
     NoteSearchHit,
     NoteSearchResponse,
@@ -790,6 +800,70 @@ def verse_places_endpoint(
         reference=reference.echo,
         total=page.total,
         places=[_place_summary(p) for p in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+# --- journeys (v7): curated itineraries over existing places (mirrors the places endpoints) ---
+
+
+def _journey_summary(row: JourneySummaryRow) -> JourneySummary:
+    """Project a JourneySummaryRow to the summary shape."""
+    return JourneySummary(
+        id=row.id,
+        name=row.name,
+        scripture=row.scripture,
+        dating=row.dating,
+        stop_count=row.stop_count,
+    )
+
+
+def _journey_stop(stop: JourneyStopRow) -> JourneyStop:
+    """Project a JourneyStopRow to the response shape. Coords/status come from the joined place;
+    they are null when the place has no confident location (the v3 honesty model)."""
+    return JourneyStop(
+        ordinal=stop.ordinal,
+        place_id=stop.place_id,
+        name=stop.name,
+        friendly_id=stop.friendly_id,
+        latitude=stop.latitude,
+        longitude=stop.longitude,
+        confidence=stop.confidence,
+        status=stop.status,
+        reference=stop.reference,
+    )
+
+
+@router.get("/journeys")
+def journeys_endpoint(
+    request: Request,
+    conn: Conn,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    page = list_journeys(conn, limit, offset)
+    response = JourneysResponse(
+        limit=limit,
+        offset=offset,
+        total=page.total,
+        journeys=[_journey_summary(j) for j in page.rows],
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/journeys/{journey_id}")
+def journey_detail_endpoint(journey_id: str, request: Request, conn: Conn) -> Response:
+    journey = get_journey(conn, journey_id)
+    if journey is None:
+        raise UnknownJourneyError(journey_id)
+    response = JourneyDetail(
+        id=journey.id,
+        name=journey.name,
+        scripture=journey.scripture,
+        dating=journey.dating,
+        source=journey.source,
+        note=journey.note,
+        stops=[_journey_stop(s) for s in get_journey_stops(conn, journey.id)],
     )
     return cached_json_response(response, request)
 

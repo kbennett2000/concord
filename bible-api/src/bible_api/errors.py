@@ -95,6 +95,18 @@ class UnknownStrongsError(Exception):
         return {"strongs_id": self.strongs_id}
 
 
+class UnknownJourneyError(Exception):
+    """A requested journey id (a path resource) is not in the journeys table → 404."""
+
+    def __init__(self, journey_id: str) -> None:
+        super().__init__(f"unknown journey {journey_id!r}")
+        self.journey_id = journey_id
+
+    @property
+    def detail(self) -> dict[str, Any]:
+        return {"journey_id": self.journey_id}
+
+
 class FilterError(Exception):
     """A query-param *filter* value did not match a known value (e.g. ``?type=``/``?status=``).
 
@@ -191,6 +203,10 @@ async def _handle_unknown_strongs(_request: Request, exc: Exception) -> Response
     return _error_response(404, "unknown_strongs", str(exc), cast(UnknownStrongsError, exc).detail)
 
 
+async def _handle_unknown_journey(_request: Request, exc: Exception) -> Response:
+    return _error_response(404, "unknown_journey", str(exc), cast(UnknownJourneyError, exc).detail)
+
+
 async def _handle_filter(_request: Request, exc: Exception) -> Response:
     filter_exc = cast(FilterError, exc)
     return _error_response(400, filter_exc.code, str(exc), filter_exc.detail)
@@ -216,5 +232,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UnknownPlaceError, _handle_unknown_place)
     app.add_exception_handler(UnknownTopicError, _handle_unknown_topic)
     app.add_exception_handler(UnknownStrongsError, _handle_unknown_strongs)
+    app.add_exception_handler(UnknownJourneyError, _handle_unknown_journey)
     app.add_exception_handler(FilterError, _handle_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)
