@@ -2,9 +2,11 @@
 the translation/type/book filters, ordering + pagination, the honest-empty and unknown-filter
 splits, case-insensitive translation, and the immutable-ETag 304.
 
-Synthetic notes only (apikit): KJV has notes, WEB has none (the public-image case). The token
-"note" appears in 4 notes (JHN 3:16 sn, JHN 3:17 tc, GEN 2:1, 1JN 1:1); "tiebreak fixture note"
-is identical in GEN 2:1 and 1JN 1:1 so the canonical tiebreak is observable. No real NET data.
+Synthetic notes only (apikit): KJV has notes, WEB carries committed public-domain footnotes
+(ADR-0004), YLT has none. The token "note" appears in 4 KJV notes (JHN 3:16 sn, JHN 3:17 tc,
+GEN 2:1, 1JN 1:1) — WEB's notes use distinct vocabulary so those totals are unchanged;
+"tiebreak fixture note" is identical in GEN 2:1 and 1JN 1:1 so the canonical tiebreak is
+observable. No real NET data.
 """
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
@@ -126,11 +128,20 @@ def test_zero_matches_is_200_empty(client: TestClient) -> None:
 
 
 def test_known_translation_no_notes_is_200_empty(client: TestClient) -> None:
-    """WEB is loaded but ships zero notes — the public-image case. 200 empty, never 404."""
-    response = client.get("/v1/notes/search", params={"q": "note", "translation": "WEB"})
+    """YLT is loaded but ships zero notes. 200 empty, never 404."""
+    response = client.get("/v1/notes/search", params={"q": "note", "translation": "YLT"})
     assert response.status_code == 200
     body = response.json()
-    assert (body["translation"], body["total"], body["hits"]) == ("WEB", 0, [])
+    assert (body["translation"], body["total"], body["hits"]) == ("YLT", 0, [])
+
+
+def test_web_public_domain_note_is_searchable(client: TestClient) -> None:
+    """ADR-0004: WEB's public-domain footnotes are FTS-searchable on a stock build."""
+    body = client.get("/v1/notes/search", params={"q": "Elohim", "translation": "WEB"}).json()
+    assert body["translation"] == "WEB"
+    assert body["total"] == 1
+    hit = body["hits"][0]
+    assert (hit["book"], hit["reference"], hit["translation"]) == ("GEN", "Genesis 1:1", "WEB")
 
 
 # --- error paths ---------------------------------------------------------------------

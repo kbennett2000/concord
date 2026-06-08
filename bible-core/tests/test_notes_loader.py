@@ -209,6 +209,31 @@ def test_public_and_private_dirs_are_unioned_in_order(tmp_path: Path) -> None:
     assert [r[0] for r in ordered] == ["Public note.", "Private note."]  # public ids first
 
 
+def test_public_web_style_notes_load(tmp_path: Path) -> None:
+    """A committed public file in the WEB shape (type omitted, char_offset 0, no marker, no
+    cross-refs — what scripts/convert_web_footnotes.py emits) loads cleanly and idempotently."""
+    public_dir = tmp_path / "notes"
+    payload = notes_file(
+        "NETX",
+        [
+            note("Gen", 1, 1, "The Hebrew word rendered God is Elohim.", char_offset=0),
+            note("John", 3, 16, "The Greek phrasing emphasizes degree."),
+        ],
+    )
+    write_notes(public_dir, payload)
+
+    first = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[public_dir])
+    second = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[public_dir])
+    assert (first.notes, second.notes) == (2, 2)  # idempotent
+    assert first.note_cross_references == 0
+
+    conn = sqlite3.connect(tmp_path / "bible.db")
+    rows = conn.execute(
+        "SELECT note_type, char_offset, marker FROM translator_notes ORDER BY id"
+    ).fetchall()
+    assert rows == [(None, 0, None), (None, 0, None)]  # type NULL, verse-level, no caller marker
+
+
 def test_dropping_private_dir_removes_exactly_the_private_notes(tmp_path: Path) -> None:
     """Rebuilding without the private path keeps the public notes and drops only the private."""
     public_dir = tmp_path / "notes"

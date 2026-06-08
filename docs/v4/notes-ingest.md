@@ -1,10 +1,21 @@
 # Translator's notes — ingest & user flow (Concord v4)
 
 Concord can **store and serve translator's notes** (NET-style study / translator's /
-text-critical notes anchored to points in the verse text). The richest source — the NET Bible —
-is **copyrighted by Biblical Studies Press, "all rights reserved," and is not redistributable.**
-So Concord ships the *capability*, never the *data*: you supply your own legally-obtained notes,
-and they are baked into your **local** `bible.db`. The published image ships **zero** notes.
+text-critical notes anchored to points in the verse text). Notes come from **two paths** that the
+loader scans together (ADR-0004):
+
+- **`data/notes/`** — **committed, public-domain** notes that **ship** in the published image. The
+  World English Bible's own translator footnotes live here (`data/notes/WEB.json`): the WEB is
+  public domain, so its notes are too. On a stock build, `GET /v1/translations/WEB/notes/{book}/{chapter}`
+  returns these real footnotes.
+- **`data/private/notes/`** — **user-supplied, restricted** notes that **never ship**. The richest
+  source — the NET Bible — is **copyrighted by Biblical Studies Press, "all rights reserved," and
+  is not redistributable.** So for restricted notes Concord ships the *capability*, never the
+  *data*: you supply your own legally-obtained notes, and they are baked into your **local**
+  `bible.db` only.
+
+So the published image ships the committed **public-domain** notes (currently WEB's) and **zero
+restricted** notes. Translations without any notes (public or private) simply return an empty list.
 
 > **Only load data you have the legal right to use.** Notes you place under `data/private/`
 > are never committed and never baked into the published image — that is your responsibility to
@@ -31,13 +42,20 @@ The build summary then reports the notes it loaded, e.g.:
 Built bible.db: 17 translations, …, 58000 notes, 16000 note cross-references in 7.1s.
 ```
 
-A build with no `data/private/notes/` (the public image, CI, or any fresh clone) bakes **zero**
-notes — the endpoint (Slice 2) will simply return an empty list for translations with no notes.
+A build with no `data/private/notes/` (the public image, CI, or any fresh clone) bakes the
+committed **public** notes (e.g. WEB's footnotes from `data/notes/`) and **zero private** notes —
+the endpoint returns those public notes for WEB and an empty list for translations with no notes.
+
+The WEB footnotes are derived from the public-domain eBible.org `engwebp` USFM by
+[scripts/convert_web_footnotes.py](../../scripts/convert_web_footnotes.py) (footnotes only — not
+verse text; verse-level anchor, `type` null, no cross-references for v1). See
+[data/SOURCES.md](../../data/SOURCES.md) for provenance.
 
 ## The notes JSON contract
 
-One file per translation. The loader (`bible_core.notes`) reads every `*.json` directly under
-`data/private/notes/`.
+One file per translation. The loader (`bible_core.notes`) reads every `*.json` directly under each
+notes directory — both `data/notes/` (committed, public) and `data/private/notes/` (local,
+restricted) — scanned in that order and unioned.
 
 ```jsonc
 {
@@ -82,11 +100,17 @@ The licensing safety is the **dual-ignore rule** (SPEC v4 §2): `data/private/` 
 **both** `.gitignore` and `.dockerignore`. The Dockerfile's broad `COPY data/ data/` is *not*
 selective — the `.dockerignore` exclusion is the only thing keeping restricted data out of the
 build context and the baked `bible.db`. `data/private/notes/` sits under that already-covered
-path, so it needs no new ignore entry. Two tests enforce this:
+path, so it needs no new ignore entry.
 
-- `test_notes_loader.test_clean_build_with_no_private_data_yields_zero_notes` — a build with no
-  private data bakes zero notes (the published-image behavior).
-- `test_licensing_safety` — `data/private/` stays in both ignore files (the dual-ignore guard).
+The **public** path `data/notes/` is the deliberate opposite: it is committed and **must NOT** be
+ignored, so its public-domain notes ship (ADR-0004). Three tests enforce the split:
+
+- `test_notes_loader.test_clean_build_bakes_public_notes_but_zero_private_notes` — a clean build
+  (no `data/private/`) bakes the committed public notes but zero private notes.
+- `test_licensing_safety.test_private_data_dir_is_ignored` — `data/private/` stays in both ignore
+  files (the dual-ignore guard).
+- `test_licensing_safety.test_public_notes_dir_is_not_ignored` — `data/notes/` stays OUT of both
+  ignore files (the mirror guard, so the public notes never silently vanish from the image).
 
 See [../../THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES) and
 [../../data/SOURCES.md](../../data/SOURCES.md) for the licensing record.

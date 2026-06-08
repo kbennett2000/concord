@@ -112,8 +112,8 @@ Fifteen endpoints. Each is documented in full — with real request/response exa
 | `GET /v1/places/{id}` | One place's detail — coordinates, confidence, and how honestly it's located. |
 | `GET /v1/places/{id}/verses` | The verses that mention a place. |
 | `GET /v1/verses/{ref}/places` | The places a verse or passage names. |
-| `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
-| `GET /v1/notes/search` | Keyword search over translator's notes — user-supplied, never shipped in the public image. |
+| `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage. The stock image ships the WEB's own public-domain footnotes; other translations' (restricted) notes are user-supplied and never shipped. |
+| `GET /v1/notes/search` | Keyword search over translator's notes — WEB's public-domain footnotes ship; restricted notes are user-supplied and never shipped. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -339,12 +339,13 @@ still haven't made a release, on purpose:
   search is already translation-agnostic: it ranks verse *references* in one meaning-space (WEB) and
   renders them in whatever translation you ask for, so "search all translations" has no meaning for
   it. (Keyword multi-translation search *did* ship in v5 — see `GET /v1/search?translations=`.)
-- **Ship translator's notes.** The notes endpoint
-  (`GET /v1/translations/{translation}/notes/{book}/{chapter}`) is fully wired and live, but
-  the public image ships **zero** notes — the richest source (NET) is copyrighted, and notes
-  are user-supplied by design. So on a stock image this endpoint returns `200` with an empty
-  list for every translation. To populate it, bake your own legally-obtained notes in via the
-  gitignored `data/private/notes/` directory — see
+- **Restricted translators' notes.** The notes endpoint
+  (`GET /v1/translations/{translation}/notes/{book}/{chapter}`) is fully wired and live. The stock
+  image now ships the **World English Bible's own public-domain footnotes** (`data/notes/WEB.json`),
+  so `GET /v1/translations/WEB/notes/{book}/{chapter}` returns real notes on a clean build. Other
+  translations return `200` with an empty list until populated — the richest source (NET) is
+  copyrighted and is user-supplied by design. To add restricted notes, bake your own
+  legally-obtained notes in via the gitignored `data/private/notes/` directory — see
   [`docs/API.md`](docs/API.md#get-v1translationstranslationnotesbookchapter) and
   [`examples/notes-sample.json`](examples/notes-sample.json) for the file shape.
 

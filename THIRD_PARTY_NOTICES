@@ -26,6 +26,21 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0)
   Attribution 4.0 International (CC BY 4.0) license.
 
 --------------------------------------------------------------------------------
+World English Bible footnotes (public domain) — data/notes/WEB.json
+--------------------------------------------------------------------------------
+Source:  eBible.org engwebp (World English Bible, Protestant Edition), USFM
+         https://ebible.org/find/details.php?id=engwebp
+License: Public domain
+
+  The World English Bible is in the Public Domain — it is not copyrighted. Its
+  translator footnotes are public domain along with the text. Concord extracts
+  the footnotes ONLY (not the verse text) via scripts/convert_web_footnotes.py
+  into data/notes/WEB.json, which IS committed and IS baked into the published
+  image (ADR-0004) — the public, ship-by-default counterpart to the restricted
+  notes below. The raw USFM is re-derivable and not committed. See
+  data/SOURCES.md and docs/v4/notes-ingest.md.
+
+--------------------------------------------------------------------------------
 Translator's notes — capability (SPEC v4), parser, and the NET data
 --------------------------------------------------------------------------------
 Concord can store and serve translator's notes, but it redistributes NONE of the
