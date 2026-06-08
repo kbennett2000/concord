@@ -1,7 +1,7 @@
 """Notes loader behavior on synthetic fixtures: anchors, types, offsets, ordinals,
-cross-refs, FTS, idempotency, loud validation, and the licensing-safety proof (a clean build
-with no private data bakes zero notes). No test depends on the copyrighted NET data (SPEC
-v4 §11)."""
+cross-refs, FTS, idempotency, loud validation, the multi-dir public/private union (ADR-0004),
+and the licensing-safety proof (a clean build bakes the committed public notes but zero private
+notes). No test depends on the copyrighted NET data (SPEC v4 §11)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _build(tmp_path: Path, notes_payload: dict[str, object] | None) -> tuple[Pat
     notes_dir = tmp_path / "private" / "notes"
     if notes_payload is not None:
         write_notes(notes_dir, notes_payload)  # type: ignore[arg-type]
-    stats = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dir=notes_dir)
+    stats = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[notes_dir])
     return tmp_path / "bible.db", stats
 
 
@@ -143,20 +143,39 @@ def test_build_is_idempotent(tmp_path: Path) -> None:
     payload = _sample_notes()
     notes_dir = tmp_path / "private" / "notes"
     write_notes(notes_dir, payload)
-    first = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dir=notes_dir)
-    second = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dir=notes_dir)
+    first = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[notes_dir])
+    second = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[notes_dir])
     assert (first.notes, first.note_cross_references) == (
         second.notes,
         second.note_cross_references,
     )
 
 
-# --- the licensing-safety proof ------------------------------------------------------
+# --- the licensing-safety proof (ADR-0004: public ships, private never does) ---------
 
 
-def test_clean_build_with_no_private_data_yields_zero_notes(tmp_path: Path) -> None:
-    """The public-image case: build with no notes_dir → a notes-empty database."""
-    stats = build_database(tmp_path / "bible.db", [_corpus(tmp_path)])  # notes_dir omitted
+def test_clean_build_bakes_public_notes_but_zero_private_notes(tmp_path: Path) -> None:
+    """The stock-image case (ADR-0004): the committed public path bakes its notes, while the
+    dual-ignored private path — absent in a clean build — bakes zero. Mirrors the loader's
+    real ``[data/notes, data/private/notes]`` order with no ``data/private/`` present."""
+    public_dir = tmp_path / "notes"
+    private_dir = tmp_path / "private" / "notes"  # never created — the clean-build case
+    write_notes(public_dir, notes_file("NETX", [note("John", 3, 16, "A public-domain footnote.")]))
+
+    stats = build_database(
+        tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[public_dir, private_dir]
+    )
+
+    assert stats.notes == 1  # the public note loaded
+    conn = sqlite3.connect(tmp_path / "bible.db")
+    # Every baked note came from the public file — none from the (absent) private path.
+    texts = [r[0] for r in conn.execute("SELECT text FROM translator_notes")]
+    assert texts == ["A public-domain footnote."]
+
+
+def test_no_notes_dirs_yields_zero_notes(tmp_path: Path) -> None:
+    """Defensive: omitting notes_dirs entirely → a notes-empty database."""
+    stats = build_database(tmp_path / "bible.db", [_corpus(tmp_path)])  # notes_dirs omitted
     assert stats.notes == 0
     assert stats.note_cross_references == 0
     conn = sqlite3.connect(tmp_path / "bible.db")
@@ -166,8 +185,48 @@ def test_clean_build_with_no_private_data_yields_zero_notes(tmp_path: Path) -> N
 
 def test_missing_notes_dir_is_not_an_error(tmp_path: Path) -> None:
     missing = tmp_path / "private" / "notes"  # never created
-    stats = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dir=missing)
+    stats = build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[missing])
     assert stats.notes == 0
+
+
+# --- multi-dir union (ADR-0004) ------------------------------------------------------
+
+
+def test_public_and_private_dirs_are_unioned_in_order(tmp_path: Path) -> None:
+    """Both notes paths load; ids are assigned in dir order (public first), deterministically."""
+    public_dir = tmp_path / "notes"
+    private_dir = tmp_path / "private" / "notes"
+    write_notes(public_dir, notes_file("NETX", [note("John", 3, 16, "Public note.")]))
+    write_notes(private_dir, notes_file("NETX", [note("Gen", 1, 1, "Private note.")]))
+
+    stats = build_database(
+        tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[public_dir, private_dir]
+    )
+
+    assert stats.notes == 2
+    conn = sqlite3.connect(tmp_path / "bible.db")
+    ordered = conn.execute("SELECT text FROM translator_notes ORDER BY id").fetchall()
+    assert [r[0] for r in ordered] == ["Public note.", "Private note."]  # public ids first
+
+
+def test_dropping_private_dir_removes_exactly_the_private_notes(tmp_path: Path) -> None:
+    """Rebuilding without the private path keeps the public notes and drops only the private."""
+    public_dir = tmp_path / "notes"
+    private_dir = tmp_path / "private" / "notes"
+    write_notes(public_dir, notes_file("NETX", [note("John", 3, 16, "Public note.")]))
+    write_notes(private_dir, notes_file("NETX", [note("Gen", 1, 1, "Private note.")]))
+
+    both = build_database(
+        tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[public_dir, private_dir]
+    )
+    public_only = build_database(
+        tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[public_dir]
+    )
+
+    assert (both.notes, public_only.notes) == (2, 1)
+    conn = sqlite3.connect(tmp_path / "bible.db")
+    texts = [r[0] for r in conn.execute("SELECT text FROM translator_notes")]
+    assert texts == ["Public note."]
 
 
 # --- loud validation -----------------------------------------------------------------
@@ -208,4 +267,4 @@ def test_invalid_json_fails_loudly(tmp_path: Path) -> None:
     notes_dir.mkdir(parents=True)
     (notes_dir / "NETX.json").write_text("{not json", encoding="utf-8")
     with pytest.raises(LoaderError, match="invalid JSON"):
-        build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dir=notes_dir)
+        build_database(tmp_path / "bible.db", [_corpus(tmp_path)], notes_dirs=[notes_dir])
