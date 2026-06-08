@@ -5,6 +5,10 @@
 # shippable image: only the committed public-domain translations belong there.
 data/private/
 
+# Raw original-language source files (STEPBible TAGNT/TAHOT/lexicons) — large and
+# re-derivable; the parsers under scripts/ emit the committed derived JSON that ships.
+data/original/
+
 # Host virtualenv (wrong arch + huge) — the builder runs its own `uv sync`.
 .venv/
 

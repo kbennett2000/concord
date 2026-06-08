@@ -1,7 +1,8 @@
 # Concord API reference
 
 Every endpoint, with real request/response examples. All examples were captured from a
-running instance loaded with the 13 bundled public-domain translations.
+running instance loaded with the 13 bundled public-domain English translations plus the SBL
+Greek New Testament (`SBLGNT`).
 
 - **Base URL:** `http://<host>:<port>` (default `http://localhost:8000`)
 - **Versioning:** data endpoints live under `/v1`. That prefix is a stability contract.
@@ -830,7 +831,7 @@ $ curl -s 'localhost:8000/healthz'
 ```json
 {
   "status": "ok",
-  "translation_count": 13, "verse_count": 404889, "cross_ref_count": 344799, "book_count": 66,
+  "translation_count": 14, "verse_count": 412806, "cross_ref_count": 344799, "book_count": 66,
   "place_count": 1340,
   "semantic": {
     "enabled": true, "translation": "WEB", "embedding_count": 31054,

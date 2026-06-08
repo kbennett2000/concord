@@ -384,6 +384,15 @@ intentionally-larger slice is flagged with its reasoning.
 > `data/topics/` and parsed by `scripts/convert_naves_topics.py`. Flat topics; Nave's "See X"
 > redirects become a `see_also` pointer with no verses; hierarchical sub-topics and multi-source
 > merging are deferred. See [`docs/adr/ADR-0006-topical-bible.md`](adr/ADR-0006-topical-bible.md).
+>
+> **v6 — word study (in progress).** Strong's lexicon, original-language texts, and per-verse
+> tagged tokens, designed in [`docs/v6/SPEC.md`](v6/SPEC.md). Delivered Greek-NT-first across
+> slices S1–S4 (Hebrew OT in S5), all additive, sourced from STEPBible-Data (CC BY 4.0).
+> **S1 (shipped):** the Greek NT loads as an ordinary translation — `data/translations/SBLGNT.json`
+> (the SBL-edition word selection from STEPBible's TAGNT, NFC-normalized; 7,917 verses), queryable
+> via `/v1/verses/{ref}?translation=SBLGNT` with **zero loader changes** (NT chapter counts match
+> the English NT). The lexicon (`/v1/strongs*`) and tokens (`/v1/verses/{ref}/words`) land in
+> S2–S4. See [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|

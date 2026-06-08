@@ -1,0 +1,67 @@
+"""An original-language text loads as an ordinary translation (v6 Slice 1, fast/synthetic).
+
+The Greek NT (and later Hebrew OT) reuses the existing translations machinery — it is just
+another translation file with a non-English ``language``. This proves the capability on a tiny
+synthetic corpus, independent of the real STEPBible data: a Greek translation sits beside an
+English one, its verses are stored verbatim and retrievable, its ``language`` is preserved, and
+``_update_chapter_counts`` accepts it because the two agree on chapter counts per shared book.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+import pytest
+from bible_core.loader import LoaderError, build_database
+from bible_core.queries import get_verse_text
+from loaderkit import book, chapter, translation, verse, write_translation
+
+
+def _corpus(tmp_path: Path) -> Path:
+    tdir = tmp_path / "translations"
+    english = translation(
+        "ENG",
+        [book("John", 43, [chapter(3, [verse(16, "For God so loved the world")])])],
+    )
+    greek = translation(
+        "GRK",
+        [book("John", 43, [chapter(3, [verse(16, "οὕτως γὰρ ἠγάπησεν ὁ θεὸς τὸν κόσμον")])])],
+        name="Greek NT",
+        language="grc",
+        attribution="CC BY 4.0.",
+    )
+    write_translation(tdir, english)
+    write_translation(tdir, greek)
+    return tdir
+
+
+def test_greek_translation_loads_beside_english(tmp_path: Path) -> None:
+    db = tmp_path / "bible.db"
+    stats = build_database(db, [_corpus(tmp_path)])
+    assert stats.translations == 2
+
+    conn = sqlite3.connect(db)
+    # The non-English language is preserved; direction defaults to ltr (Greek is LTR).
+    meta = conn.execute("SELECT language, direction FROM translations WHERE id='GRK'").fetchone()
+    assert meta == ("grc", "ltr")
+    # The Greek verse is stored verbatim and retrievable via the normal query path.
+    assert get_verse_text(conn, "GRK", "JHN", 3, 16) == "οὕτως γὰρ ἠγάπησεν ὁ θεὸς τὸν κόσμον"
+    assert get_verse_text(conn, "ENG", "JHN", 3, 16) == "For God so loved the world"
+
+
+def test_chapter_count_agreement_still_enforced(tmp_path: Path) -> None:
+    """An OL text that disagrees on chapter count for a shared book is still rejected — the v1
+    versification lock the OT slice (S5) will relax per-versification still holds for now."""
+    tdir = tmp_path / "translations"
+    write_translation(tdir, translation("ENG", [book("John", 43, [chapter(1, [verse(1, "a")])])]))
+    write_translation(
+        tdir,
+        translation(
+            "GRK",
+            [book("John", 43, [chapter(1, [verse(1, "α")]), chapter(2, [verse(1, "β")])])],
+            language="grc",
+        ),
+    )
+    with pytest.raises(LoaderError, match="chapter count"):
+        build_database(tmp_path / "bible.db", [tdir])

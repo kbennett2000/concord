@@ -1403,3 +1403,42 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
 - **Live check:** real build → 5,319 topics / 138,138 topic-verse links; `q=anxiety` →
   ANXIETY (`see_also: care`); CARE carries Phil 4:6; `/verses/Phil 4:6/topics` → CARE, COMMANDMENTS,
   PRAYER, THANKFULNESS, TROUBLE. `make check` green.
+
+## v6 — word study (Strong's lexicon, original-language texts & tagged tokens)
+
+Designed in [`docs/v6/SPEC.md`](v6/SPEC.md); architecture in
+[`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md). All-STEPBible-Data (CC BY 4.0),
+Greek-NT-first (S1–S4), Hebrew OT last (S5). **Naming:** "v5" was already taken by *search
+completeness* — this milestone is **v6**.
+
+### Slice V6-S1 — Greek NT as a translation (ADR-0007)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v6-s1-greek-nt`).
+- **Why:** the original-language word-study feature loads each OL text **as an ordinary
+  translation** so it rides the existing `/v1/verses` + `/v1/translations` machinery. The Greek NT
+  goes first because its NRSV chapter counts match the standard English NT, so it loads with **no
+  schema and no loader changes** — proving the "OL as a translation" idea before the additive
+  lexicon/token tables land in S2–S4.
+- **What landed:**
+  - **data/parser:** `scripts/convert_step_tagnt.py` reads STEPBible's `TAGNT` (Translators
+    Amalgamated Greek NT), keeps the **SBL-edition** words (the `editions` column contains `SBL`),
+    strips the transliteration parenthetical, **NFC-normalizes**, and joins each verse's words in
+    `#word-index` order into `data/translations/SBLGNT.json` (27 books, **7,917 verses, 137,121 SBL
+    words**; 4,975 non-SBL words skipped). Book codes resolve via the canonical-books alias table
+    (all 27 NT codes are seeded; no override needed). NRSV ref; alt-versification brackets
+    (`{…}`/`[…]`/`(…)`) ignored. Deterministic (byte-identical re-run). Raw `TAGNT` files live under
+    the new gitignored + **dockerignored** `data/original/` — re-derivable, not committed.
+  - **no production-code changes:** the Greek NT loads through `parse_translation_file` /
+    `build_database` unchanged; `direction` stays `ltr` (Greek is LTR), `versification` `standard`.
+- **Decisions (ADR-0007):** all-STEPBible CC BY 4.0; **commit** the derived JSON (raw not
+  committed); id **`SBLGNT`** = the SBL *word selection* with STEPBible's NA-based spelling (not a
+  byte-faithful printed SBLGNT — `copyright` says so); **NFC** text. Collapsed-base Strong's ids,
+  the lexicon/token tables, and the versification-grouping for the Hebrew OT are later slices.
+- **Tests:** `bible-core/tests/test_ol_translation_loads.py` (fast/synthetic — a Greek translation
+  loads beside an English one, language preserved, verse retrievable, and the chapter-count lock
+  still rejects a disagreeing OL text); `test_loader_real.py` gains
+  `test_real_build_loads_greek_nt_as_a_translation` (SBLGNT is NT-only, JHN 21 chapters, John 3:16
+  drops the TR-only αὐτοῦ, John 5:4 absent, text is NFC). Translation-count assertions updated
+  **13→14** in `test_loader_real.py` + `test_utility_real.py` (13 PD English + the Greek SBLGNT).
+- **Live check:** full real build → **18 translations** (13 PD English + SBLGNT + 4 local private),
+  no chapter-count conflict; SBLGNT 7,917 verses, `grc`/`ltr`; `/v1/verses/John 3:16?translation=
+  SBLGNT` returns the Greek. `make check` green.
