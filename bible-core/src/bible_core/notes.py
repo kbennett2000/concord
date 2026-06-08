@@ -1,16 +1,23 @@
-"""Build-time translator's-notes loader — ingest of user-supplied notes JSON (SPEC v4).
+"""Build-time translator's-notes loader — ingest of notes JSON (SPEC v4, ADR-0004).
 
-Reads notes JSON from a ``data/private/notes/`` directory (one file per translation) and
-populates the additive ``translator_notes`` + ``note_cross_references`` tables, then rebuilds
-the ``notes_fts`` index. The v4 analogue of the cross-reference / geography loaders: a
-build-time, idempotent data load baked into ``bible.db``.
+Reads notes JSON from one or more notes directories (one file per translation) and populates
+the additive ``translator_notes`` + ``note_cross_references`` tables, then rebuilds the
+``notes_fts`` index. The v4 analogue of the cross-reference / geography loaders: a build-time,
+idempotent data load baked into ``bible.db``.
 
-**Licensing (SPEC v4 §2-§3).** Notes are *user-supplied* and live under the gitignored +
-dockerignored ``data/private/`` tree, so the published image ships **zero** notes — a clean
-build (no private data) produces a notes-empty database. The notes' pickup directory
-(``data/private/notes/``) is a *subdirectory* of ``data/private/``, so it is invisible to the
-top-level translation scanner (which globs ``data/private/*.json`` non-recursively) — a notes
-file is never mistaken for a translation, and the dual-ignore rule already covers it.
+**Two pickup paths (ADR-0004).** Notes are loaded from a *list* of directories, scanned in
+order and unioned:
+
+- ``data/notes/`` — **committed, public-domain** notes that *ship* in the image (e.g. the WEB
+  translation's own PD footnotes). Not gitignored, not dockerignored.
+- ``data/private/notes/`` — **user-supplied, non-redistributable** notes (e.g. NET). Under the
+  gitignored + dockerignored ``data/private/`` tree, so it never reaches the published image.
+
+**Licensing (SPEC v4 §2-§3, ADR-0004).** The dual-ignore rule still holds for ``data/private/``:
+a clean build (no private data) bakes **zero private notes** — only the committed public notes.
+Each notes directory is scanned non-recursively (``*.json``) and is separate from the top-level
+translation scan, so a notes file is never mistaken for a translation. When the same translation
+carries notes in more than one directory, both load (union, in directory order).
 
 **Input contract (per notes JSON file).** One file describes one translation's notes::
 
@@ -243,20 +250,33 @@ def discover_notes_files(notes_dir: Path) -> list[Path]:
     return sorted(notes_dir.glob("*.json"), key=lambda p: str(p))
 
 
+def discover_notes_files_in_dirs(notes_dirs: list[Path]) -> list[Path]:
+    """Return notes files across all ``notes_dirs``, in a deterministic union order.
+
+    Directories are scanned in the given order (public before private); within each, files
+    are sorted by path. The fixed dir order keeps note-id assignment reproducible even when
+    the same translation appears in more than one directory."""
+    files: list[Path] = []
+    for notes_dir in notes_dirs:
+        files.extend(discover_notes_files(notes_dir))
+    return files
+
+
 def load_notes(
     conn: sqlite3.Connection,
-    notes_dir: Path,
+    notes_dirs: list[Path],
     translation_ids: frozenset[str],
     alias_to_book: dict[str, str],
 ) -> NotesStats:
-    """Ingest notes JSON files from ``notes_dir`` into ``translator_notes`` /
-    ``note_cross_references`` and rebuild ``notes_fts``. A missing/empty directory loads
-    nothing (the public-image / clean-build case) — not an error."""
+    """Ingest notes JSON files from ``notes_dirs`` into ``translator_notes`` /
+    ``note_cross_references`` and rebuild ``notes_fts``. Directories are scanned in order and
+    unioned (ADR-0004). A missing/empty directory loads nothing (the public-image /
+    clean-build case for ``data/private/notes/``) — not an error."""
     note_rows: list[NoteRow] = []
     xref_rows: list[NoteXrefRow] = []
     by_type: Counter[str] = Counter()
     next_id = 1
-    for path in discover_notes_files(notes_dir):
+    for path in discover_notes_files_in_dirs(notes_dirs):
         notes, xrefs = parse_notes_file(path, next_id, translation_ids, alias_to_book)
         note_rows.extend(notes)
         xref_rows.extend(xrefs)

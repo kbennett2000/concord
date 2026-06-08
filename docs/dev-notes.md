@@ -1303,3 +1303,30 @@ Perimeter-only security hardening (no request-path logic changes; nothing under
   keyword search only.
 - **Post-merge (Kris):** push the `v1.1.0` tag to trigger `publish-image.yml`, building/pushing
   `ghcr.io/kbennett2000/concord:v1.1.0` (+ `:latest` + `:sha-…`).
+
+## Roadmap — ship WEB's public-domain footnotes
+
+### Slice A — public notes path mechanism (ADR-0004)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/A-public-notes-path`).
+- **Why:** v4 made notes private-only — the loader scanned the single dual-ignored
+  `data/private/notes/`, so the stock image shipped **zero** notes (docs/v4/SPEC.md §2). The WEB's
+  own translator footnotes are **public domain** and *should* ship, but there was nowhere committed
+  to put them. Roadmap item #1, step 1: add the mechanism; the real WEB data lands in Slice B.
+- **What landed (mechanism only, no real data):** a second, committed, ship-by-default notes path
+  **`data/notes/`** (empty `.gitkeep` this slice), scanned by the loader **alongside**
+  `data/private/notes/`. `build_database`'s `notes_dir: Path | None` → **`notes_dirs:
+  list[Path] | None`** (mirrors the existing `cross_ref_dirs: list[Path]`); `bible_core.notes`
+  gained `discover_notes_files_in_dirs` and `load_notes` now iterates the list. `main()` passes
+  `[data/notes, data/private/notes]` in that order. **Union, deterministic ids** (dir order, public
+  first; sorted filename within each) — byte-identical rebuilds preserved. Same-translation-in-both
+  → union (no dedup; documented). See **ADR-0004**.
+- **Safety split preserved + re-tested.** `data/private/` dual-ignore **untouched**; `data/notes/`
+  is **not** ignored (the point). Tests: kept `test_private_data_dir_is_ignored`; **added**
+  `test_public_notes_dir_is_not_ignored` (the mirror guard — fails loudly if the public path is ever
+  ignored). Evolved the behavioral proof from "clean build → zero notes" to
+  **`test_clean_build_bakes_public_notes_but_zero_private_notes`** (public file present, no
+  `data/private/` → public note baked, private zero). Added multi-dir union tests
+  (`test_public_and_private_dirs_are_unioned_in_order`,
+  `test_dropping_private_dir_removes_exactly_the_private_notes`).
+- **No API/schema/contract change** — purely the build-input mechanism. `bible-core` stays web-free;
+  runtime stays offline. Synthetic fixtures only. `make check` green.

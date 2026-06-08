@@ -327,16 +327,18 @@ def build_database(
     data_dirs: list[Path],
     cross_ref_dirs: list[Path] | None = None,
     geo_dir: Path | None = None,
-    notes_dir: Path | None = None,
+    notes_dirs: list[Path] | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
-    ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), and ``notes_dir``
+    ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), and ``notes_dirs``
     (translator's-notes JSON). Idempotent — same inputs, byte-identical db.
 
-    ``notes_dir`` is normally ``data/private/notes`` and exists only when a user has supplied
-    notes; absent/empty → zero notes (the public-image case). It must NOT overlap the
-    translation scan (``data_dirs``): notes live in a *subdirectory* of ``data/private`` so the
-    non-recursive translation glob never sees them (SPEC v4 §3)."""
+    ``notes_dirs`` is normally ``[data/notes, data/private/notes]`` (ADR-0004): the first is the
+    committed public-domain notes that ship in the image; the second holds user-supplied,
+    non-redistributable notes and is gitignored + dockerignored, so a clean build bakes zero
+    private notes. Both are scanned non-recursively and are separate from the translation scan
+    (``data_dirs``) so a notes file is never mistaken for a translation. Absent/empty dirs load
+    nothing — not an error."""
     start = time.perf_counter()
     cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
@@ -403,8 +405,8 @@ def build_database(
             from .notes import NotesStats, load_notes
 
             notes_stats = (
-                load_notes(conn, notes_dir, frozenset(seen_codes), alias_to_book)
-                if notes_dir is not None
+                load_notes(conn, notes_dirs, frozenset(seen_codes), alias_to_book)
+                if notes_dirs is not None
                 else NotesStats(0, 0, {})
             )
 
@@ -462,11 +464,13 @@ def main(argv: list[str] | None = None) -> int:
     data_dirs = _default_data_dirs(base)
     cross_ref_dirs = [base / "cross-references"]
     geo_dir = base / "geography"
-    # Notes live in a subdir of `private/` (never the top-level translation scan). Loaded only
-    # when present locally — the public build has no `private/`, so it bakes zero notes.
-    notes_dir = base / "private" / "notes"
+    # Two notes paths (ADR-0004), scanned in order: committed public-domain notes that ship
+    # (`data/notes/`), then user-supplied non-redistributable notes (`data/private/notes/`).
+    # The latter is dual-ignored, so the public build has no `private/` and bakes zero private
+    # notes — only the committed public ones.
+    notes_dirs = [base / "notes", base / "private" / "notes"]
     try:
-        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs, geo_dir, notes_dir)
+        stats = build_database(Path(args.output), data_dirs, cross_ref_dirs, geo_dir, notes_dirs)
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
