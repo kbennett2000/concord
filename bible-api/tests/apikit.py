@@ -179,6 +179,47 @@ def build_corpus(path: Path) -> None:
         place_verses,
     )
 
+    # Deterministic journeys (v7) over the existing places, for the journeys endpoints:
+    #  - j_paul: ordered stops with a REVISIT (p_ant1 at ordinals 2 and 4) → reverse dedup
+    #  - j_wander: a single stop on p_nod (unknown place) → null-coord stop path; null dating
+    # Ordered by id: j_paul before j_wander.
+    # (id, name, scripture, dating, source, note)
+    journeys = [
+        (
+            "j_paul",
+            "Paul Test Journey",
+            "Acts 13-14",
+            "c. AD 47 (test)",
+            "Acts (test).",
+            "One proposed reconstruction (test).",
+        ),
+        (
+            "j_wander",
+            "Wander Test",
+            "Genesis 4",
+            None,
+            "Genesis (test).",
+            "One reconstruction (test).",
+        ),
+    ]
+    # (journey_id, ordinal, place_id, reference)
+    journey_stops = [
+        ("j_paul", 1, "p_jeru", "Acts 13:1"),
+        ("j_paul", 2, "p_ant1", "Acts 13:14"),
+        ("j_paul", 3, "p_ant2", "Acts 14:21"),
+        ("j_paul", 4, "p_ant1", "Acts 14:26"),  # revisit p_ant1
+        ("j_wander", 1, "p_nod", "Genesis 4:16"),  # unknown place → null coords
+    ]
+    conn.executemany(
+        "INSERT INTO journeys (id, name, scripture, dating, source, note) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        journeys,
+    )
+    conn.executemany(
+        "INSERT INTO journey_stops (journey_id, ordinal, place_id, reference) VALUES (?, ?, ?, ?)",
+        journey_stops,
+    )
+
     # Deterministic translator's notes (v4) for the notes endpoint tests. KJV has notes; WEB has
     # none (so a loaded translation with zero notes returns 200 empty — the public-image case).
     #  - KJV JHN 3:16 → two notes (ordinals 1,2; a tn with two cross-refs + a sn)

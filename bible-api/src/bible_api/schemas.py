@@ -531,3 +531,52 @@ class VerseWordsResponse(BaseModel):
     text_id: str
     total: int
     tokens: list[WordTokenOut]
+
+
+class JourneySummary(BaseModel):
+    """A journey's summary (SPEC v7 §6): metadata plus its stop count. ``dating`` is null when
+    genuinely debated."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None
+    stop_count: int
+
+
+class JourneysResponse(BaseModel):
+    """A page of journeys: the echoed pagination state, total count, and summaries."""
+
+    limit: int
+    offset: int
+    total: int
+    journeys: list[JourneySummary]
+
+
+class JourneyStop(BaseModel):
+    """One ordered stop of a journey, resolved to its place. Coordinates/confidence are null when
+    the place has no confident location (the v3 honesty model rides along — the consumer simply
+    can't pin it). ``reference`` is the optional scripture citation for this leg."""
+
+    ordinal: int
+    place_id: str
+    name: str | None
+    friendly_id: str | None
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    status: str | None
+    reference: str | None
+
+
+class JourneyDetail(BaseModel):
+    """A single journey's full detail: its metadata — including ``source`` and the
+    one-reconstruction ``note`` (the honesty model, SPEC v7 §5) — plus its ordered stops."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None
+    source: str
+    note: str
+    stops: list[JourneyStop]
