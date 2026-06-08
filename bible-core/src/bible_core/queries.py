@@ -1043,3 +1043,97 @@ def get_topics_for_reference(conn: sqlite3.Connection, reference: Reference) -> 
         )
     )
     return TopicPage(rows=rows, total=len(rows))
+
+
+# --- Strong's lexicon (mirrors the topical-Bible queries) ----------------------------
+
+
+@dataclass(frozen=True)
+class StrongsRow:
+    """One lexicon entry in summary form (no full definition) — the browse/list shape."""
+
+    strongs_id: str
+    language: str
+    lemma: str
+    transliteration: str
+    gloss: str
+
+
+@dataclass(frozen=True)
+class StrongsPage:
+    """A page of lexicon entries plus the total match count."""
+
+    rows: tuple[StrongsRow, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class StrongsEntry:
+    """One lexicon entry in full — adds the definition and source for the detail view."""
+
+    strongs_id: str
+    language: str
+    lemma: str
+    transliteration: str
+    gloss: str
+    definition: str
+    source: str
+
+
+_STRONGS_SUMMARY_COLS = ("strongs_id", "language", "lemma", "transliteration", "gloss")
+_STRONGS_SUMMARY_SELECT = ", ".join(_STRONGS_SUMMARY_COLS)
+# Strong's ids sort numerically within a language (G1, G2, … G26), not lexically (G1, G10, G100).
+_STRONGS_ORDER = "language, CAST(SUBSTR(strongs_id, 2) AS INTEGER), strongs_id"
+
+
+def _row_to_strongs(r: sqlite3.Row) -> StrongsRow:
+    return StrongsRow(r[0], r[1], r[2], r[3], r[4])
+
+
+def list_strongs(
+    conn: sqlite3.Connection,
+    q: str | None,
+    language: str | None,
+    limit: int,
+    offset: int,
+) -> StrongsPage:
+    """Browse the lexicon, optionally filtered by ``q`` (substring of lemma, transliteration or
+    gloss) and ``language``.
+
+    Ordered by Strong's number within language; ``total`` is a separate count over the same filter.
+    """
+    clauses: list[str] = []
+    params: list[str] = []
+    if q is not None and q.strip():
+        clauses.append(
+            "(lemma LIKE '%' || ? || '%' "
+            "OR transliteration LIKE '%' || ? || '%' "
+            "OR gloss LIKE '%' || ? || '%')"
+        )
+        needle = q.strip()
+        params += [needle, needle, needle]
+    if language is not None and language.strip():
+        clauses.append("language = ?")
+        params.append(language.strip())
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    rows = tuple(
+        _row_to_strongs(r)
+        for r in conn.execute(
+            f"SELECT {_STRONGS_SUMMARY_SELECT} FROM strongs_entries{where} "
+            f"ORDER BY {_STRONGS_ORDER} LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+    )
+    total = conn.execute(f"SELECT COUNT(*) FROM strongs_entries{where}", params).fetchone()[0]
+    return StrongsPage(rows=rows, total=total)
+
+
+def get_strongs(conn: sqlite3.Connection, strongs_id: str) -> StrongsEntry | None:
+    """One lexicon entry (with full definition) by its Strong's id, or ``None`` if absent."""
+    row = conn.execute(
+        "SELECT strongs_id, language, lemma, transliteration, gloss, definition, source "
+        "FROM strongs_entries WHERE strongs_id = ?",
+        (strongs_id,),
+    ).fetchone()
+    return None if row is None else StrongsEntry(*row)

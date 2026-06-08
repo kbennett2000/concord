@@ -449,3 +449,36 @@ class VerseTopicsResponse(BaseModel):
     reference: str
     total: int
     topics: list[TopicSummary]
+
+
+class StrongsSummary(BaseModel):
+    """A Strong's lexicon entry's summary (no full definition) — the browse/list shape."""
+
+    strongs_id: str
+    language: str
+    lemma: str
+    transliteration: str
+    gloss: str
+
+
+class StrongsResponse(BaseModel):
+    """A page of lexicon entries: the echoed filter/pagination state, total count, and summaries."""
+
+    q: str | None
+    language: str | None
+    limit: int
+    offset: int
+    total: int
+    entries: list[StrongsSummary]
+
+
+class StrongsDetail(BaseModel):
+    """A single lexicon entry's full detail, including the definition and its source."""
+
+    strongs_id: str
+    language: str
+    lemma: str
+    transliteration: str
+    gloss: str
+    definition: str
+    source: str

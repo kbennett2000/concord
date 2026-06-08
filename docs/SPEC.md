@@ -391,8 +391,10 @@ intentionally-larger slice is flagged with its reasoning.
 > **S1 (shipped):** the Greek NT loads as an ordinary translation — `data/translations/SBLGNT.json`
 > (the SBL-edition word selection from STEPBible's TAGNT, NFC-normalized; 7,917 verses), queryable
 > via `/v1/verses/{ref}?translation=SBLGNT` with **zero loader changes** (NT chapter counts match
-> the English NT). The lexicon (`/v1/strongs*`) and tokens (`/v1/verses/{ref}/words`) land in
-> S2–S4. See [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
+> the English NT). **S2 (shipped):** the Greek Strong's lexicon (STEPBible TBESG → the additive
+> `strongs_entries` table, 10,846 entries keyed on the collapsed-base Strong's number), browsable at
+> `/v1/strongs` and `/v1/strongs/{id}`. The tagged tokens (`/v1/verses/{ref}/words`) and lemma/
+> Strong's verse search land in S3–S4. See [`docs/adr/ADR-0007-word-study.md`](adr/ADR-0007-word-study.md).
 
 | # | Slice | Package(s) | Delivers | Depends on | Review focus |
 |---|---|---|---|---|---|

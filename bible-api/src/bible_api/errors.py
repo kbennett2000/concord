@@ -83,6 +83,18 @@ class UnknownTopicError(Exception):
         return {"topic_id": self.topic_id}
 
 
+class UnknownStrongsError(Exception):
+    """A requested Strong's id (a path resource) is not in the lexicon → 404."""
+
+    def __init__(self, strongs_id: str) -> None:
+        super().__init__(f"unknown Strong's {strongs_id!r}")
+        self.strongs_id = strongs_id
+
+    @property
+    def detail(self) -> dict[str, Any]:
+        return {"strongs_id": self.strongs_id}
+
+
 class FilterError(Exception):
     """A query-param *filter* value did not match a known value (e.g. ``?type=``/``?status=``).
 
@@ -175,6 +187,10 @@ async def _handle_unknown_topic(_request: Request, exc: Exception) -> Response:
     return _error_response(404, "unknown_topic", str(exc), cast(UnknownTopicError, exc).detail)
 
 
+async def _handle_unknown_strongs(_request: Request, exc: Exception) -> Response:
+    return _error_response(404, "unknown_strongs", str(exc), cast(UnknownStrongsError, exc).detail)
+
+
 async def _handle_filter(_request: Request, exc: Exception) -> Response:
     filter_exc = cast(FilterError, exc)
     return _error_response(400, filter_exc.code, str(exc), filter_exc.detail)
@@ -199,5 +215,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SemanticTimeoutError, _handle_semantic_timeout)
     app.add_exception_handler(UnknownPlaceError, _handle_unknown_place)
     app.add_exception_handler(UnknownTopicError, _handle_unknown_topic)
+    app.add_exception_handler(UnknownStrongsError, _handle_unknown_strongs)
     app.add_exception_handler(FilterError, _handle_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)

@@ -120,6 +120,8 @@ Twenty endpoints. Each is documented in full — with real request/response exam
 | `GET /v1/topics/{id}` | One topic's detail — its verse count and any "see also" redirect. |
 | `GET /v1/topics/{id}/verses` | The verses curated under a topic, optionally with text. |
 | `GET /v1/verses/{ref}/topics` | The topics a verse or passage appears under. |
+| `GET /v1/strongs` | Browse the Strong's lexicon, filtered by lemma/transliteration/gloss or language. |
+| `GET /v1/strongs/{id}` | One Strong's entry — lemma, transliteration, gloss, and full definition. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -186,6 +188,21 @@ Nave's own "See X" cross-references are preserved: a redirect topic carries a `s
 and no verses of its own (so `anxiety` points you to `care`, where the verses live). The full
 parameters — name/section filters, pagination, and `include_text` — are in
 [`docs/API.md`](docs/API.md).
+
+### Word study
+
+`GET /v1/strongs` answers *what does the original word mean*. Browse the **Strong's lexicon** —
+the Greek lexicon from [STEPBible](https://github.com/STEPBible/STEPBible-Data) — by lemma,
+transliteration, or gloss, and pull one entry's full definition. Ids are forgiving: `g0026`,
+`g26`, and `G26` all resolve to the same entry.
+
+```bash
+curl 'localhost:8000/v1/strongs?q=love&language=grc'   # ἀγαπάω (G25), ἀγάπη (G26), ...
+curl 'localhost:8000/v1/strongs/G26'                   # ἀγάπη — "love", with full definition
+```
+
+This pairs with the **SBL Greek New Testament** loaded as a translation (`?translation=SBLGNT`);
+tagged original-language tokens per verse, and lemma/Strong's verse search, follow in later slices.
 
 ## Configuration
 
@@ -411,6 +428,9 @@ The `/v1` prefix means today's responses are a contract. Build against them with
 - **Greek New Testament (SBLGNT):** [STEPBible-Data](https://github.com/STEPBible/STEPBible-Data)
   (Tyndale House Cambridge), licensed under Creative Commons Attribution 4.0 International
   (CC BY 4.0); the SBLGNT is © 2010 Society of Biblical Literature & Logos Bible Software.
+- **Strong's lexicon (Greek):** [STEPBible-Data](https://github.com/STEPBible/STEPBible-Data)
+  (Tyndale House Cambridge; the Brief lexicon draws on Abbott-Smith), licensed under Creative
+  Commons Attribution 4.0 International (CC BY 4.0). The Strong's numbering (1890) is public domain.
 - **Cross-references:** [OpenBible.info](https://www.openbible.info/labs/cross-references/),
   licensed under Creative Commons Attribution (CC BY).
 - **Place data:** [OpenBible.info Bible-Geocoding-Data](https://github.com/openbibleinfo/Bible-Geocoding-Data),

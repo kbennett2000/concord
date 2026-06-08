@@ -242,5 +242,21 @@ def build_corpus(path: Path) -> None:
         topic_verses,
     )
 
+    # Deterministic Strong's lexicon for the /v1/strongs endpoint tests:
+    #  - G25 ἀγαπάω / G26 ἀγάπη — two Greek "love" words (browse 'love' / numeric order)
+    #  - H430 אֱלֹהִים — a Hebrew entry (language filter)
+    # (strongs_id, language, lemma, transliteration, gloss, definition, source)
+    strongs_entries = [
+        ("G26", "grc", "ἀγάπη", "agapē", "love", "love, goodwill, esteem.", "STEP Bible"),
+        ("G25", "grc", "ἀγαπάω", "agapaō", "to love", "to love, to esteem.", "STEP Bible"),
+        ("H430", "hbo", "אֱלֹהִים", "ʾelōhîm", "God", "God, gods, rulers.", "STEP Bible"),
+    ]
+    conn.executemany(
+        "INSERT INTO strongs_entries "
+        "(strongs_id, language, lemma, transliteration, gloss, definition, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        strongs_entries,
+    )
+
     conn.commit()
     conn.close()

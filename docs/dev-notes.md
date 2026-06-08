@@ -1442,3 +1442,39 @@ completeness* — this milestone is **v6**.
 - **Live check:** full real build → **18 translations** (13 PD English + SBLGNT + 4 local private),
   no chapter-count conflict; SBLGNT 7,917 verses, `grc`/`ltr`; `/v1/verses/John 3:16?translation=
   SBLGNT` returns the Greek. `make check` green.
+
+### Slice V6-S2 — Strong's lexicon (ADR-0007)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v6-s2-strongs-lexicon`).
+- **Why:** word study needs a lexicon — "what does G26 (*agapē*) mean?". This slice lands the
+  additive `strongs_entries` table + the two read endpoints, mirroring the topical-Bible pattern
+  (entry table + browse/detail queries + `cached_json_response` + an `Unknown…Error`). Pure SQLite
+  through `bible-core` — no embeddings.
+- **What landed:**
+  - **data/parser:** `scripts/convert_strongs_lexicon.py` reads STEPBible's `TBESG` (Translators
+    Brief lexicon of Extended Strongs for Greek; tab-separated, CC BY 4.0) → `data/strongs/
+    lexicon.json` (**10,846 entries**). Each id is the eStrong column collapsed to its **base**
+    (`G0026`→`G26`); where a number splits into disambiguated senses (`G0001G`/`G0001H`) the first
+    wins (188 dups collapsed). HTML in the definition is stripped to plain text; the `__` indent
+    markers are dropped. One extended LXX entry with an empty gloss is skipped+counted. Deterministic
+    (sorted by Strong's number). Raw `TBESG` lives under the gitignored+dockerignored `data/original/`.
+  - **schema/loader (`core`):** new `strongs_entries` table (PK `strongs_id`; `language`, `lemma`,
+    `transliteration`, `gloss`, `definition`, `source`); new `bible_core.strongs` loader
+    (`load_strongs_entries`, duplicate id → `LoaderError`); `lexicon_dir` threaded through
+    `build_database`/`main` (→ `data/strongs/`) like `topics_dir`; `BuildStats.strongs_entries` +
+    summary line. Transliteration is allowed empty (105 extended entries lack one); the rest required.
+  - **queries (`core`):** `StrongsRow`/`StrongsPage`/`StrongsEntry` + `list_strongs(q, language,
+    limit, offset)` (substring over lemma/transliteration/gloss, optional language; ordered
+    **numerically** within language via `CAST(SUBSTR(strongs_id,2) AS INT)`) and `get_strongs(id)`.
+  - **api:** `GET /v1/strongs` (browse) + `GET /v1/strongs/{id}` (detail, with definition);
+    `UnknownStrongsError` → `404 unknown_strongs`; path id normalized (upper-case letter + drop
+    leading zeros, so `g0026`/`g26`/`G26` all resolve to `G26`). Schemas `StrongsSummary`/
+    `StrongsResponse`/`StrongsDetail`.
+- **Tests:** `bible-core/tests/test_strongs_loader.py` (synthetic — counts, detail, empty
+  transliteration allowed, `q`/`language` filter + numeric order, duplicate-id rejected, idempotent,
+  missing dir → 0); `bible-api/tests/test_strongs_endpoint.py` (browse/echo/order, `q` over
+  gloss+transliteration, language filter, pagination, detail shape, id normalization, 404
+  `unknown_strongs`, ETag/304) seeded via `apikit`; `test_loader_real.py` gains
+  `test_real_build_loads_the_strongs_lexicon` (real G26 = ἀγάπη "love").
+- **Acceptance ①:** `GET /v1/strongs/G26` → ἀγάπη "love" with full definition. ✔
+- **Live check:** real build → **10,846 Strong's entries**; `/v1/strongs/g0026` → `G26` ἀγάπη love;
+  `/v1/strongs?q=love&language=grc` lists G25/G26/…; unknown → `404 unknown_strongs`. `make check` green.
