@@ -206,6 +206,35 @@ _TABLES: tuple[str, ...] = (
         PRIMARY KEY (text_id, book_id, chapter, verse, position)
     )
     """,
+    # Journeys (v7, additive). A curated biblical itinerary — Paul's missionary journeys, the
+    # Exodus — as ONE proposed reconstruction (SPEC v7). `id` is a hand-minted stable slug
+    # ("paul-first"). `source` cites the route's provenance; `note` is the honesty hedge that
+    # this is one reconstruction (competing routes are deliberately not modeled). `dating` is
+    # NULL when genuinely debated.
+    """
+    CREATE TABLE IF NOT EXISTS journeys (
+        id        TEXT PRIMARY KEY,
+        name      TEXT NOT NULL,
+        scripture TEXT NOT NULL,
+        dating    TEXT,
+        source    TEXT NOT NULL,
+        note      TEXT NOT NULL
+    )
+    """,
+    # Ordered stops of a journey. Each stop is a FK into EXISTING geography (places.id) — new
+    # geography is never minted here. The PK is (journey_id, ordinal); `place_id` is a plain
+    # repeatable column because return legs revisit cities. `reference` is the optional scripture
+    # citation for this leg. idx_journey_stops_place serves the reverse place→journeys direction,
+    # mirroring idx_place_verses_bcv.
+    """
+    CREATE TABLE IF NOT EXISTS journey_stops (
+        journey_id TEXT NOT NULL REFERENCES journeys (id),
+        ordinal    INTEGER NOT NULL,
+        place_id   TEXT NOT NULL REFERENCES places (id),
+        reference  TEXT,
+        PRIMARY KEY (journey_id, ordinal)
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_verses_bcv ON verses (book_id, chapter, verse)",
     "CREATE INDEX IF NOT EXISTS idx_verses_tbc ON verses (translation_id, book_id, chapter)",
     "CREATE INDEX IF NOT EXISTS idx_xref_from "
@@ -219,6 +248,8 @@ _TABLES: tuple[str, ...] = (
     # Supports the verse→tokens direction ("the tagged words of this verse").
     "CREATE INDEX IF NOT EXISTS idx_word_tokens_bcv "
     "ON word_tokens (text_id, book_id, chapter, verse)",
+    # Supports the reverse place→journeys direction ("which journeys pass through this place").
+    "CREATE INDEX IF NOT EXISTS idx_journey_stops_place ON journey_stops (place_id)",
     # "all notes for this verse/chapter in this translation" — the Slice-2 read lookup.
     "CREATE INDEX IF NOT EXISTS idx_notes_anchor "
     "ON translator_notes (translation_id, book_id, chapter, verse)",

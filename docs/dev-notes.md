@@ -1584,3 +1584,46 @@ completeness* — this milestone is **v6**.
   `docs/openapi.json` regenerated (`Translation` gains `direction`). **v6 complete.**
 - **Data size:** `OSHB.json` ~7.4 MB, `tokens-oshb.json` ~59 MB, `lexicon-hebrew.json` ~3 MB —
   committed derived JSON (raw TAHOT/TBESH stay in the gitignored/dockerignored `data/original/`).
+
+## v7 — journeys / routes (curated itineraries over existing places)
+
+Designed in [`docs/v7/SPEC.md`](v7/SPEC.md); architecture in
+[`docs/adr/ADR-0008-journeys.md`](adr/ADR-0008-journeys.md). The "next frontier" v3 named and
+deferred: a curated handful of well-known biblical itineraries (Paul's missionary journeys, the
+Exodus) as **ordered sequences of EXISTING places** — for a map consumer (songbird) to draw as
+polylines. Purely additive, reuses v3 geography, no new package, no ML.
+
+### Slice V7-S1 — schema + loader + queries + Paul's first journey (ADR-0008)
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`slice/v7-s1-journeys-schema`).
+- **Why:** establish the route layer end-to-end in `bible-core` (schema → loader → queries → data)
+  with one real journey, before any endpoints. Stops are FKs into the v3 `places` table — geography
+  is **referenced, never rebuilt**.
+- **What landed:**
+  - **schema:** additive `journeys(id, name, scripture, dating, source, note)` +
+    `journey_stops(journey_id, ordinal, place_id REFERENCES places(id), reference)` with PK
+    `(journey_id, ordinal)` — `place_id` is a **repeatable** column (return legs revisit cities, the
+    one departure from the place/topic junction shape) — and `idx_journey_stops_place` for the
+    reverse place→journeys direction.
+  - **loader:** `bible_core.journeys.load_journeys` (clones `geo.load_places`), wired into
+    `build_database(journeys_dir=…)` and run **after** `load_places` (FK ordering). Hand-curated data
+    is held to a higher bar than the skip-and-count datasets: it **fails loud** on an unknown
+    `place_id`, a duplicate journey id/ordinal, or empty stops. `BuildStats` + the summary line gain
+    `journeys` / `journey_stops`.
+  - **queries:** `list_journeys` (paginated summaries with a correlated stop-count) /
+    `get_journey` / `get_journey_stops` (ordered, LEFT JOIN `places` so each stop carries its
+    coords/status/name — the v3 honesty model rides along: an unknown-place stop has null coords) /
+    `count_journey_stops` / `get_journeys_for_place` (reverse, `DISTINCT` so a revisited place lists
+    once).
+  - **data:** committed `data/journeys/journeys.json` — **Paul's First Missionary Journey**
+    (`paul-first`, 15 ordered stops, Acts 13–14). Scripture-derived itinerary; place-ids verified
+    against the committed geography (start/return Syrian Antioch `ae41ab4` ≠ Pisidian-Antioch stop
+    `a6c704a`). `source` + `note` carry the one-reconstruction honesty.
+- **Tests:** `test_journey_queries.py` (list/pagination/order, detail, ordered stops with the place
+  join, null-coord stop, stop count, reverse dedup of revisits, empty reverse — direct SQL seed);
+  `test_journeys_loader.py` (counts, ordered load, **fail-loud** on unknown place_id / dup ordinal /
+  dup journey id / empty stops, no-dir → zero, idempotent — synthetic geo via geokit);
+  `test_journeys_loader_real.py` (integration: paul-first 15 stops, Antioch disambiguation, every
+  stop resolves to a real identified place with coords, reverse lists paul-first).
+- **Scope held:** competing routes / route variants, per-segment dating, and geometry rendering are
+  deferred (SPEC v7 §3). Endpoints land in S2 (forward) / S3 (reverse); the rest of the curated set
+  (Paul's 2nd/3rd, the voyage to Rome, the Exodus) + README/`docs/API.md` land in S4.
