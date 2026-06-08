@@ -1705,3 +1705,35 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **`make check` green**; real build summary reports **5 journeys, 75 journey stops**. Live-verified
   all three endpoints against a real build (list → 5; each journey's ordered stops resolve to real
   coords; reverse dedups). **v7 is complete.**
+
+### Release v1.2.0
+- **Date:** 2026-06-08. **PR:** _(this PR)_ (`chore/release-v1.2.0`).
+- **What shipped:** the first minor since v1.1.0, **batching four merged-but-unreleased features**,
+  every one **purely additive to `/v1`** (new endpoints / new optional params, no existing response
+  shape changed) — hence a single **semver minor**, not four patches:
+  - **Section headings** — `GET /v1/translations/{translation}/headings/{book}/{chapter}` (the
+    per-translation section titles that anchor a chapter).
+  - **Topical index** (Nave's, CC BY 4.0) — `GET /v1/topics`, `/v1/topics/{id}`,
+    `/v1/topics/{id}/verses`, `/v1/verses/{ref}/topics` (bi-directional, browsable).
+  - **Word study / concordance (v6)** — `GET /v1/strongs`, `/v1/strongs/{id}`,
+    `/v1/strongs/{id}/verses` (the concordance), `/v1/verses/{ref}/words` (a verse's tagged
+    original-language tokens). Greek-NT-first (SBLGNT) + Hebrew OT (OSHB); STEPBible CC BY 4.0.
+  - **Journeys (v7)** — `GET /v1/journeys`, `/v1/journeys/{id}` (embedded ordered stops),
+    `/v1/places/{id}/journeys` (reverse). Curated itineraries over existing v3 places.
+- **Mechanics:** bumped `bible_api.__version__` `1.1.0 → 1.2.0` **and reconciled a version drift**
+  v1.1.0 left behind — `bible-api/pyproject.toml` still read `1.0.2` (never bumped at v1.1.0) while
+  the served `info.version` read `1.1.0`; unified **both** to `1.2.0` (`bible-core`/`bible-semantic`
+  stay `0.0.0`, unpublished workspace path-deps; `uv.lock` follows). Regenerated `docs/openapi.json`
+  via `make openapi` (only `info.version` moved — all feature paths already landed in their PRs).
+  README published-image examples (`docker pull`/`run … :v1.1.0`) → `:v1.2.0` (local-build
+  `concord:latest` examples untouched). `make check` green (659 unit + 47 integration).
+- **Pre-release gate (evidence):** a fresh **public-image-equivalent** build (clean tracked-only
+  checkout, no `data/private/`) bakes **15 translations, 0 notes, 0 note cross-refs** — confirming
+  the restricted translations (esv/net/nkjv/nlt) and NET notes (all-rights-reserved) ship **nowhere**
+  (dual-ignored: `.gitignore` + `.dockerignore`). All four features served live against that DB;
+  every shipped original-language / Strong's / topical dataset is CC BY 4.0 / PD with its notice in
+  `THIRD_PARTY_NOTICES` + `data/SOURCES.md`.
+- **Scope held:** #4's English↔original-token alignment and #5's route-variants / per-segment dating
+  stayed deferred; no geography expansion under either (`data/geography/` untouched since v1.1.0).
+- **Post-merge (Kris):** push the `v1.2.0` tag to trigger `publish-image.yml`, building/pushing
+  `ghcr.io/kbennett2000/concord:v1.2.0` (+ `:latest` + `:sha-…`) — the ~22-min embedding bake.
