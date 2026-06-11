@@ -1737,3 +1737,29 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   stayed deferred; no geography expansion under either (`data/geography/` untouched since v1.1.0).
 - **Post-merge (Kris):** push the `v1.2.0` tag to trigger `publish-image.yml`, building/pushing
   `ghcr.io/kbennett2000/concord:v1.2.0` (+ `:latest` + `:sha-…`) — the ~22-min embedding bake.
+
+### Fix #67 — fused section headings, corpus-wide data cleanup
+- **Date:** 2026-06-10. **PR:** _(this PR)_ (`slice/67-fused-headings`).
+- **Why:** issue #67 reported **6** WEB verses with a section heading glued onto the verse text
+  (and missing from the chapter `headings` array) — an upstream extraction artifact polluting FTS
+  and the WEB embeddings. Investigation found it **corpus-wide, not 6**: the extractor fused each
+  heading onto the **last verse before the new section** across the committed translations.
+- **What landed:** `scripts/fix_fused_headings.py` (one-shot, stdlib) detects a title-case "fused
+  tail" after a sentence terminator (incl. the single curly quote `’` YLT/JPS close dialogue with,
+  and an optional stray verse number where the next verse is an omitted textual variant — e.g. ASV
+  Matt 17:20 carried `…you. 21 The Second Prediction of the Passion`), strips it, and restores the
+  heading at `before_verse = N+1` (the stray number + 1 when present; the next chapter's v1 when
+  fused onto a chapter's last verse). **2,452 strips across 12 translations** (WEB 456, CPDV 470,
+  YLT 452, JPS 451, the rest ~77 each; OSHB/SBLGNT untouched). A liturgical-notation guard keeps
+  "Higgaion Selah" (Ps 9:16 verse content) from being misread as a heading. Files round-trip
+  byte-identically through `json.dumps(indent=2, ensure_ascii=False)`, so the diff is only cleaned
+  `text` lines + inserted heading objects; the run is idempotent. `scripts/fused_headings_manifest.
+  {md,csv}` lists every change (115 single-translation strips flagged `LOW_CONFIDENCE`).
+- **Guard:** `bible-core/tests/test_no_fused_headings.py` (unit, ~1s) re-applies the cleaner's own
+  detector to every committed translation and asserts zero matches — so a future re-extraction fails
+  the default gate. Plus spot-asserts for Kris's original 6.
+- **`make check` green** (661 unit). Rebuilt `bible.db` (`section_headings` 41,335 → 41,988);
+  FTS no longer matches stray heading phrases (`"Second Prediction"`, `"Expulsion from Paradise"`,
+  `"Jesus’ Authority Challenged"`, … all 0). WEB embeddings regenerate clean on the next bake
+  (reads verse text via `iter_verses`). Purely additive over existing structures — no schema/endpoint
+  change.
