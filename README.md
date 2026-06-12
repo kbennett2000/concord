@@ -64,8 +64,11 @@ A tutorial written for someone in exactly your shoes is here:
 five-lesson course that takes you from "what's an API?" to a real app you built yourself,
 running on your own computer. No experience needed. If that "I've never coded" voice is you,
 start there — and when you've finished, **[concord-tutorial-react](https://github.com/kbennett2000/concord-tutorial-react)**
-picks up right where it leaves off and walks you into React. (The next sections of this README
-are written for developers — but the courses were written for you.)
+picks up right where it leaves off and walks you into React — and
+**[concord-tutorial-ai](https://github.com/kbennett2000/concord-tutorial-ai)** finishes the
+ladder: the AI everyone is talking about, taught to look Scripture up in *your* Concord instead
+of remembering it. Still no experience needed. (The next sections of this README are written for
+developers — but the courses were written for you.)
 
 ## Quick start
 
@@ -456,11 +459,14 @@ Concord exists to be built on — and a small but growing ecosystem already runs
   [`examples/embed_in_process.py`](examples/embed_in_process.py) is a runnable example — it
   parses a reference and fetches a verse with no server running, then (if the embedding model
   and vector store are present) does a `bible-semantic` query in-process too.
-- **Learn to build on it — two courses, from "what's an API?" to reading a real codebase:**
+- **Learn to build on it — three courses, from "what's an API?" to reading a real AI codebase:**
   **[concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web)** builds your
   first real app in plain HTML and JavaScript (no experience needed), and
   **[concord-tutorial-react](https://github.com/kbennett2000/concord-tutorial-react)** picks up
-  from there into React — ending with you reading songbird's own source and finding you can.
+  from there into React — ending with you reading songbird's own source and finding you can…and
+  **[concord-tutorial-ai](https://github.com/kbennett2000/concord-tutorial-ai)** adds local AI
+  tool-calling in plain JavaScript — ending with the student reading concord-mcp's source at
+  v1.0.0 and recognizing every part.
 
 The `/v1` prefix means today's responses are a contract. Build against them with confidence.
 
