@@ -15,6 +15,7 @@ telemetry, no phone-home.
 - **A developer who wants to get hands-on?** → [Quick start](#quick-start), including [semantic search](#semantic-search) and the new [geography](#geography) endpoints.
 - **Here because Scripture matters to you, and you're curious what this is?** → [What is this, really?](#what-is-this-really)
 - **Looking for a polished Bible app to actually use?** → [songbird](https://github.com/kbennett2000/songbird) (desktop) or [soap-journal-mobile](https://github.com/kbennett2000/soap-journal-mobile) (phone).
+- **Want your AI assistant to answer Bible questions from a real Bible — not from memory?** → [concord-mcp](https://github.com/kbennett2000/concord-mcp) connects Concord to Claude.
 
 ## What is this, really?
 
@@ -42,6 +43,11 @@ probably what you actually want.
 songbird is built on top of Concord — a polished desktop app that runs against this very
 `/v1` surface. soap-journal-mobile is offline-first and goes anywhere, so it runs on its own
 and doesn't depend on Concord's LAN server at all.
+
+And if the way you'd rather reach for Scripture is by *asking your AI assistant* —
+[concord-mcp](https://github.com/kbennett2000/concord-mcp) connects Concord to Claude, so it
+answers from verses it actually looked up in your instance (quoted with a reference like
+`John 3:16 (KJV)`) instead of reciting them from memory.
 
 Concord itself is for the builders.
 
@@ -454,6 +460,11 @@ Concord exists to be built on — and a small but growing ecosystem already runs
 
 - **The app it's for:** [songbird](https://github.com/kbennett2000/songbird) is a polished
   end-user Bible app built on top of Concord — a working desktop client of this `/v1` surface.
+- **Use it from your AI assistant:** [concord-mcp](https://github.com/kbennett2000/concord-mcp)
+  is an MCP server that hands Concord's verse lookup, semantic search, cross-references,
+  original-language word study, and place data to an AI assistant as tools — so Claude answers
+  from verses it actually looked up in your instance, quoted with a verifiable reference like
+  `John 3:16 (KJV)`, instead of reciting them from memory.
 - **Embedding in-process:** because `bible-core` has no web dependencies, a Python project can
   import it directly and query Scripture without running the HTTP server at all.
   [`examples/embed_in_process.py`](examples/embed_in_process.py) is a runnable example — it
