@@ -1763,3 +1763,51 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `"Jesus’ Authority Challenged"`, … all 0). WEB embeddings regenerate clean on the next bake
   (reads verse text via `iter_verses`). Purely additive over existing structures — no schema/endpoint
   change.
+
+### Fix #69 — verse labels on word-study tokens (ADR-0009)
+- **Date:** 2026-08-20. **PR:** _(this PR)_ (`slice/69-word-token-verse-labels`).
+- **Why:** issue #69, filed while building concord-mcp's `word_study` tool.
+  `GET /v1/verses/{ref}/words` returned a flat token list with no verse label, so for a multi-verse
+  reference the only boundary signal was `position` restarting at 1. concord-mcp coped by splitting
+  on position resets and labelling blocks only when the block count matched the requested
+  reference's verse list exactly — a guard that gives up on token-less verses, whole-chapter refs
+  and cross-chapter spans. The data was never missing: `word_tokens` has carried `book_id`,
+  `chapter`, `verse` since v6 S3, and `get_words_for_reference` already ordered by them; only the
+  SELECT list and the response model omitted them.
+- **What landed:** `WordToken` gains `chapter`/`verse` (**appended** — `bible-core` is embeddable,
+  and reordering shipped fields would silently break an out-of-repo caller that unpacks a token);
+  `WordTokenOut` gains `book`/`chapter`/`verse`/`reference`, also appended, so the seven published
+  keys keep their wire positions. The label is built in the router from the already-parsed
+  `Reference` (`book_id` + canonical `book_name`) — no join, no extra query, and `/verses/jn
+  4:7/words` labels `"John 4:7"` rather than echoing the raw path. **ADR-0009** records when an
+  already-published `/v1` response may grow fields instead of spawning an endpoint, reconciling
+  ROADMAP rule 1 with ADR-0005's new-endpoint bias and ADR-0003's opt-in widening.
+- **Safety:** the positional `WordToken(r[0]..r[6])` construction became a
+  `_WORD_TOKEN_SELECT`/`_row_to_word_token` pair (the file's `_row_to_place` convention) with
+  **named** arguments — `chapter`, `verse` and `position` are three adjacent ints, so a
+  transposition would type-check, coerce cleanly through Pydantic, and surface only as wrong
+  labels. Tests assert on rows whose three values are pairwise distinct for the same reason; the
+  older fixtures collide (`GEN 1:1 pos 1` is `(1,1,1)`) and would have masked a swap.
+- **Measured, and written into the ADR:** `John 21:15-17` 13,575 → 19,155 B (+41.1%);
+  `Genesis 1-50` 3.24 → 4.56 MB (+40.8%). Most of it is `book` + `reference` repeating per token.
+  Kept for self-describing tokens (the `TranslatorNote` precedent); hoisting `book` to the envelope
+  is the first lever if word-study payloads ever bite.
+- **Two gaps recorded, not fixed:** (1) `docs/openapi.json` cannot see this — the handler returns a
+  raw `Response` with no `response_model=`, so `make openapi-check` passes unchanged and is *not*
+  the drift guard for body shape on these endpoints; `docs/API.md` is. (2) `Cache-Control:
+  ... immutable` means a browser or proxy holding an old `/words` body may serve the label-less
+  shape for up to a year without revalidating.
+- **`make check` green** (671 unit, openapi.json unchanged) + `pytest -m integration
+  test_loader_real.py` (5 passed) for the labels against real SBLGNT/OSHB. Verified end-to-end
+  against the real `bible.db`: per-verse token counts match `word_tokens` rows exactly (John
+  21:15-17 → 30/23/37), cross-chapter spans change chapter mid-list, Hebrew/RTL and alias-book
+  paths label correctly. concord-mcp can now drop its reconstruction guard (tracked there).
+
+### Fix — README used `+` for spaces in URL *paths*
+- **Date:** 2026-08-20. **PR:** _(this PR)_ (`slice/69-word-token-verse-labels`).
+- **Why:** found while running the #69 verification. Four copy-paste examples in the README used
+  `John+3:16` / `Acts+17` / `Philippians+4:6` / `Genesis+1:1` in the **path**. `+` only means a
+  space in a query string; in a path segment it is a literal `+`, so all four returned
+  `400 unparseable_reference` (`unexpected character '+'`). `docs/API.md` was already correct
+  (`%20` throughout) — the bug was README-only.
+- **What landed:** `+` → `%20` in those four examples. Docs-only; no code change.

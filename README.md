@@ -136,7 +136,7 @@ Twenty-seven endpoints. Each is documented in full — with real request/respons
 | `GET /v1/strongs` | Browse the Strong's lexicon, filtered by lemma/transliteration/gloss or language. |
 | `GET /v1/strongs/{id}` | One Strong's entry — lemma, transliteration, gloss, and full definition. |
 | `GET /v1/strongs/{id}/verses` | The verses where a Strong's number occurs (a concordance), optionally with text. |
-| `GET /v1/verses/{ref}/words` | The tagged original-language tokens of a verse — surface, Strong's, morph, gloss. |
+| `GET /v1/verses/{ref}/words` | The tagged original-language tokens of a passage — surface, Strong's, morph, gloss, each labeled with its verse. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
