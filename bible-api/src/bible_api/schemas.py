@@ -513,7 +513,13 @@ class StrongsVersesResponse(BaseModel):
 
 class WordTokenOut(BaseModel):
     """One tagged word of a verse: its surface form plus the joined lexicon lemma/gloss (the
-    lemma/transliteration/gloss are null when untagged or the Strong's has no entry)."""
+    lemma/transliteration/gloss are null when untagged or the Strong's has no entry).
+
+    ``book``/``chapter``/``verse``/``reference`` label the token's own verse, so a multi-verse
+    request needs no boundary reconstruction (``position`` restarts at 1 in each verse; the
+    unique key is chapter+verse+position). Unlike the other verse-labeled models, which lead
+    with the label, these trail: the seven fields above shipped first, and this widening keeps
+    every one of them at its existing wire position (ADR-0009)."""
 
     position: int
     surface_form: str
@@ -522,6 +528,10 @@ class WordTokenOut(BaseModel):
     lemma: str | None
     transliteration: str | None
     gloss: str | None
+    book: str
+    chapter: int
+    verse: int
+    reference: str
 
 
 class VerseWordsResponse(BaseModel):

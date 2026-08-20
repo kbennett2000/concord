@@ -71,7 +71,9 @@ column (no FK) so a token's Strong's needn't appear in the collapsed lexicon.
 - `GET /v1/strongs/{id}/verses` — occurrences (the Strong's→verses direction); `?text=` (default
   `SBLGNT`), `include_text` + `?translation=` hydration, pagination.
 - `GET /v1/verses/{ref}/words` — the tagged tokens of a passage (verse→tokens direction): surface
-  form, Strong's, morphology, and (joined from the lexicon) lemma/translit/gloss.
+  form, Strong's, morphology, and (joined from the lexicon) lemma/translit/gloss. Each token also
+  carries its own `book`/`chapter`/`verse`/`reference` (added post-v6 for issue #69, ADR-0009), so
+  a multi-verse passage splits into verse blocks without inferring boundaries from `position`.
 
 The original-language *text* itself is served by the existing `/v1/verses` and `/v1/translations`.
 

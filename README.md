@@ -136,7 +136,7 @@ Twenty-seven endpoints. Each is documented in full — with real request/respons
 | `GET /v1/strongs` | Browse the Strong's lexicon, filtered by lemma/transliteration/gloss or language. |
 | `GET /v1/strongs/{id}` | One Strong's entry — lemma, transliteration, gloss, and full definition. |
 | `GET /v1/strongs/{id}/verses` | The verses where a Strong's number occurs (a concordance), optionally with text. |
-| `GET /v1/verses/{ref}/words` | The tagged original-language tokens of a verse — surface, Strong's, morph, gloss. |
+| `GET /v1/verses/{ref}/words` | The tagged original-language tokens of a passage — surface, Strong's, morph, gloss, each labeled with its verse. |
 | `GET /v1/random` | A random verse, optionally filtered by book or testament. |
 | `GET /v1/books` | The 66-book catalog with metadata. |
 | `GET /v1/translations` | The loaded translations with metadata. |
@@ -173,7 +173,7 @@ and the link runs **both ways**: ask a place for its verses, or ask a verse (or 
 for the places it names.
 
 ```bash
-curl 'localhost:8000/v1/verses/Acts+17/places'   # Athens, Berea, Thessalonica, Amphipolis, ...
+curl 'localhost:8000/v1/verses/Acts%2017/places'   # Athens, Berea, Thessalonica, Amphipolis, ...
 ```
 
 What gives it character is honesty about uncertainty. **Concord never invents a pin.** A place it
@@ -196,7 +196,7 @@ verses, or ask a verse for the topics it appears under.
 
 ```bash
 curl 'localhost:8000/v1/topics?q=anxiety'              # finds ANXIETY (→ see_also: care)
-curl 'localhost:8000/v1/verses/Philippians+4:6/topics' # Care, Prayer, Thankfulness, ...
+curl 'localhost:8000/v1/verses/Philippians%204:6/topics' # Care, Prayer, Thankfulness, ...
 ```
 
 Nave's own "See X" cross-references are preserved: a redirect topic carries a `see_also` pointer
@@ -223,9 +223,9 @@ Strong's number for every verse it appears in, or ask a verse for its tagged ori
 
 ```bash
 curl 'localhost:8000/v1/strongs/G26/verses'            # every verse with ἀγάπη — a concordance
-curl 'localhost:8000/v1/verses/John+3:16/words'        # the tagged Greek tokens of John 3:16
+curl 'localhost:8000/v1/verses/John%203:16/words'        # the tagged Greek tokens of John 3:16
 curl 'localhost:8000/v1/strongs/H430/verses'           # every verse with אֱלֹהִים ("God")
-curl 'localhost:8000/v1/verses/Genesis+1:1/words'      # the tagged Hebrew tokens of Genesis 1:1
+curl 'localhost:8000/v1/verses/Genesis%201:1/words'      # the tagged Hebrew tokens of Genesis 1:1
 ```
 
 The right text is chosen automatically — Hebrew (`OSHB`) for an `H…` id or an OT reference, Greek

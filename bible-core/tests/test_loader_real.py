@@ -165,6 +165,14 @@ def test_real_build_loads_word_tokens_both_directions(tmp_path: Path) -> None:
     assert "love" in (agapao.gloss or "")
     # The TR-only αὐτοῦ (#11) is absent from the SBL token stream, like the verse text.
     assert "αὐτοῦ" not in [t.surface_form for t in toks]
+    # Every token labels its own verse (#69).
+    assert {(t.chapter, t.verse) for t in toks} == {(3, 16)}
+
+    # A multi-verse reference: the labels split the stream where position restarts at 1.
+    span_ref = parse_reference("John 21:15-17", SqliteBookResolver(conn))
+    span_toks = get_words_for_reference(conn, span_ref, "SBLGNT")
+    assert {(t.chapter, t.verse) for t in span_toks} == {(21, 15), (21, 16), (21, 17)}
+    assert [t.position for t in span_toks if t.verse == 16][0] == 1
 
 
 def test_real_build_loads_the_hebrew_ot(tmp_path: Path) -> None:
@@ -224,3 +232,9 @@ def test_real_build_loads_the_hebrew_ot(tmp_path: Path) -> None:
     elohim_tok = next(t for t in toks if t.strongs_id == "H430")
     assert _consonants(elohim_tok.lemma or "") == "אלהים"
     assert "God" in (elohim_tok.gloss or "")
+    # Verse labels ride the Hebrew side too (#69), across a multi-verse reference.
+    assert {(t.chapter, t.verse) for t in toks} == {(1, 1)}
+    span_toks = get_words_for_reference(
+        conn, parse_reference("Genesis 1:1-2", SqliteBookResolver(conn)), "OSHB"
+    )
+    assert {(t.chapter, t.verse) for t in span_toks} == {(1, 1), (1, 2)}

@@ -1157,7 +1157,13 @@ class StrongsVerseRef:
 @dataclass(frozen=True)
 class WordToken:
     """One tagged word of an original-language verse, with its lexicon gloss joined in (the lemma/
-    transliteration/gloss are ``None`` when the token is untagged or its Strong's has no entry)."""
+    transliteration/gloss are ``None`` when the token is untagged or its Strong's has no entry).
+
+    ``chapter``/``verse`` label the token's own verse, so a multi-verse reference needs no
+    boundary reconstruction (``position`` restarts at 1 in each verse). They are appended rather
+    than leading: ``bible-core`` is an embeddable library, and reordering the shipped fields
+    would silently break an out-of-repo caller that unpacks or positionally constructs a token.
+    """
 
     position: int
     surface_form: str
@@ -1166,6 +1172,33 @@ class WordToken:
     lemma: str | None
     transliteration: str | None
     gloss: str | None
+    chapter: int
+    verse: int
+
+
+# The word-token columns, in ``WordToken`` field order. Paired with ``_row_to_word_token`` so the
+# SELECT list and the dataclass can't drift — the same convention as _PLACE_SELECT/_row_to_place.
+# The mapper names its arguments (unlike the places/topics mappers) because chapter, verse and
+# position are three adjacent ints: a transposition here would type-check, coerce through
+# Pydantic, and surface only as wrong labels.
+_WORD_TOKEN_SELECT = (
+    "wt.position, wt.surface_form, wt.strongs_id, wt.morph_code, "
+    "se.lemma, se.transliteration, se.gloss, wt.chapter, wt.verse"
+)
+
+
+def _row_to_word_token(r: sqlite3.Row) -> WordToken:
+    return WordToken(
+        position=r[0],
+        surface_form=r[1],
+        strongs_id=r[2],
+        morph_code=r[3],
+        lemma=r[4],
+        transliteration=r[5],
+        gloss=r[6],
+        chapter=r[7],
+        verse=r[8],
+    )
 
 
 def count_strongs_verses(conn: sqlite3.Connection, strongs_id: str, text_id: str) -> int:
@@ -1204,6 +1237,10 @@ def get_words_for_reference(
     Each token LEFT JOINs the lexicon, so the lemma/transliteration/gloss come along when the
     token's Strong's has a collapsed entry (else they are ``None``). A valid reference with no
     tokens (e.g. an OT verse for a NT-only text) returns an empty tuple.
+
+    Every token carries its own ``chapter``/``verse``, so a caller spanning several verses reads
+    the boundaries off the tokens instead of inferring them from ``position`` restarting at 1.
+    The book is ``reference.book_id`` — a reference is single-book by construction.
     """
     clauses: list[str] = []
     params: list[str | int] = [text_id, reference.book_id]
@@ -1214,10 +1251,9 @@ def get_words_for_reference(
     where = f"wt.text_id = ? AND wt.book_id = ? AND ({' OR '.join(clauses)})"
 
     return tuple(
-        WordToken(r[0], r[1], r[2], r[3], r[4], r[5], r[6])
+        _row_to_word_token(r)
         for r in conn.execute(
-            "SELECT wt.position, wt.surface_form, wt.strongs_id, wt.morph_code, "
-            "se.lemma, se.transliteration, se.gloss "
+            f"SELECT {_WORD_TOKEN_SELECT} "
             "FROM word_tokens wt "
             "LEFT JOIN strongs_entries se ON se.strongs_id = wt.strongs_id "
             f"WHERE {where} "

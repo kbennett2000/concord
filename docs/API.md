@@ -937,8 +937,8 @@ translation hydrates as `text: null`. **Errors:** `404 unknown_strongs`; `404` u
 ## `GET /v1/verses/{ref}/words`
 
 The tagged original-language tokens of a reference — the word-study verse view. Each token carries
-its surface form, Strong's number, morphology code, and the lemma/transliteration/gloss joined from
-the lexicon.
+its surface form, Strong's number, morphology code, the lemma/transliteration/gloss joined from the
+lexicon, and the verse it belongs to.
 
 | Param | In | Type | Default | Notes |
 |---|---|---|---|---|
@@ -946,24 +946,37 @@ the lexicon.
 | `text` | query | string | by testament | The tagged text. Defaults by the reference's testament — `OSHB` for OT, `SBLGNT` for NT. Unknown → `404`. |
 
 ```bash
-$ curl -s 'localhost:8000/v1/verses/John%203:16/words'
+$ curl -s 'localhost:8000/v1/verses/John%2011:35-36/words'
 ```
 ```json
 {
-  "reference": "John 3:16", "text_id": "SBLGNT", "total": 25,
+  "reference": "John 11:35-36", "text_id": "SBLGNT", "total": 11,
   "tokens": [
-    { "position": 1, "surface_form": "οὕτως", "strongs_id": "G3779", "morph_code": "ADV",
-      "lemma": "οὕτως", "transliteration": "houtōs", "gloss": "thus(-ly)" },
-    { "position": 3, "surface_form": "ἠγάπησεν", "strongs_id": "G25", "morph_code": "V-AAI-3S",
-      "lemma": "ἀγαπάω", "transliteration": "agapaō", "gloss": "to love" }
+    { "position": 3, "surface_form": "Ἰησοῦς.", "strongs_id": "G2424", "morph_code": "N-NSM-P",
+      "lemma": "Ἰησοῦς", "transliteration": "Iēsous", "gloss": "Jesus",
+      "book": "JHN", "chapter": 11, "verse": 35, "reference": "John 11:35" },
+    { "position": 1, "surface_form": "ἔλεγον", "strongs_id": "G3004", "morph_code": "V-IAI-3P",
+      "lemma": "λέγω", "transliteration": "legō", "gloss": "to say",
+      "book": "JHN", "chapter": 11, "verse": 36, "reference": "John 11:36" }
   ]
 }
 ```
 
+**`position` is per-verse, not a running index** — it restarts at 1 in every verse, as it does
+between the two tokens above. The unique key for a token is `book` + `chapter` + `verse` +
+`position`. Group by `(chapter, verse)` to split a multi-verse response into verse blocks; never
+infer the boundaries from `position` resetting, which silently misreads a verse the tagged text
+doesn't cover.
+
+Note the two `reference` fields mean different things: the top-level one echoes the request (your
+input order preserved), while a token's names that one token's verse. Tokens always come back in
+canonical `chapter, verse, position` order, whatever order the request listed.
+
 A token's `lemma`/`transliteration`/`gloss` are null when it is untagged or its Strong's has no
-lexicon entry. A valid reference with no tokens (e.g. an OT verse for the NT-only SBLGNT) returns
-`200` with `"total": 0`, `"tokens": []`. **Errors:** `400 unparseable_reference` · `404 unknown_book`
-· `404` unknown `text`. **Caching:** immutable.
+lexicon entry; `book`/`chapter`/`verse`/`reference` are always present. A valid reference with no
+tokens (e.g. an OT verse for the NT-only SBLGNT) returns `200` with `"total": 0`, `"tokens": []`.
+**Errors:** `400 unparseable_reference` · `404 unknown_book` · `404` unknown `text`.
+**Caching:** immutable.
 
 ## `GET /v1/random`
 

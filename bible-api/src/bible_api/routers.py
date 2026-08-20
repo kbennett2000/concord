@@ -1143,6 +1143,13 @@ def verse_words_endpoint(
                 lemma=t.lemma,
                 transliteration=t.transliteration,
                 gloss=t.gloss,
+                # The verse label (#69). The book comes from the parsed reference — it is
+                # constant for the response (a reference is single-book) — and the canonical
+                # book_name, not the raw path, so `/verses/jn 4:7/words` labels "John 4:7".
+                book=reference.book_id,
+                chapter=t.chapter,
+                verse=t.verse,
+                reference=f"{reference.book_name} {t.chapter}:{t.verse}",
             )
             for t in tokens
         ],
