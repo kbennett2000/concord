@@ -16,6 +16,22 @@ from fastapi.testclient import TestClient
 
 SUMMARY_KEYS = ["strongs_id", "language", "lemma", "transliteration", "gloss"]
 
+# The word-token wire shape. The verse label trails the seven original fields — the #69
+# widening kept every shipped key at its existing position (ADR-0009).
+TOKEN_KEYS = [
+    "position",
+    "surface_form",
+    "strongs_id",
+    "morph_code",
+    "lemma",
+    "transliteration",
+    "gloss",
+    "book",
+    "chapter",
+    "verse",
+    "reference",
+]
+
 
 # --- browse + filters ----------------------------------------------------------------
 
@@ -162,6 +178,10 @@ def test_verse_words_order_and_lexicon_join(client: TestClient) -> None:
     assert (toks[0]["strongs_id"], toks[0]["lemma"]) == ("G9999", None)
     # pos3 is untagged: null strongs + morph.
     assert (toks[2]["strongs_id"], toks[2]["morph_code"]) == (None, None)
+    # Every token labels its own verse, single-verse requests included (#69).
+    assert {(t["book"], t["chapter"], t["verse"], t["reference"]) for t in toks} == {
+        ("JHN", 3, 16, "John 3:16")
+    }
 
 
 def test_verse_words_empty_when_no_tokens(client: TestClient) -> None:
@@ -178,6 +198,54 @@ def test_verse_words_default_text_by_testament(client: TestClient) -> None:
     assert elohim["gloss"] == "God"
     # An NT reference defaults to the Greek text (SBLGNT).
     assert client.get("/v1/verses/John 3:16/words").json()["text_id"] == "SBLGNT"
+
+
+def test_verse_words_token_key_order(client: TestClient) -> None:
+    # The wire key order is the contract clients encode against (schemas.py) — pin it so the
+    # next widening is a deliberate choice rather than a side effect of field placement.
+    body = client.get("/v1/verses/John 3:16/words").json()
+    assert list(body["tokens"][0].keys()) == TOKEN_KEYS
+
+
+def test_verse_words_tokens_carry_verse_labels(client: TestClient) -> None:
+    # The issue-#69 case: two verses whose tokens both start at position 1.
+    body = client.get("/v1/verses/John 4:7-8/words").json()
+    assert [
+        (t["book"], t["chapter"], t["verse"], t["reference"], t["position"]) for t in body["tokens"]
+    ] == [("JHN", 4, 7, "John 4:7", 1), ("JHN", 4, 8, "John 4:8", 1)]
+
+
+def test_verse_words_cross_chapter_labels(client: TestClient) -> None:
+    # A span crossing a chapter boundary. The position list is the evidence that position alone
+    # cannot recover the boundaries — it restarts twice, once mid-chapter and once at the break.
+    body = client.get("/v1/verses/John 3:16-4:8/words").json()
+    assert body["total"] == 5
+    assert [(t["chapter"], t["verse"]) for t in body["tokens"]] == [
+        (3, 16),
+        (3, 16),
+        (3, 16),
+        (4, 7),
+        (4, 8),
+    ]
+    assert [t["position"] for t in body["tokens"]] == [1, 2, 3, 1, 1]
+
+
+def test_verse_words_reference_uses_canonical_book_name(client: TestClient) -> None:
+    # The label comes from the resolved book, not the raw path or the request echo.
+    body = client.get("/v1/verses/jn 4:7/words").json()
+    assert (body["tokens"][0]["book"], body["tokens"][0]["reference"]) == ("JHN", "John 4:7")
+
+
+def test_verse_words_hebrew_labels(client: TestClient) -> None:
+    # The OT default-text path. GEN 1:1 seeds positions 1 and 3, so this is the one fixture
+    # where position and verse genuinely differ.
+    body = client.get("/v1/verses/Genesis 1:1-2/words").json()
+    assert [(t["chapter"], t["verse"], t["position"]) for t in body["tokens"]] == [
+        (1, 1, 1),
+        (1, 1, 3),
+        (1, 2, 1),
+    ]
+    assert [t["reference"] for t in body["tokens"]][-1] == "Genesis 1:2"
 
 
 def test_verse_words_bad_reference_400(client: TestClient) -> None:
