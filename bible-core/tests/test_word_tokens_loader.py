@@ -122,6 +122,18 @@ def _tokens() -> dict[str, object]:
                 "strongs_id": "G26",
                 "morph_code": "N-NSF",
             },
+            # 1 John 5:1 — the far side of a chapter boundary, so `1 John 4:16-5:1` exercises the
+            # cross-chapter span. Untagged on purpose: a G26 here would change the Strong's→
+            # verses expectations above.
+            {
+                "book": "1JN",
+                "chapter": 5,
+                "verse": 1,
+                "position": 1,
+                "surface_form": "πᾶς",
+                "strongs_id": None,
+                "morph_code": None,
+            },
             # unresolved book → skipped + counted.
             {
                 "book": "ZZZ",
@@ -152,9 +164,9 @@ def _build(tmp_path: Path) -> tuple[Path, object]:
 
 def test_counts_dedup_and_skip(tmp_path: Path) -> None:
     _, stats = _build(tmp_path)
-    # 5 distinct PKs (the repeated JHN 3:16 #2 collapses); ZZZ skipped. The lexicon still loads
+    # 6 distinct PKs (the repeated JHN 3:16 #2 collapses); ZZZ skipped. The lexicon still loads
     # 2 entries even though tokens-grk.json shares the directory.
-    assert stats.word_tokens == 5  # type: ignore[attr-defined]
+    assert stats.word_tokens == 6  # type: ignore[attr-defined]
     assert stats.strongs_entries == 2  # type: ignore[attr-defined]
 
 
@@ -182,6 +194,58 @@ def test_verse_to_words_ordered_with_lexicon_join(tmp_path: Path) -> None:
     assert (toks[0].strongs_id, toks[0].lemma, toks[0].gloss) == ("G2316", None, None)
     # pos3 is untagged: null strongs + morph survive the round-trip.
     assert (toks[2].strongs_id, toks[2].morph_code) == (None, None)
+    # Every token labels its own verse, single-verse refs included.
+    assert [(t.chapter, t.verse) for t in toks] == [(3, 16), (3, 16), (3, 16)]
+
+
+def test_words_carry_chapter_and_verse_labels(tmp_path: Path) -> None:
+    """The issue-#69 case: two verses whose tokens both start at position 1.
+
+    Chapter, verse and position are pairwise distinct here, so a transposition between the three
+    int columns would fail this rather than coincidentally pass.
+    """
+    db, _ = _build(tmp_path)
+    conn = sqlite3.connect(db)
+    ref = parse_reference("1 John 4:8-16", SqliteBookResolver(conn))
+    toks = get_words_for_reference(conn, ref, "GRK")
+    assert [(t.chapter, t.verse, t.position) for t in toks] == [(4, 8, 1), (4, 16, 1)]
+
+
+def test_words_cross_chapter_span_labels(tmp_path: Path) -> None:
+    """A span crossing a chapter boundary — the case a position-reset heuristic cannot recover."""
+    db, _ = _build(tmp_path)
+    conn = sqlite3.connect(db)
+    ref = parse_reference("1 John 4:16-5:1", SqliteBookResolver(conn))
+    toks = get_words_for_reference(conn, ref, "GRK")
+    assert [(t.chapter, t.verse, t.position) for t in toks] == [(4, 16, 1), (5, 1, 1)]
+
+
+def test_words_whole_chapter_span_labels(tmp_path: Path) -> None:
+    """A whole-chapter span leaves `verse` unconstrained; the labels still come off each row."""
+    db, _ = _build(tmp_path)
+    conn = sqlite3.connect(db)
+    ref = parse_reference("John 3", SqliteBookResolver(conn))
+    toks = get_words_for_reference(conn, ref, "GRK")
+    assert [(t.chapter, t.verse, t.position) for t in toks] == [(3, 16, 1), (3, 16, 2), (3, 16, 3)]
+
+
+def test_words_chapter_range_span_labels(tmp_path: Path) -> None:
+    """A chapter range with an empty upper chapter still labels what it finds."""
+    db, _ = _build(tmp_path)
+    conn = sqlite3.connect(db)
+    ref = parse_reference("John 3-4", SqliteBookResolver(conn))
+    toks = get_words_for_reference(conn, ref, "GRK")
+    assert [(t.chapter, t.verse, t.position) for t in toks] == [(3, 16, 1), (3, 16, 2), (3, 16, 3)]
+
+
+def test_words_verse_list_spans_no_duplicates(tmp_path: Path) -> None:
+    """A comma verse list becomes several OR'd predicates — a row matching two is still one row."""
+    db, _ = _build(tmp_path)
+    conn = sqlite3.connect(db)
+    resolver = SqliteBookResolver(conn)
+    for ref_text in ("1 John 4:8,16", "1 John 4:8,8,16"):
+        toks = get_words_for_reference(conn, parse_reference(ref_text, resolver), "GRK")
+        assert [(t.chapter, t.verse) for t in toks] == [(4, 8), (4, 16)]
 
 
 def test_words_for_reference_empty_when_no_tokens(tmp_path: Path) -> None:
