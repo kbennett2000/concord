@@ -56,6 +56,24 @@ def test_cross_chapter_range(client: TestClient) -> None:
     assert positions == [(3, 18), (3, 19), (3, 20), (4, 1), (4, 2)]
 
 
+def test_chapter_to_chapter_verse_range(client: TestClient) -> None:
+    # #73: "John 3-4:2" was a 400 until the bare left chapter learned to start at verse 1.
+    response = client.get("/v1/verses/John 3-4:2", params={"translations": "KJV"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reference"] == "John 3:1-4:2"
+    positions = [(v["chapter"], v["verse"]) for v in body["verses"]]
+    assert positions == [(3, v) for v in range(1, 21)] + [(4, 1), (4, 2)]
+
+
+def test_chapter_to_chapter_verse_matches_explicit_form(client: TestClient) -> None:
+    # The two spellings name one span, so they are byte-identical — same ETag, same body.
+    implicit = client.get("/v1/verses/John 3-4:2", params={"translations": "KJV"})
+    explicit = client.get("/v1/verses/John 3:1-4:2", params={"translations": "KJV"})
+    assert implicit.content == explicit.content
+    assert implicit.headers["etag"] == explicit.headers["etag"]
+
+
 def test_multi_translation(client: TestClient) -> None:
     body = client.get("/v1/verses/John 3:17", params={"translations": "KJV,WEB,YLT"}).json()
     assert body["translations"] == ["KJV", "WEB", "YLT"]

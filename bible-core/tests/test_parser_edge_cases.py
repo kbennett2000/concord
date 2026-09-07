@@ -28,13 +28,27 @@ ACCEPTS: list[tuple[str, tuple[Span, ...]]] = [
     # whitespace inside the spec is tolerated
     ("John 3 : 16", (Span(3, 16, 3, 16),)),
     ("John 3:16, 18", (Span(3, 16, 3, 16), Span(3, 18, 3, 18))),
+    # chapter → chapter:verse: the omitted left verse is the constant 1 (#73, ADR-0010)
+    ("John 3-4:2", (Span(3, 1, 4, 2),)),
+    ("John 3-4.2", (Span(3, 1, 4, 2),)),  # '.' ≡ ':' reaches the same branch
+    ("John 3–4:2", (Span(3, 1, 4, 2),)),  # en dash, folded before dispatch
+    ("John 3-3:5", (Span(3, 1, 3, 5),)),  # c1 == c2, already canonical (no collapse needed)
+    ("John 3-3:1", (Span(3, 1, 3, 1),)),  # degenerate: one verse
+    ("John 03-04:02", (Span(3, 1, 4, 2),)),  # leading zeros (pins the .isdigit() reading)
+    ("John 1-99999999:1", (Span(1, 1, 99999999, 1),)),  # no bounds check, still one span
 ]
 
 REJECTS: list[tuple[str, str]] = [
     ("John 3:18-16", "descending verse range"),
     ("John 5-3", "descending chapter range"),
-    ("John 3-4:2", "ambiguous range"),
     ("John 3:16-4", "descending verse range"),
+    # the chapter → chapter:verse branch's own boundaries (#73)
+    ("John 4-3:2", "descending range"),  # distinct from "descending chapter range"
+    ("John 0-4:2", "chapter number must be positive"),
+    ("John 3-4:0", "verse number must be positive"),
+    ("John 3-4:2:5", "not a valid chapter:verse"),
+    # a comma anywhere wins the dispatch, so the new form is still not allowed in a list
+    ("John 3-4:2,6", "expected a chapter number"),
     ("John 3:16,4:2", "bare verse numbers"),
     ("John 3:16-18,20", "expected a verse number"),
     ("John", "needs at least a chapter"),

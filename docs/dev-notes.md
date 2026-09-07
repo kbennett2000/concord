@@ -146,8 +146,8 @@ in the README.
   | `John 1:99999999` | parses (no bounds check) |
   | `3-3`, `3:16-3:16`, `3:16-3:18` | collapse to simpler form |
   | `3:18-16`, `5-3` | reject "descending … range" |
-  | `3-4:2` | reject "ambiguous range" |
-  | `3:16-4` | reject "descending verse range" (16→4) |
+  | `3-4:2` | ~~reject "ambiguous range"~~ → **accept** `Span(3,1,4,2)` since #73 (ADR-0010) |
+  | `3:16-4` | reject "descending verse range" (16→4) — *still*, see #73 |
   | `3:16,4:2` | reject "bare verse numbers" (no cross-chapter lists) |
   | `3:16-18,20` | reject "expected a verse number" (no ranges-in-lists) |
   | `John` | reject "needs at least a chapter" |
@@ -176,7 +176,11 @@ in the README.
   for `1 John 3:16` and handles `Song of Solomon 1:1` and `Jn. 3:16` uniformly.
 - **A couple of cases resolve by consistent rule, not special-case:** `John 3:16-4`
   rejects as a *descending* range (16→4), and `John 3:16-18.20` parses as a cross-chapter
-  range because `.`≡`:`. Both intentional; both tested.
+  range because `.`≡`:`. Both intentional; both tested. **(Amended by #73:** `3-4:2` used
+  to reject alongside them and now accepts. The rule that separates it from `3:16-4` is
+  where the omitted verse sits — at a range **start** it is the constant 1, at a range
+  **end** it would mean "through the end of that chapter", which needs the chapter's verse
+  count: a DB fact this parser is forbidden to know. Do not "fix" the asymmetry.**)**
 - **Pyright clean, no friction** (sqlite rows are `Any`, no `cast` needed in the resolver).
   Reused Slice 2's `extraPaths` so tests import the sibling `parserkit` resolver fixture.
 - **For Slice 4 future-you:** the parser does **not** bounds-check chapters/verses — the
@@ -1811,3 +1815,32 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `400 unparseable_reference` (`unexpected character '+'`). `docs/API.md` was already correct
   (`%20` throughout) — the bug was README-only.
 - **What landed:** `+` → `%20` in those four examples. Docs-only; no code change.
+
+### Fix #73 — chapter-to-chapter:verse reference ranges (ADR-0010)
+- **Date:** 2026-09-07. **PR:** _(this PR)_ (`slice/73-chapter-to-chapter-verse-ranges`).
+- **Why:** issue #73, filed while running songbird's new sermon-sources scan against a real
+  church channel. Cornerstone Chapel writes passages as `Judges 13-14:11`; Concord returned
+  `400 unparseable_reference` ("ambiguous range"), and since the scan reads a refusal as "not a
+  reference", eight of that channel's sermons went to a review queue. songbird never interprets
+  references itself, so the gap was ours.
+- **What landed:** one branch in `_parse_range` — `c1-c2:v2` → `Span(c1, 1, c2, v2)`, rejecting
+  only `c2 < c1`. No query change: that span is the shape `John 3:16-4:2` already produces, so
+  `_span_predicate`'s cross-chapter linear branch already served it. `_echo`/`_echo_span`
+  unchanged — `Judges 13-14:11` echoes as `Judges 13:1-14:11`, and because the echo is computed
+  from the spans rather than the input, the two spellings compare **equal** as `Reference`s and
+  return byte-identical bodies with the same ETag.
+- **The asymmetry, and why it must stay:** `3-4:2` now accepts but `3:16-4` still rejects. An
+  omitted verse at a range **start** is the constant 1; at a range **end** it would mean "through
+  the end of that chapter", which needs a verse count — a DB fact the pure parser may not know.
+  Stated in a comment on the branch, in the Slice 3 policy table above (amended, not deleted),
+  and in ADR-0010. `3:16-4`'s message now names the alternative spelling, since teaching users
+  `13-14:11` makes that neighbour more reachable.
+- **Not done deliberately:** the three "collapse" ternaries in the sibling branches are provably
+  vacuous (`Span` is a frozen 4-int dataclass, so equal bounds *are* the collapsed form) — the
+  new branch copies no such ternary, and simplifying the existing ones is a separate cleanup.
+  `Judges 13-14:11,13` still fails with a chapter-number message, because a comma wins the parse
+  dispatch before the range branch; ranges-in-lists were already unsupported, it is pinned by a
+  test, and a better message is its own issue.
+- **`make check` green** (693 unit, 47 deselected; ruff + pyright strict clean, openapi.json
+  unchanged). Verified end-to-end against the real `bible.db` on a live `make run`: the issue's
+  full neighbour table re-run, with only the target row moving.
