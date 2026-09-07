@@ -239,6 +239,9 @@ no HTTP). Supported forms for a **single book**:
 - Whole chapter — `John 3`
 - Chapter range — `John 3-4` (no colon ⇒ chapters 3 through 4)
 - Cross-chapter verse range — `John 3:16-4:2`
+- Chapter through chapter:verse — `Judges 13-14:11` (⇒ `13:1` through `14:11`); the omitted
+  start verse is the constant 1. The mirror form `3:16-4` stays a verse range — see
+  [`docs/adr/ADR-0010-chapter-to-chapter-verse-ranges.md`](adr/ADR-0010-chapter-to-chapter-verse-ranges.md)
 - Numbered books — `1 John`, `1John`, `1 Jn`, `I John`, `First John`
 - Separators — colon or period for chapter:verse (`3:16` ≡ `3.16`)
 

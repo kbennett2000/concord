@@ -1086,8 +1086,16 @@ returns 200 with `translation_count > 0` and semantic search ready.
 | Whole chapter | `John 3` |
 | Chapter range | `John 3-4` |
 | Cross-chapter range | `John 3:16-4:2` |
+| Chapter through chapter:verse | `Judges 13-14:11` (⇒ `Judges 13:1-14:11`) |
 | Numbered books | `1 John`, `1John`, `1 Jn`, `I John`, `First John` |
 | Separators | colon or period (`3:16` ≡ `3.16`) |
+
+A bare chapter before the `-` starts at verse 1, so `Judges 13-14:11` and
+`Judges 13:1-14:11` are the same request — `reference` echoes the second spelling for both.
+The mirror form does **not** work that way: in `John 3:16-4` the bare bound after a `:` is a
+verse in the same chapter, so it reads as 16→4 and is rejected as descending. "Through the
+end of chapter 4" would need that chapter's verse count, which the parser deliberately does
+not know ([ADR-0010](adr/ADR-0010-chapter-to-chapter-verse-ranges.md)).
 
 Two deliberate disambiguations: bare `jud` → **Jude**, while Judges is `jdg`/`judg`/`jg`.
 Multi-reference strings joined by `;` are out of scope for v1. Malformed input →
