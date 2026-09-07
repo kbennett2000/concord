@@ -24,6 +24,9 @@ SUPPORTED = [
     "John 3-3",
     "John 3:16-3:18",
     "John 3:18,16",
+    "John 3-4:2",
+    "John 3-3:5",
+    "Judges 13-14:11",
 ]
 
 

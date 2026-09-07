@@ -76,6 +76,11 @@ def test_cross_chapter_linear_range() -> None:
     assert _positions(_verses("John 3:18-4:2")) == [(3, 18), (3, 19), (3, 20), (4, 1), (4, 2)]
 
 
+def test_chapter_to_chapter_verse_range() -> None:
+    # #73: the bare left chapter starts at verse 1, so this is all of ch 3 plus 4:1-4:2.
+    assert _positions(_verses("John 3-4:2")) == [(3, v) for v in range(1, 21)] + [(4, 1), (4, 2)]
+
+
 def test_get_chapter() -> None:
     result = get_chapter(CONN, "JHN", "John", 4, ("KJV",))
     assert result.reference == "John 4"

@@ -153,14 +153,24 @@ def _parse_range(spec: str, raw: str) -> tuple[Span, ...]:
         chapter, v1 = _split_cv(left, raw)
         v2 = _parse_int(right, "verse", raw)
         if v2 < v1:
-            raise ParseError(f"descending verse range {spec!r} in {raw!r}")
+            raise ParseError(
+                f"descending verse range {spec!r} in {raw!r}: a bare bound after ':' is a verse "
+                "in the same chapter; for a chapter end write C:V-C:V"
+            )
         return (Span(chapter, v1, chapter, v2),) if v1 != v2 else (Span(chapter, v1, chapter, v1),)
 
-    if not left_cv and right_cv:  # e.g. 3-4:2
-        raise ParseError(
-            f"ambiguous range {spec!r} in {raw!r}: a bare chapter on the left and "
-            "chapter:verse on the right; write it as C:V-C:V"
-        )
+    if not left_cv and right_cv:  # chapter → chapter:verse, e.g. 3-4:2 ⇒ 3:1 through 4:2
+        # A missing verse on the LEFT means the start of that chapter — verse 1, a constant.
+        # The mirror form (3:16-4) cannot be read the same way: "through the end of chapter 4"
+        # needs that chapter's verse count, a DB fact this parser is not allowed to know, so it
+        # stays a descending verse range above. See docs/adr/ADR-0010.
+        c1 = _parse_int(left, "chapter", raw)
+        c2, v2 = _split_cv(right, raw)
+        # The implied left bound is (c1, 1) and _parse_int guarantees v2 >= 1, so the general
+        # (c2, v2) < (c1, 1) test reduces exactly to c2 < c1.
+        if c2 < c1:
+            raise ParseError(f"descending range {spec!r} in {raw!r}")
+        return (Span(c1, 1, c2, v2),)
 
     # cross-chapter range, e.g. 3:16-4:2
     c1, v1 = _split_cv(left, raw)

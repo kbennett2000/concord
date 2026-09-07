@@ -46,6 +46,20 @@ def test_cross_chapter_verse_range() -> None:
     assert ref.echo == "John 3:16-4:2"
 
 
+def test_chapter_to_chapter_verse_range() -> None:
+    # The reference form from issue #73 ("Judges 13-14:11"): a bare chapter on the left
+    # starts at verse 1. The echo normalizes to the explicit C:V-C:V spelling.
+    ref = parse_reference("Judges 13-14:11", RESOLVER)
+    assert ref.spans == (Span(13, 1, 14, 11),)
+    assert ref.echo == "Judges 13:1-14:11"
+
+
+def test_chapter_to_chapter_verse_equals_explicit_form() -> None:
+    assert parse_reference("Judges 13-14:11", RESOLVER) == parse_reference(
+        "Judges 13:1-14:11", RESOLVER
+    )
+
+
 def test_period_separator_equals_colon() -> None:
     assert parse_reference("John 3.16", RESOLVER) == parse_reference("John 3:16", RESOLVER)
 
