@@ -2,10 +2,12 @@
 """Convert an operator-owned Every Man's Bible PDF into Concord's private EMB translation.
 
 Concord v8 (docs/v8/SPEC.md). Reads the PDF with ``pdftohtml -xml`` (poppler-utils) and
-writes ``data/private/EMB.json`` — verses and section headings — plus working files under
+writes ``data/private/EMB.json`` — verses and section headings — and
+``data/private/notes/EMB.json`` — its textual and study notes — plus working files under
 ``data/private/work/EMB/``. Everything it writes stays under ``data/private/`` (git- and
-docker-ignored). Given the EPUB edition, it also cross-checks every verse against it; given
-nothing else, it uses ``data/private/nlt.json`` (if present) only as cross-check evidence.
+docker-ignored). Given the EPUB edition, it also cross-checks every verse and every note
+against it; given nothing else, it uses ``data/private/nlt.json`` (if present) only as verse
+cross-check evidence.
 
     uv run python scripts/convert_emb.py --pdf "<your EMB.pdf>" [--epub "<your EMB.epub>"]
 
@@ -29,7 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="convert_emb.py",
-        description="Every Man's Bible PDF → data/private/EMB.json (Concord v8).",
+        description="Every Man's Bible PDF → data/private/EMB.json + notes (Concord v8).",
     )
     parser.add_argument("--pdf", required=True, type=Path, help="your Every Man's Bible PDF")
     parser.add_argument(
