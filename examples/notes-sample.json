@@ -33,6 +33,19 @@
       "verse": 16,
       "text": "Example plain footnote on the same verse (no type, so it stores as null). A second note on one verse shows how ordinal orders them.",
       "ordinal": 2
+    },
+    {
+      "book": "GEN",
+      "chapter": 1,
+      "verse": 1,
+      "text": "Example **feature article** in Markdown (the optional v8 fields, ADR-0011). It covers [the six days](ref:GEN.1.1-2.3) and points to [John 1](ref:JHN.1). Illustrative sample text only.",
+      "type": "article",
+      "label": "Example Feature",
+      "title": "An example title",
+      "text_format": "markdown",
+      "passages": [
+        { "start_chapter": 1, "start_verse": 1, "end_chapter": 2, "end_verse": 3 }
+      ]
     }
   ]
 }

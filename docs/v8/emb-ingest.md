@@ -43,7 +43,7 @@ The same PDF always gives byte-identical output, so re-running is safe.
 | File | What |
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
-| `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors for V8-S2 |
+| `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors for V8-S2b |
 | `data/private/work/EMB/crosscheck.tsv` | Every cross-check finding by reference and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 

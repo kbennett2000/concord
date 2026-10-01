@@ -1966,3 +1966,51 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **Side effect:** the builds retagged local `concord:latest` (now `eb76c77b30fc`); the local copy
   of the deployed `b1b70418194d` was removed with its tag. The server is untouched (rollback
   `concord:pre-emb` still there).
+
+### Feature V8-S2a — the notes contract (ADR-0011)
+
+- **Why:** the spec's V8-S2 split in two. S2a settles the contract EMB's notes need, with no
+  converter work and no deploy; S2b has the converter emit the textual and study notes. SPEC §7
+  now shows both rows.
+- **Contract:**
+  - Notes gain `label`, `title`, `text_format` (`"markdown"` or null), `passages` and `image`,
+    appended after the existing keys on the passage read and the notes search.
+  - `type` gains `article` and `chart`.
+  - `/v1/translations` entries gain `note_count`.
+  - `passages` stay in the note's own book: four positive numbers, end not before start, and
+    the response adds a `reference`.
+  - `image` is reserved: the loader rejects any value until V8-S4.
+- **`ref:` grammar:** `[text](ref:TARGET)` with `BOOK.C`, `BOOK.C-C` (chapter ranges, added
+  at Kris's call), `BOOK.C.V`, `BOOK.C.V-V` and `BOOK.C.V-C.V`, over exact USFM codes. Each maps
+  onto a reference `/v1/verses/{ref}` already accepts. The loader checks every target in a
+  Markdown note against the grammar and the seeded book ids.
+- **OpenAPI:** the three routes declare `responses={200: {"model": …}}` (Kris's call), so
+  `docs/openapi.json` gained `TranslationsResponse`, `NotesResponse`, `NoteSearchResponse` and
+  their nested models. Runtime is unchanged. The file sorts keys, so key order stays pinned by
+  the API tests, not by the schema.
+- **Schema:**
+  - `translator_notes` gains four nullable columns.
+  - The `note_type` CHECK is widened.
+  - A new `note_passages` table, indexed on `note_id`.
+  - `bible.db` is rebuilt from scratch on every build, so changing the DDL needs no migration.
+- **Tests:** 45 in `bible-core/tests/test_note_fields.py`:
+  - round trips through `get_notes` and `search_notes`;
+  - null/empty values on a note without the fields;
+  - all five `ref:` forms;
+  - 12 bad `ref:` targets and 17 bad field values, each rejected with a clear error that names
+    the file and note;
+  - `note_count`;
+  - the sample notes file, which gained one `article` example.
+
+  The API tests extend the key-order pins (appended only), check the new keys on the existing
+  fixture notes and on one fixture note carrying every field, and check that the API's type set
+  matches bible-core's.
+- **Proof with real private data** (`make build-db`, a local API on :8077, compared with the
+  server at 192.168.1.62:8000):
+  - NET John 3's **71 notes**: every existing key and value equal and in order, with exactly
+    `label, title, text_format, passages, image` appended as `null, null, null, [], null`.
+  - A NET notes-search page (50 of 423 for "love"): the same.
+  - `/v1/translations`: 20 entries equal to the server's, with `note_count` 58,253 for NET and
+    0 for EMB and the 18 others.
+- **`make check` green** (801 passed, 48 deselected; ruff and pyright strict clean;
+  `openapi.json` up to date after regeneration), and the licensing tests pass unchanged.

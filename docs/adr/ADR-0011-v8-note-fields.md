@@ -111,7 +111,8 @@ translation's verse counts.
 `docs/openapi.json` records their bodies, new fields included, and `make openapi-check` guards
 them. Runtime behaviour is unchanged: the handlers still return the cached raw response. This
 narrows the gap ADR-0009 recorded for these three endpoints only; the rest stay undocumented
-there, with `docs/API.md` as their field list.
+there, with `docs/API.md` as their field list. `docs/openapi.json` is rendered with sorted keys,
+so it records which fields exist, not their order. The API tests pin the order.
 
 ## Consequences
 
