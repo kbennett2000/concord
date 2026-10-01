@@ -11,8 +11,9 @@ your **local** `bible.db`. The published image ships **zero** EMB content.
 > `data/private/`, which is never committed and never baked into the published image — that is
 > your responsibility to keep clean, and Concord's pipeline is built to make it automatic.
 
-This page covers V8-S1: the **text** (verses and section headings). Notes, features, images,
-documents and the Verse Finder follow in later slices (SPEC §7).
+This page covers the **text** (verses and section headings, V8-S1) and the **textual and study
+notes** (V8-S2b). Features, images, documents and the Verse Finder follow in later slices
+(SPEC §7).
 
 ## The user flow
 
@@ -21,20 +22,23 @@ documents and the Verse Finder follow in later slices (SPEC §7).
 2. **Install poppler-utils** — the converter calls its `pdftohtml` (e.g.
    `sudo apt install poppler-utils`). Nothing else: the converter is standard-library Python
    plus `bible-core`, already in the repo's environment.
-3. **Run the one command** from the repo root (about a minute):
+3. **Run the one command** from the repo root (about a minute and a half):
 
    ```bash
    uv run python scripts/convert_emb.py --pdf "<your EMB.pdf>" --epub "<your EMB.epub>"
    ```
 
-   `--epub` is optional but recommended: it is the only check of the text against a second
-   witness. If `data/private/nlt.json` exists it is read as cross-check evidence only.
+   `--epub` is optional but recommended: it is the only check of the text and the notes
+   against a second witness. If `data/private/nlt.json` exists it is read as verse cross-check
+   evidence only.
 4. **Read the summary** it prints (below). If any check fails, nothing is written and the exit
    code is non-zero.
 5. **Rebuild** Concord: `make build-db` for a local run, or `make docker-build-private` for your
-   own Docker image (below). The build summary then counts one more translation.
-6. **Served.** `EMB` appears in `GET /v1/translations` as "Every Man's Bible (NLT)" and reads
-   through every existing endpoint; songbird lists it with no change.
+   own Docker image (below). The build summary then counts one more translation and EMB's
+   notes.
+6. **Served.** `EMB` appears in `GET /v1/translations` as "Every Man's Bible (NLT)", with its
+   `note_count`, and reads through every existing endpoint; its notes through
+   `/v1/translations/EMB/notes/{book}/{chapter}` and `/v1/notes/search`.
 
 The same PDF always gives byte-identical output, so re-running is safe.
 
@@ -43,8 +47,10 @@ The same PDF always gives byte-identical output, so re-running is safe.
 | File | What |
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
-| `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors for V8-S2b |
-| `data/private/work/EMB/crosscheck.tsv` | Every cross-check finding by reference and class (local only) |
+| `data/private/notes/EMB.json` | Its textual and study notes: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
+| `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors |
+| `data/private/work/EMB/crosscheck.tsv` | Every verse cross-check finding by reference and class (local only) |
+| `data/private/work/EMB/notes-crosscheck.tsv` | Every note cross-check finding by note and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 
 No loader scans `data/private/work/`. Notes on the text:
@@ -56,6 +62,17 @@ No loader scans `data/private/work/`. Notes on the text:
 - **Section headings** include Ps 119's stanza labels and Song of Songs' speaker labels. A
   heading the book prints inside a verse is attached before that verse (the summary lists them).
 - **Tables** read as their rows, cells joined " - ".
+
+Notes on the notes:
+
+- **Textual notes** (`tn`, label "Textual Note") are the NLT footnotes behind each `*`, each
+  attached where its `*` sat: in the verse text, inside a psalm title (verse 1), at the start of
+  a chapter whose header carries the `*`, or by a heading's `*` (SPEC §4.2).
+- **Study notes** (`sn`, label "Study Note") attach at the start of the verse where the book
+  calls them out, and list every passage their heading names.
+- **Text** is Markdown (`text_format: "markdown"`) only when a note has italics or links: italics
+  as `*…*`, the book's own `[`, `]` and other Markdown characters escaped, and each reference the
+  book links as a `ref:` link (ADR-0011). Other notes are plain text.
 
 ## Reading the summary
 
@@ -70,8 +87,19 @@ No loader scans `data/private/work/`. Notes on the text:
   (no markup scraps, `*`, double spaces, broken words or fused headings). Any ✗ blocks the write.
 - **Cross-check** (with `--epub`) — every verse where the PDF parse and the EPUB differ gets one
   class. The two that must be **0**: *fix regressions* (a fix broke a verse the raw parse had
-  right) and *open, EPUB verse without damage*. Open items in visibly damaged EPUB verses are
+  right) and *open, EPUB text without damage*. Open items in visibly damaged EPUB verses are
   listed for reference.
+- **Notes** — the counts against their targets (4,817 textual notes in 1,072 blocks, 2,467 study
+  notes); the textual notes by label kind and by anchor (each breakdown sums to the total); every
+  `*` matched to a note (*markers without a note* and *notes without a marker* must be **0**); the
+  study notes' reference shapes and callouts (*callouts without a note* must be **0**); each
+  `ref:` link by how the book's own link target compares (*unexplained* must be **0**); and the
+  note checks — hygiene, Markdown flanking and the Markdown-to-text round trip. Any ✗ blocks the
+  write.
+- **Notes cross-check** (with `--epub`) — the same classes and evidence rules, note by note. The
+  EPUB's markup adds spaces the book doesn't print ("word ." , "2: 5"); both sides close them up
+  alike before comparing. Again *fix regressions* and *open, EPUB text without damage* must be
+  **0**.
 
 ## Getting your private data into your own Docker image
 
