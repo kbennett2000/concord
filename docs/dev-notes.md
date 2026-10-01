@@ -1844,3 +1844,65 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **`make check` green** (693 unit, 47 deselected; ruff + pyright strict clean, openapi.json
   unchanged). Verified end-to-end against the real `bible.db` on a live `make run`: the issue's
   full neighbour table re-run, with only the target row moving.
+
+### Feature V8-S1 — the Every Man's Bible text (`EMB`, private)
+- **Date:** 2026-10-01. **PR:** _(this PR)_ (`slice/v8-s1-emb-text`). Spec: `docs/v8/SPEC.md`
+  (committed verbatim, then corrected below); user flow: `docs/v8/emb-ingest.md`.
+- **What landed:** `scripts/convert_emb.py` + the `scripts/emb_convert/` package (pyright strict,
+  44 synthetic tests in `scripts/tests/`, no EMB text). It reads the operator's PDF through
+  `pdftohtml -xml`, parses it structurally (font size, colour, bold/italic, link target,
+  position), writes `data/private/EMB.json` (verses + headings) and `work/EMB/` (the `*` markers,
+  cross-check findings, summary). ~1 minute; byte-identical on re-run. Plus a licensing test that
+  a clean checkout bakes zero private translations (`_default_data_dirs` had none).
+- **Measured (the converter's summary):** 1,189 chapters · 31,064 verses · 24 combined
+  entries (Num 1:20-21 … 2:29-30) · 2,197 section headings + 59 labels (22 Ps 119 stanzas,
+  37 Song of Songs speakers) · 116 psalm titles · 4,817 `*` markers · 26 Perspectives boxes and
+  266 callout lines set aside · 15 tables (161 rows) · 146 fractions · 300 broken-word items ·
+  23 fused compounds repaired · 1 page-split table cell restored (Num 1:6–7) · 3 chapter turns
+  by label (Dan 11:1, Hos 2:1, 1 Cor 11:1) · 23 mid-verse headings (e.g. Gen 2:4, Obad 1:1,
+  Song 1:4 ×2, 5:1, 6:13, 8:5). All 333 italic-only lines in chapters claimed (163 title lines,
+  97 Interlude/refrain, 15 unfinished-sentence, 22 stanza, 37 speaker).
+- **Spec corrections, and why:**
+  - **31,064 verses, not 31,040.** 31,102 − 24 (absorbed by "20-21"-style entries) − 16 NLT
+    omissions + 2 NLT extras (3 John 1:15, Rev 12:18). The measuring parse skipped *both*
+    numbers of each combined entry (−48, not −24); its "14 Hosea verses" were an artifact.
+  - **2,197 headings, not 2,206.** The 2,206 bold-italic lines include 9 table header rows.
+    None wrap. "Book One" above Psalm 1 sits in the book intro's page and is kept.
+  - **Letter spacing is 300 items in 275 verses, not ~90**, and it is one quirk: the last word
+    of a verse, first on a justified line before the next verse number, broken glyph by glyph
+    or once; the same in italic psalm titles mid-line. Joined only where the pieces make a known
+    word (public translations + the PDF's own untouched text) and are not words themselves; a
+    phrase the PDF prints elsewhere, or that the public texts print more often than its joined
+    form ("money changers"), is never joined. The committed WEB/KJV/ASV/BSB files carry some of
+    the *same* broken words ("h im", "Is rael"), so they are trusted for word counts only.
+  - **No line-end hyphens are dropped.** The "~70" are compounds the PDF prints closed —
+    rendered and checked (1 Kgs 10:5). 28 verses keep valid closed spellings as printed; one
+    compound prints fused in 23 verses and is repaired from the PDF's own evidence. A hyphen or
+    em dash ending a *wrapped* prose line closes up; at a poetic line break (next line indented
+    46) it keeps its space — the EPUB showed 267 such dashes the first rule had closed.
+  - **Tables, psalm titles, labels, mid-verse headings** — placement settled (§4.1).
+- **The cross-check (with `--epub`):** 25,500 agree · 563 fixed PDF quirks (275 broken words,
+  272 wrapped hyphens/dashes, 19 compounds, 2 table rows) · **0 fix regressions** · 4,996
+  visible EPUB damage · 204 EPUB splices · 131 EPUB loss with evidence at the spot · 28
+  hyphenation variants · 8 verified on the rendered page · **0 open where the EPUB verse is
+  undamaged** · 9 open in visibly damaged EPUB verses (Dan 9:3, Deut 33:3, Ezek 11:16,
+  Heb 13:21, Hos 8:1, Matt 7:12, Ps 8:1, Ps 31:23, Rev 10:4). Headings: none open (23 damaged in
+  the EPUB, 11 misnumbered, 45 run into its verses, 68 missing from it).
+  - **Evidence rules.** PDF-only words count as EPUB loss only with something at that spot: an
+    EPUB dropped-text break (an empty `<a>`, or a double space where a word was — only 379 in
+    the whole EPUB), a fused token, or the operator's NLT having the same words. EPUB-only words
+    are scraps (markup, non-words, stray numbers), splices (a PDF heading or callout label, or
+    words printed nowhere on the verse's PDF pages), or open.
+  - **Verified on the rendered page** (PDF-only words, no EPUB trace; each crop checked by
+    eye, the words sit in the verse's own text flow): Ezek 7:8, Ezek 16:39, Jer 26:12, Num 15:2,
+    Ps 106:43, and the titles of Ps 11, 62, 132.
+- **Deploy notes:** Songbird (192.168.1.62:8055) reads `concord-api-1` on the same host, image
+  `concord:latest` built on G434 on 2026-06-10 with `data/private` included, though nothing in
+  the repo records how (no skip-worktree, `.dockerignore` unchanged). `emb-ingest.md` now
+  documents a temporary, untracked `Dockerfile.dockerignore` instead. The build re-runs the
+  ~23-minute embed (data and scripts are copied before it) — a stage split is proposed as a
+  separate change.
+- **`make check` green** (739 unit, 47 deselected; ruff + pyright strict clean incl. the new
+  `scripts/` paths, openapi.json unchanged). `make build-db` loads 20 translations; a local API
+  on :8077 served EMB (Gen 1:1, Ps 3:1 with its title, Num 1:6–7 and Rev 7:5 table rows,
+  Exod 27:1's fractions, `null` for Num 1:21 and Matt 17:21 beside WEB, 22 headings in Ps 119).

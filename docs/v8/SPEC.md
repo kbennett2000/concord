@@ -30,15 +30,23 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 
 - **The PDF is the source.** 8,350 single-column e-reader pages, a real text layer, every internal link intact, an 81-entry outline. All 10 spots checked where the EPUB is damaged read correctly in it. Read it with `pdftohtml -xml` (poppler-utils): font size, colour and link targets carry the structure. Charts are its embedded 1,024 px JPGs.
 - **The EPUB is not a source.** Its conversion dropped and fused words and left markup scraps in about one verse in nine; 3,189 verses disagree with the PDF, 936 of them with no visible sign. It serves only as an independent cross-check of the PDF parse.
-- **No clean second-edition reference text exists locally.** Kris's private `NLT` is the 1996 first edition (73% of verses word differently). So the verse text is proven by cross-check: PDF vs EPUB (26,947 verses agree), every disagreement classified as EPUB damage, a fixed PDF quirk, or an open problem.
-- **PDF quirks the converter must handle:** letter-spaced words (~90 verses); dropped line-end hyphens (~70); small-caps LORD printed as a large "L" plus small "ORD" (which a font-size rule mistakes for a heading); fractions like 7½ printed as small digits at verse-number size; 26 Perspectives text boxes inside the Bible text; feature callout labels (e.g. "Work", "Time") inside the Bible text; 48 Numbers census lines printed as combined entries. Boxes, callouts, book introductions and chapter-navigation lists are never part of a verse.
-- **Verse count:** 31,040 is 78 short of a 31,102-verse skeleton — 48 combined Numbers census lines, 16 verses the NLT omits (e.g. Matt 17:21), and 14 the measurement blamed on the private NLT file's broken Hosea (probably an artifact of how it measured, so a correct parse may find them).
+- **No clean second-edition reference text exists locally.** Kris's private `NLT` is the 1996 first edition (73% of verses word differently). So the verse text is proven by cross-check: PDF vs EPUB, every disagreement classified (S1's classes: fixed PDF quirk, fix regression, EPUB damage, EPUB splice, EPUB loss with evidence at the spot, hyphenation variant, verified on the rendered page, open). S1's result: 25,500 verses agree, 0 fix regressions, 0 open where the EPUB verse shows no damage.
+- **PDF quirks the converter must handle** *(as measured by S1)*:
+  - **Words broken by spacing** — 300 items in 275 verses (not "~90"). Justification spreads the last word of a verse, first on its line before the next verse number, glyph by glyph or once ("g o o d .", "prophes y."); the italic font does the same mid-line in psalm titles. Joined only where the pieces make a known word and are not themselves words.
+  - **Hyphens** — no line-end hyphen is dropped. The "~70" were compounds the PDF *prints* closed (rendered and checked): 28 verses keep a valid closed spelling as printed ("cupbearer", "coworker"); one compound prints fused in 23 verses ("fatherin-law") and is repaired from the PDF's own evidence. A hyphen or em dash at the end of a *wrapped* prose line closes up; at a poetic line break it keeps its space.
+  - **Small caps** — 7,151 "L"+"ORD" fragments, plus small-caps phrases (inscriptions, Paul's signature lines), set at verse-number size.
+  - **Fractions** — 146, printed as small "1" "/" "2" after a digit; stored as ½ etc.
+  - **Combined verses** — 24 entries in Numbers 1–2 printed as a range ("20-21"), absorbing 24 verse numbers (the measurement counted both numbers of each, 48).
+  - **Tables** — 15 table runs in Num 1, 2, 13, 34; 1 Chr 27; Ezra 1, 2; Neh 7; Rev 7. Cells are joined " - " (the operator's NLT's own format for Num 1–2), rows in one verse by a space, header rows ("Tribe / Leader") dropped. One row is split across a page (Num 1:6–7) and is put back.
+  - **Explicit chapter turns** — Dan 11:1, Hos 2:1 and 1 Cor 11:1 are printed "11:1" before their chapter's header.
+  - **Never part of a verse** — 26 Perspectives text boxes, feature callout labels (266 lines), book introductions and chapter-navigation lists.
+- **Verse count:** **31,064** = the 31,102-verse skeleton − 24 numbers absorbed by combined entries − 16 verses the NLT omits (e.g. Matt 17:21) + 2 the NLT's versification adds (3 John 1:15, Rev 12:18). The measurement's 31,040 dropped both numbers of each combined entry; the "14 Hosea verses" do not exist (Hosea parses complete).
 - **Measured inventory — the converter's acceptance targets:**
 
 | Item | PDF count | Tied to |
 |---|---|---|
-| Chapters / verse numbers | 1,189 / 31,040 | — |
-| Section headings | 2,206 | before a verse |
+| Chapters / verse numbers | 1,189 / 31,064 (S1; measured 31,040) | — |
+| Section headings | 2,197 (S1; measured 2,206 bold-italic lines incl. 9 table header rows), plus 59 labels as headings (22 Ps 119 stanzas, 37 Song of Songs speakers) | before a verse |
 | Textual notes | 4,827 in 958 chapter blocks (4,817 `*` markers) | a verse; 859 split a/b |
 | Study notes | 2,467 | 2,035 ranges · 332 verses · 52 cross-chapter · 33 multi-part · 15 whole chapters |
 | Men, Women, and God | 99 articles, 101 callouts | 55 ranges · 30 whole chapters · 8 multi-part · 5 verses · 1 cross-chapter |
@@ -55,7 +63,11 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 
 ## 4. Data model (all additive)
 
-**4.1 Text — `data/private/EMB.json`.** The existing translation contract, unchanged: code `EMB`, name `Every Man's Bible (NLT)`, language `en`, `copyright` = the book's own copyright-page lines. `*` markers are removed from verse text; their positions become textual-note offsets (S2). A combined verse is stored under its first number and the other numbers are absent (honest absence: `null` in parallel reads). Psalm titles are kept; S1's plan says where (the committed WEB file puts them at the start of verse 1).
+**4.1 Text — `data/private/EMB.json`.** The existing translation contract, unchanged: code `EMB`, name `Every Man's Bible (NLT)`, language `en`, `copyright` = the book's own copyright-page lines. `*` markers are removed from verse text; their positions become textual-note offsets (S2) — S1 records them in `data/private/work/EMB/markers.json` (book, chapter, verse, offset, where: verse / title / heading / chapter, target page, order in chapter; 4,817). A combined verse is stored under its first number and the other numbers are absent (honest absence: `null` in parallel reads). As S1 settled:
+- **Psalm titles** are prefixed to verse 1, as in WEB, KJV, ASV, BSB, JPS, YLT, ESV and NKJV, so parallel reads line up.
+- **Ps 119's stanza labels and Song of Songs' speaker labels** are section headings (editorial, not Scripture). Interlude, refrains and italic book titles stay verse text.
+- **Mid-verse headings** (23, e.g. Gen 2:4, Obad 1:1, five Song of Songs speaker labels) attach before the verse they interrupt: `before_verse` has no mid-verse position, so a speaker label can sit above words the previous speaker says. A known limit of the headings contract.
+- **Tables** — cells joined " - ", header rows dropped (§3).
 
 **4.2 Notes — `data/private/notes/EMB.json` (ADR-0011, S2).** The v4 contract plus appended, optional fields:
 - `label` — the source's own name for the kind ("Textual Note", "Study Note", "Men, Women, and God", …, "Chart"). Clients show it; `type` stays the coarse class.
@@ -84,7 +96,7 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 ## 6. The converter
 
 - MIT code in this repo that reads **the operator's own PDF** and writes the §4 files under `data/private/`. It holds no EMB text. One command regenerates everything; the same PDF gives byte-identical output.
-- Lives outside `bible-core`, `bible-api` and `bible-semantic` (none import it) and adds no runtime dependency. Ruff- and Pyright-strict-clean, tested on synthetic `pdftohtml -xml` fixtures. Placement is settled in S1's plan.
+- Lives outside `bible-core`, `bible-api` and `bible-semantic` (none import it) and adds no runtime dependency. Ruff- and Pyright-strict-clean, tested on synthetic `pdftohtml -xml` fixtures. **Placement (S1):** the `scripts/emb_convert/` package behind `scripts/convert_emb.py` (beside the other `convert_*` scripts), tests in `scripts/tests/`; standard library plus `bible_core.seed`, and `pdftohtml` at convert time only. One command: `uv run python scripts/convert_emb.py --pdf <EMB.pdf> [--epub <EMB.epub>]` (≈1 minute). The cross-check is a converter option (`--epub`), so it re-runs whenever a later slice changes the converter; the operator's private NLT, when present, is evidence only. User flow: `docs/v8/emb-ingest.md`.
 - Every run prints a **verification summary**: counts per item against §3's table and, given the EPUB, the PDF-vs-EPUB verse cross-check with every disagreement classified.
 - The user flow is documented the way `docs/v4/notes-ingest.md` documents NET's: own the book → run the converter → rebuild → served. Only load data you have the legal right to use.
 
