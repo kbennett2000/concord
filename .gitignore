@@ -31,6 +31,10 @@ embeddings.db
 # Non-distributable data (local-only translations)
 data/private/
 
+# Temporary private-build ignore file: `make docker-build-private` writes it and always
+# deletes it. It drops data/private/ from the build context's exclusions — never commit it.
+Dockerfile.dockerignore
+
 # Editor / OS
 .vscode/
 .idea/
