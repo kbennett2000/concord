@@ -1916,3 +1916,53 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `scripts/` paths, openapi.json unchanged). `make build-db` loads 20 translations; a local API
   on :8077 served EMB (Gen 1:1, Ps 3:1 with its title, Num 1:6–7 and Rev 7:5 table rows,
   Exod 27:1's fractions, `null` for Num 1:21 and Matt 17:21 beside WEB, 22 headings in Ps 119).
+
+### Feature V8-S1b — faster private rebuilds
+
+- **Why:** every EMB cycle ends with a private image rebuild, and V8-S1's took 32 min, 31 of them
+  the meaning-search embed. The embed depends only on the WEB text, the model and the embedding
+  code, but the single builder stage copied all of `data/` and `scripts/` before it.
+- **Design:** the Dockerfile is now `base → deps → builder → embeddings → runtime`. The builder
+  still bakes `bible.db` from all of `data/`, then writes the WEB verse list
+  (`scripts/build_embeddings.py --export-verses`, ~1 s). The `embeddings` stage sees only that
+  list, its own pinned packages (`uv export --package bible-semantic --no-emit-workspace` from
+  `uv.lock`), `bible-semantic/src` and its two scripts. BuildKit keys `COPY --from` on file
+  content, so a data or code change re-runs the loader and the export, the list comes out
+  byte-identical, and the embed is cached. The exported package list also keeps root
+  `pyproject.toml` tool-config edits (V8-S1 made one) and workspace version bumps from re-running
+  the embed. Runtime is unchanged except `embeddings.db` + model come from the new stage.
+- **One compromise:** the embed stage runs with no bible-core installed, so
+  `bible_semantic.build` imports bible-core inside `read_corpus` only. A fast test runs the
+  script with `bible_core` blocked; an integration test shows the verse-list path gives
+  byte-identical vectors to the `bible.db` path.
+- **`make docker-build-private`** writes `Dockerfile.dockerignore` (`.dockerignore` minus
+  `data/private/`), runs `docker compose build`, and traps EXIT/INT/TERM to delete it. Shown: a
+  failing build (exit 2) and a SIGINT to the process group (`Error 130`) both leave no file.
+  Gotcha: this machine's Docker is a snap, so signals from a non-terminal shell (and `timeout`)
+  never reach `docker` — my first SIGINT test ran on as the first build; a terminal Ctrl-C is
+  unaffected.
+- **Guards:** `Dockerfile.dockerignore` is gitignored; licensing tests fail if any file
+  `git ls-files -- '*.dockerignore'` lists lacks `data/private/`, or if the gitignore line goes.
+- **Measured (private builds, this machine, 1 Oct 2026):** first build 48 min 43 s — the embed
+  2,847 s vs V8-S1's 1,837 s, the same work (bit-identical output) slowed by a VirtualBox VM using
+  1–3 of the 8 cores. Then: a made-up 50-chapter translation in `data/private` (`bible.db` → 21
+  translations) **52 s**; a comment in `scripts/emb_convert` **4 s**; a docstring in bible-core
+  **75 s**; the clean tree again **5 s** — the embed `CACHED` every time. A public `docker build`
+  (no `Dockerfile.dockerignore`) **54 s**, also reusing the embed: 15 committed translations, 0
+  notes, 0 EMB.
+- **Same image as the server's** (`concord-api-1`, `b1b70418194d`, read-only via `docker cp` to a
+  stream): `embeddings.db` 31,054 keys, all vectors bit-identical (max |Δ| 0), meta equal but
+  `built_at`. Same 5,268 paths under `/app`; `bible.db` and the model byte-identical; config
+  (Env, Cmd, User, Healthcheck, ports) identical; 37 files differ — `embeddings.db`'s timestamp,
+  `bible_semantic/build.py` (this slice), and the workspace packages' `.pyc`/`RECORD`/
+  `uv_cache.json` (rebuilt; a `.pyc` body matches past its timestamp header). On :8077 the new
+  image served the same `/healthz`, 20 translations, NET John 3's 71 notes, EMB Gen 1 / Ps 3 /
+  Ps 119 headings, and Matt 17:21's `null`.
+- **Semantic top 10:** for 5 queries, with the query vector fixed, the server's corpus, the new
+  corpus and the new image's HTTP answers give identical top 10s and scores. Server-vs-new over
+  HTTP differs by ≤ 0.0017 in score, and two queries swap near-tied neighbours: the server's
+  i5-3470 has no AVX2, so ONNX Runtime embeds the *query* with different int8 kernels than this
+  i7-9700KF. A property of the host, not the image.
+- **Side effect:** the builds retagged local `concord:latest` (now `eb76c77b30fc`); the local copy
+  of the deployed `b1b70418194d` was removed with its tag. The server is untouched (rollback
+  `concord:pre-emb` still there).

@@ -107,6 +107,7 @@ Each slice ends with Kris able to use the result. songbird's matching slices (it
 | # | Slice | Delivers | Usable result |
 |---|---|---|---|
 | V8-S1 | The text | This spec; the converter foundation; `EMB.json` (verses + headings); the PDF-vs-EPUB cross-check; the user-flow doc; EMB live in Kris's Concord | EMB in songbird's translation menu, reading cleanly |
+| V8-S1b | Faster private rebuilds | The embeddings get their own Docker stage keyed on the WEB verse list; `make docker-build-private` (temporary `Dockerfile.dockerignore`, always deleted); guards that every committed `*.dockerignore` excludes `data/private/` | A private rebuild after a converter or data change in about a minute, not ~32 |
 | V8-S2 | Textual + study notes | ADR-0011 (§4.2 fields, two new types, `note_count`); the converter emits textual and study notes | EMB's footnotes and study notes in songbird's reader |
 | songbird A | Notes from any source | Per-translation "show notes from" choices replacing the NET-only checkbox (an existing NET choice is kept); labels, titles, passages, Markdown | EMB notes on every other translation, like NET's |
 | V8-S3 | Features | The converter emits the five feature types | Features in the reader, on any translation |
