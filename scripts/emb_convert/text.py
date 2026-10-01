@@ -36,8 +36,8 @@ from emb_convert.clean import (
     Vocabulary,
     collapse,
     fraction,
-    letter_spacing,
     line_joiner,
+    unspace,
 )
 from emb_convert.layout import BookRange, Layout, LinkKind
 from emb_convert.lines import Line, group_lines
@@ -61,7 +61,6 @@ STANZA_PSALM = 119
 _VERSE_NUMBER = re.compile(r"^(\d+)(?:-(\d+))?$")
 _CHAPTER_LABEL = re.compile(r"^(\d+):$")
 _LABEL_SPLIT = re.compile(r"^(\w+) ([a-z])$")
-_ELLIPSIS = re.compile(r"\.\s+\.")  # ". . ." is a real ellipsis, spaced on purpose
 _TERMINAL = ".!?"
 _CLOSERS = "”’\"' "
 
@@ -119,6 +118,16 @@ class Marker:
     ordinal: int
 
 
+@dataclass(frozen=True, slots=True)
+class Callout:
+    """A blue verse number: the book calls out a study note at this verse (V8-S2b)."""
+
+    book: str
+    chapter: int
+    verse: int
+    target_page: int
+
+
 @dataclass(slots=True)
 class Diagnostics:
     counts: Counter[str] = field(default_factory=Counter[str])
@@ -131,6 +140,7 @@ class Diagnostics:
     where: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     callout_labels: list[tuple[str, int, str]] = field(default_factory=list[tuple[str, int, str]])
     italic_verse_text: set[str] = field(default_factory=set[str])  # Interlude and kin
+    callouts: list[Callout] = field(default_factory=list[Callout])  # study-note verse numbers
 
     def note(self, kind: str, ref: str) -> None:
         self.counts[kind] += 1
@@ -244,6 +254,23 @@ class _Box:
     where: str = ""
 
 
+def trusted_text(line: Line) -> list[str]:
+    """A line's text minus where broken words occur (the vocabulary's PDF source): the first
+    item's leading single-spaced chunk, and italic items."""
+    texts: list[str] = []
+    content = line.nonblank
+    for item in content:
+        if item.italic:
+            continue
+        if item is content[0]:
+            cut = item.text.strip().find("  ")
+            if cut != -1:
+                texts.append(item.text.strip()[cut:])
+            continue
+        texts.append(item.text)
+    return texts
+
+
 class _Parser:
     def __init__(self, doc: PdfDocument, layout: Layout, fixes: Fixes, public: PublicWords) -> None:
         self.layout = layout
@@ -252,7 +279,7 @@ class _Parser:
         self.lines = group_lines(items)
         self.repair = CompoundRepair(line.text for line in self.lines)
         self.vocabulary = Vocabulary(
-            public, (text for line in self.lines for text in self.trusted_text(line))
+            public, (text for line in self.lines for text in trusted_text(line))
         )
         self.diag = Diagnostics()
         self.books: list[ParsedBook] = []
@@ -290,23 +317,6 @@ class _Parser:
 
     def is_marker(self, item: TextItem) -> bool:
         return item.stripped == "*" and item.blue and self.link_kind(item) is LinkKind.TEXTUAL_NOTE
-
-    @staticmethod
-    def trusted_text(line: Line) -> list[str]:
-        """A line's text minus where broken words occur (the vocabulary's PDF source): the
-        first item's leading single-spaced chunk, and italic items."""
-        texts: list[str] = []
-        content = line.nonblank
-        for item in content:
-            if item.italic:
-                continue
-            if item is content[0]:
-                cut = item.text.strip().find("  ")
-                if cut != -1:
-                    texts.append(item.text.strip()[cut:])
-                continue
-            texts.append(item.text)
-        return texts
 
     @staticmethod
     def is_verse_number(item: TextItem) -> bool:
@@ -525,6 +535,19 @@ class _Parser:
             self.verse_buffer.mark(mark)
         self.chapter_marks = []
 
+    def callout(self, item: TextItem, verse: int) -> None:
+        """A blue verse number links to its study note: record where the book calls it out."""
+        if (
+            item.blue
+            and item.link_page is not None
+            and self.book is not None
+            and self.chapter is not None
+            and self.link_kind(item) is LinkKind.STUDY_NOTE
+        ):
+            self.diag.callouts.append(
+                Callout(self.book.code, self.chapter.number, verse, item.link_page)
+            )
+
     def flush_verse(self) -> None:
         if self.verse is None or self.chapter is None or self.book is None:
             return
@@ -688,6 +711,7 @@ class _Parser:
                     self.diag.unclassified.append(f"verse number before any chapter at {line.page}")
                 else:
                     self.start_verse(first, last)
+                    self.callout(item, first)
                 i += 1
                 continue
             if self.is_marker(item):
@@ -736,24 +760,17 @@ class _Parser:
         )
 
     def unspaced(self, item: TextItem, first: bool, line: Line, glued: bool = False) -> str:
-        """``item``'s text with broken words joined: italic items, and the first item of a
-        justified line (where a real word gap is double and a single space is a glyph gap)."""
-        justified = line.right >= WRAP_RIGHT
+        """``item``'s text with broken words joined (``clean.unspace``)."""
         if not self.fixes.letter_spacing:
             return item.text
-        bare = item.text.strip()
-        if (
-            bare
-            and not any(c.isalnum() for c in bare)
-            and not _ELLIPSIS.search(bare)
-            and " " in bare
-        ):
-            # punctuation alone, spread by justification (") . " after a "*"): close it up
-            self.diag.note("letter-spaced", self.where(line))
-            return item.text.replace(bare, bare.replace(" ", ""))
-        if not (item.italic or (first and justified)):
-            return item.text
-        fixed = letter_spacing(item.text, self.vocabulary, whole_item=item.italic, glued_tail=glued)
+        fixed = unspace(
+            item.text,
+            self.vocabulary,
+            italic=item.italic,
+            first=first,
+            justified=line.right >= WRAP_RIGHT,
+            glued=glued,
+        )
         if fixed is None:
             return item.text
         self.diag.note("letter-spaced", self.where(line))
@@ -833,6 +850,7 @@ class _Parser:
                 assert match is not None
                 first = int(match.group(1))
                 self.start_verse(first, int(match.group(2) or first))
+                self.callout(item, first)
             if first_ref is None:
                 first_ref = self.ref()
             for n, column in enumerate(sorted(row.cells)):

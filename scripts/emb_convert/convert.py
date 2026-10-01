@@ -3,8 +3,10 @@
 Writes, only when every structural check passes:
 
 - ``<out>/EMB.json`` — the translation (Concord's translation contract, code ``EMB``);
-- ``<out>/work/EMB/markers.json`` — where each removed ``*`` sat (for V8-S2's notes);
-- ``<out>/work/EMB/crosscheck.tsv`` — every cross-check finding by reference;
+- ``<out>/notes/EMB.json`` — its textual and study notes (the notes contract, ADR-0011);
+- ``<out>/work/EMB/markers.json`` — where each removed ``*`` sat (the textual notes' anchors);
+- ``<out>/work/EMB/crosscheck.tsv`` — every verse cross-check finding by reference;
+- ``<out>/work/EMB/notes-crosscheck.tsv`` — every note cross-check finding by note;
 - ``<out>/work/EMB/summary.txt`` — the printed summary.
 
 ``work/`` is never scanned by a loader. The same PDF gives byte-identical files.
@@ -23,8 +25,9 @@ from emb_convert.crosscheck import CrossCheck, cross_check
 from emb_convert.epub import parse_epub
 from emb_convert.layout import Layout, canonical_books, find_layout
 from emb_convert.lines import group_lines
+from emb_convert.notes import build_notes, cross_check_epub_notes, notes_payload
 from emb_convert.pdfxml import PdfDocument, parse_pdf_xml, run_pdftohtml
-from emb_convert.report import summary
+from emb_convert.report import notes_summary, summary
 from emb_convert.skeleton import load_public_texts, load_skeleton, load_verses
 from emb_convert.text import Marker, ParseResult, parse_bible
 from emb_convert.validate import validate
@@ -180,8 +183,8 @@ def run_cross_check(
     )
 
 
-def crosscheck_tsv(cross: CrossCheck) -> str:
-    rows = ["book\tchapter\tverse\tclass\tdetail\tepub_damaged\tfixes"]
+def crosscheck_tsv(cross: CrossCheck, header: str = "book\tchapter\tverse") -> str:
+    rows = [f"{header}\tclass\tdetail\tepub_damaged\tfixes"]
     for f in cross.findings:
         if f.verdict.value == "agree":
             continue
@@ -207,20 +210,35 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     skeleton = load_skeleton()
     validation = validate(result, skeleton)
     cross = run_cross_check(doc, layout, result, public, epub, nlt, skeleton) if epub else None
+    notes = build_notes(doc, layout, result, public, skeleton)
+    notes_cross = cross_check_epub_notes(notes, epub, doc, layout, _texts(result)) if epub else None
     rights = copyright_lines(doc, layout)
     lines = summary(
         result, validation, cross, source=pdf.name, pages=doc.page_count,
         poppler=doc.producer_version,
     )  # fmt: skip
-    ok = validation.ok and not result.diagnostics.unclassified and not result.diagnostics.errors
+    lines += ["", *notes_summary(notes, notes_cross)]
+    ok = (
+        validation.ok
+        and not result.diagnostics.unclassified
+        and not result.diagnostics.errors
+        and notes.ok
+    )
     work = out_dir / "work" / CODE
+    notes_file = out_dir / "notes" / f"{CODE}.json"
     if ok:
         work.mkdir(parents=True, exist_ok=True)
+        notes_file.parent.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{CODE}.json").write_text(_dump(translation_payload(result, rights)), "utf-8")
+        notes_file.write_text(_dump(notes_payload(notes, CODE)), "utf-8")
         (work / "markers.json").write_text(_dump(marker_payload(result.markers)), "utf-8")
         if cross is not None:
             (work / "crosscheck.tsv").write_text(crosscheck_tsv(cross), "utf-8")
-        lines += ["", f"Wrote {out_dir / f'{CODE}.json'} and {work}/"]
+        if notes_cross is not None:
+            (work / "notes-crosscheck.tsv").write_text(
+                crosscheck_tsv(notes_cross, "note\tchapter\toccurrence"), "utf-8"
+            )
+        lines += ["", f"Wrote {out_dir / f'{CODE}.json'}, {notes_file} and {work}/"]
     else:
         lines += ["", "Checks failed — nothing written."]
     text = "\n".join(lines) + "\n"

@@ -96,12 +96,19 @@ class Vocabulary:
     def is_word(self, word: str) -> bool:
         return self._pdf[word] > 0 or self._public.words[word] > 0
 
-    def broken(self, pieces: list[str]) -> bool:
-        """Do ``pieces`` (lower-case letters) look like one word split by spaces?"""
+    def broken(self, pieces: list[str], hyphenated: str | None = None) -> bool:
+        """Do ``pieces`` (lower-case letters) look like one word split by spaces?
+
+        ``hyphenated``: the joined run as printed, when it holds a hyphen ("Ben-kaz" + "ar").
+        Its hyphen-split words must each be a word ("ben", "kazar"): a compound name is a word
+        only in parts.
+        """
         if len(pieces) < 2 or all(self.is_piece_word(p) for p in pieces):
             return False
         if tuple(pieces) in self._phrases or self._public.prefers_phrase(pieces):
             return False  # a real phrase ("money changers"), not a broken word
+        if hyphenated is not None:
+            return all(self.is_word(w) for w in words_of(hyphenated))
         return self.is_word("".join(pieces))
 
 
@@ -119,10 +126,17 @@ def letters(token: str) -> str:
 
 _CHUNKS = re.compile(r"( {2,})")
 _CLOSING = frozenset(".,;:!?)’”")
+_OPENING = frozenset("(“‘[")
+_APOSTROPHES = ("’", "'")
 
 
 def letter_spacing(
-    text: str, vocabulary: Vocabulary, *, whole_item: bool, glued_tail: bool = False
+    text: str,
+    vocabulary: Vocabulary,
+    *,
+    whole_item: bool,
+    glued_tail: bool = False,
+    apostrophe_splits: bool = True,
 ) -> str | None:
     """Join words the text layer broke with spaces ("g o o d .", "prophes y.", "ask ing").
 
@@ -133,8 +147,9 @@ def letter_spacing(
     at least one piece is not a word on its own — is joined ("for him", "I am a", "money
     lender" are left alone). A lone word followed by spaced punctuation
     ("thighs .") closes up. ``glued_tail``: the item's last letters continue in the next item
-    (small caps: "be the L" + "ORD"), so its last piece is not a fragment. Returns the fixed
-    text, or None when nothing changed.
+    (small caps: "be the L" + "ORD"), so its last piece is not a fragment.
+    ``apostrophe_splits=False``: a word split just after an apostrophe ("Name’ s") is left as
+    printed. Returns the fixed text, or None when nothing changed.
     """
     parts = _CHUNKS.split(text)
     changed = False
@@ -148,6 +163,7 @@ def letter_spacing(
             at_start=index == 0,
             keep_last=glued_tail and last,
             anywhere=whole_item,
+            apostrophe_splits=apostrophe_splits,
         )
         if fixed != parts[index]:
             parts[index], changed = fixed, True
@@ -155,7 +171,13 @@ def letter_spacing(
 
 
 def _join_chunk(
-    chunk: str, vocabulary: Vocabulary, *, at_start: bool, keep_last: bool, anywhere: bool
+    chunk: str,
+    vocabulary: Vocabulary,
+    *,
+    at_start: bool,
+    keep_last: bool,
+    anywhere: bool,
+    apostrophe_splits: bool = True,
 ) -> str:
     lead = chunk[: len(chunk) - len(chunk.lstrip())]
     tail = chunk[len(chunk.rstrip()) :]
@@ -174,17 +196,28 @@ def _join_chunk(
         pieces = merged
     out: list[str] = []
     i = 0
+    opening = at_start and len(pieces) >= 3 and all(c in _OPENING for c in pieces[0])
+    if opening:  # "( s e e the river": the bracket opens the broken word, spaced off it
+        out.append(pieces[0])
+        i = 1
     while i < len(pieces):
-        if i and not anywhere:  # outside italic text a broken word opens the item
+        if i > int(opening) and not anywhere:  # outside italic text a broken word opens it
             out.extend(pieces[i:])
             break
         for size in range(min(len(pieces) - i, 8), 1, -1):
             run = pieces[i : i + size]
+            if not apostrophe_splits and any(p.endswith(_APOSTROPHES) for p in run[:-1]):
+                continue
             words = [letters(p) for p in run]
             while words and not any(c.isalnum() for c in run[len(words) - 1]):
                 words.pop()  # trailing punctuation pieces (" .") join along
-            if words and all(words) and vocabulary.broken(words):
-                out.append("".join(run))
+            joined = "".join(run)
+            hyphenated = joined if _HYPHEN in joined else None
+            if words and all(words) and vocabulary.broken(words, hyphenated):
+                if opening and i == 1:
+                    out[0] += joined
+                else:
+                    out.append(joined)
                 i += size
                 break
         else:
@@ -193,6 +226,43 @@ def _join_chunk(
     if kept is not None:
         out.append(kept)
     return lead + " ".join(out) + tail
+
+
+_ELLIPSIS = re.compile(r"\.\s+\.")  # ". . ." is a real ellipsis, spaced on purpose
+
+
+def unspace(
+    text: str,
+    vocabulary: Vocabulary,
+    *,
+    italic: bool,
+    first: bool,
+    justified: bool,
+    glued: bool = False,
+    anywhere: bool = False,
+    apostrophe_splits: bool = True,
+) -> str | None:
+    """One item's text with broken words joined, or None when nothing changed.
+
+    Where broken words occur: italic items (anywhere in them), and the first item of a
+    justified line, where a real word gap is double and a single space is a glyph gap. An
+    item of punctuation alone, spread by justification (") . " after a "*"), closes up.
+    ``glued``: the item's last letters continue in the next item (small caps). ``anywhere``:
+    read the whole item as italic text is read (the notes' justified lines);
+    ``apostrophe_splits``: see ``letter_spacing``.
+    """
+    bare = text.strip()
+    if bare and not any(c.isalnum() for c in bare) and not _ELLIPSIS.search(bare) and " " in bare:
+        return text.replace(bare, bare.replace(" ", ""))
+    if not (italic or anywhere or (first and justified)):
+        return None
+    return letter_spacing(
+        text,
+        vocabulary,
+        whole_item=italic or anywhere,
+        glued_tail=glued,
+        apostrophe_splits=apostrophe_splits,
+    )
 
 
 def fraction(numerator: str, denominator: str, *, fixed: bool) -> str:

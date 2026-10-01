@@ -2014,3 +2014,66 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     0 for EMB and the 18 others.
 - **`make check` green** (801 passed, 48 deselected; ruff and pyright strict clean;
   `openapi.json` up to date after regeneration), and the licensing tests pass unchanged.
+
+### Feature V8-S2b — EMB's textual and study notes (private)
+
+- **What landed:** the converter now writes `data/private/notes/EMB.json` beside `EMB.json`:
+  `scripts/emb_convert/` gains `textual.py`, `study.py`, `notetext.py` (text and Markdown),
+  `epub_notes.py` and `notes.py`; the summary gains a Notes section and a notes cross-check;
+  29 synthetic tests (made-up text). A run takes ~1.5 min (was ~1) and is byte-identical on
+  re-run; S1's `EMB.json`, `markers.json` and verse cross-check are byte-identical too.
+- **Counts:** 4,817 textual notes in 1,072 blocks, one per `*`; 2,467 study notes; 7,284 in all.
+  - **The spec's 4,827 / 958 were a counting artifact.** 4,827 is the number of text items that
+    *begin* with "C:V": 4,750 real labels plus 77 wrapped lines that start with a reference. It
+    missed the 67 labels without that form (25 psalm-title, 8 chapter-header, 34 in the
+    single-chapter books). The 958 blocks counted only one-line headers; 114 wrap.
+  - Label kinds (non-overlapping): `C:V` 3,820 · lettered 856 · ranges 74 · psalm titles 25 ·
+    chapter headers 8 · single-chapter books 34. Lettered labels across them: 871 in 416 verses
+    (the plan's 419 grouped by label text).
+  - Study-note shapes: 1,967 ranges · 330 verses · 83 whole chapters (printed as full ranges,
+    e.g. Ps 23:1-6) · 52 cross-chapter · 35 multi-part. The spec's 2,035 + 15 / 332 / 33 have the
+    same totals.
+- **Matching:** all 4,817 markers pair with a note (0 unmatched either way). Anchors: 4,783 verse,
+  25 psalm title, 8 chapter header (Ps 25, 34, 37, 111, 112, 119, 145; Lam 1), 1 heading (Song 1,
+  labelled 1:1 → the end of 1:1). Two `*` links point to the page after their note's first line
+  (2 Kgs 25:17b, 1 Chr 6:57): the notes start at a page's foot. "2:3b-4" (Hab) shows a letter can
+  name half a verse, so the letter check is "ascending", not "starts at a".
+- **Callouts:** 2,439 blue verse numbers, each matched to a note; 2,438 at its first verse, 1 at a
+  later part (2 Cor 11:30; 12:1-10, anchored at 12:1 with both passages, at Kris's call); 28 notes
+  share a first verse and have no callout of their own.
+- **Links:** 830 links → 869 `ref:` targets. The book's own target agrees (±1 page) for 811; 3
+  name their book but target another (in the 1 Sam 9:14-17 and Mark 1:40-45 notes); 8 repeat an
+  earlier link's target (1 Sam 9:14-17, Prov 5:1-23, John 8:12); 1 targets the note's own verse
+  (Heb 5:11-13); 7 bare references the book linked to another book were read in context and
+  belong to the note's own book (Judg 17:1-6 "chapters 17–21"; Acts 2:14-21 2:21; Heb 1:4-6 2:11;
+  Heb 6:13-20 11:8-19; Heb 7:1-3 6:20; Heb 11:5-7 11:5 and 11:6). 0 unexplained.
+- **Text:** 4,738 Markdown notes, 2,546 plain; 900 escapes; 443 broken-word items joined; 4 fused
+  compounds repaired; 0 fractions. New quirks, both measured: the textual notes' italic font
+  breaks after "k" (~250); justified study-note lines break words mid-line, not only at the
+  start. A split just after an apostrophe is the book's own (Mark 4:21-25's study note: the
+  rendered page and the EPUB both print it), so it stays.
+- **Notes cross-check (with `--epub`):** 2,304 agree · 145 fixed PDF quirks · **0 fix regressions**
+  · 4,698 visible EPUB damage (most EPUB notes carry markup scraps) · 104 splices · 11 loss with
+  evidence · 5 hyphenation variants · 6 verified on the rendered page (Exod 40:2b, Isa 10:22-23,
+  11:10b, 28:16b; 1 Sam 3:1-10, Luke 12:32-34) · **0 open where the EPUB note is undamaged** · 14
+  open in damaged EPUB notes (listed in the summary). The EPUB dropped two block headers
+  (Exodus 1, Revelation 1) and spells "1 Thessalonians" with a no-break space; its reader keys a
+  label by the chapter it names and steps to the next book when the chapter goes back.
+- **Proof:** `make build-db` loads 65,537 notes (58,253 NET + 7,284 EMB) with no error. A local
+  API on :8077: EMB `note_count` 7,284; Genesis 1's 7 notes at their anchors; the Gen 1:1 study
+  note's `ref:` links; 2 Cor 12:1's two passages; an EMB notes search; NET John 3's 71 notes equal
+  to the server's in every existing field.
+- **Plan deviations:** three commits, not six (the parts share `notes.py`); about 3,000 changed
+  lines with tests, not ~1,800.
+- **Deployed 2026-10-01** to the LAN Concord (192.168.1.62:8000) from this branch's head.
+  `make docker-build-private` took 1 min 23 s, with the embed `CACHED` (the in-image loader built
+  65,537 notes) and the temporary `Dockerfile.dockerignore` gone afterwards. The image checked on
+  :8077 (20 translations, EMB 7,284 notes, NET John 3's 71 equal to the server's, semantic search
+  on). `docker save | gzip` 10 s (504 MB), `scp` 38 s, `docker load` + `compose up -d` 46 s,
+  healthy. Rollback: `concord:pre-emb-notes` (the V8-S1 image) — `docker tag
+  concord:pre-emb-notes concord:latest && docker compose up -d` in `~/applications/concord`.
+  Read through Songbird's own `ConcordClient` inside `songbird-songbird-1`: NET John 3's 71 notes
+  identical to a capture taken before the swap in every field Songbird reads; EMB Genesis 1's 7
+  notes load; 20 translations, the same ids. Today's Songbird doesn't read `note_count` yet.
+- **`make check` green** (830 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged).

@@ -330,25 +330,105 @@ def cross_check(
                 detail = "missing in PDF"
             result.findings.append(Finding(key, verdict, detail, damaged))
             continue
-        f, r = normalize(fixed[key]), normalize(raw.get(key, ""))
-        changed_by = tuple(
-            name for name, texts in sorted(solo.items()) if normalize(texts.get(key, "")) != r
+        result.findings.append(
+            _compare(
+                key,
+                fixed[key],
+                raw.get(key, ""),
+                solo,
+                epub.verses[key],
+                damaged,
+                (nlt or {}).get(key),
+                ctx,
+                VERIFIED_ON_PAGE,
+            )  # fmt: skip
         )
-        if f == e:
-            verdict = Verdict.AGREE if r == e else Verdict.FIXED_QUIRK
-            result.findings.append(Finding(key, verdict, "", damaged, changed_by))
-            continue
-        if r == e:
-            result.findings.append(
-                Finding(key, Verdict.FIX_REGRESSION, "raw parse agreed", damaged, changed_by)
-            )
-            continue
-        verdict, detail = explain(key, fixed[key], epub.verses[key], (nlt or {}).get(key), ctx)
-        if verdict is Verdict.OPEN and key in VERIFIED_ON_PAGE:
-            verdict = Verdict.VERIFIED
-        result.findings.append(Finding(key, verdict, detail, damaged, changed_by))
 
     result.headings = _check_headings(pdf_headings, epub, skeleton)
+    return result
+
+
+def _compare(
+    key: Key,
+    pdf: str,
+    pdf_raw: str,
+    solo: dict[str, dict[Key, str]],
+    epub: str,
+    damaged: bool,
+    nlt_text: str | None,
+    ctx: Context,
+    verified: frozenset[Key],
+) -> Finding:
+    """One text the PDF and the EPUB both have: agree, a fix's doing, or ``explain``'s class."""
+    f, r, e = normalize(pdf), normalize(pdf_raw), normalize(epub)
+    changed_by = tuple(
+        name for name, texts in sorted(solo.items()) if normalize(texts.get(key, "")) != r
+    )
+    if f == e:
+        verdict = Verdict.AGREE if r == e else Verdict.FIXED_QUIRK
+        return Finding(key, verdict, "", damaged, changed_by)
+    if r == e:
+        return Finding(key, Verdict.FIX_REGRESSION, "raw parse agreed", damaged, changed_by)
+    verdict, detail = explain(key, pdf, epub, nlt_text, ctx)
+    if verdict is Verdict.OPEN and key in verified:
+        verdict = Verdict.VERIFIED
+    return Finding(key, verdict, detail, damaged, changed_by)
+
+
+# The EPUB's span soup leaves spaces the book doesn't print: before closing punctuation
+# ("10:13 )."), around an em dash, inside a reference split by its link ("2: 5-12",
+# "1:22 -25"), around a fraction's slash ("1 / 10"). Both sides close them up alike, so no word
+# difference can hide behind it.
+_SPACE_BEFORE = re.compile(r"\s+(?=[.,;:!?)\]”’—])")
+_SPACE_AFTER = re.compile(r"(?<=[(\[“—])\s+")
+_IN_NUMBER = re.compile(r"(?<=\d)\s*([/:\-–])\s*(?=\d)")
+
+
+def tidy(text: str) -> str:
+    return _IN_NUMBER.sub(r"\1", _SPACE_AFTER.sub("", _SPACE_BEFORE.sub("", text)))
+
+
+def _tidy_all(texts: dict[Key, str]) -> dict[Key, str]:
+    return {key: tidy(text) for key, text in texts.items()}
+
+
+def cross_check_notes(
+    fixed: dict[Key, str],
+    raw: dict[Key, str],
+    solo: dict[str, dict[Key, str]],
+    epub: dict[Key, str],
+    epub_damaged: set[Key],
+    context_texts: dict[Key, str],
+    pages: dict[int, str],
+    spans: dict[Key, tuple[int, int]],
+    verified: frozenset[Key] = frozenset(),
+) -> CrossCheck:
+    """The notes' text, PDF vs EPUB, with the verses' classes and evidence rules (V8-S2b).
+
+    Keys name notes, not verses. ``context_texts``: every PDF text the evidence may draw on
+    (the verses and the notes) — the vocabulary a "non-word" is judged against, and the corpus
+    a splice is found in. There is no NLT evidence for notes.
+    """
+    fixed, raw, epub = _tidy_all(fixed), _tidy_all(raw), _tidy_all(epub)
+    solo = {name: _tidy_all(texts) for name, texts in solo.items()}
+    ctx = Context.build(context_texts, {}, [], pages, spans)
+    result = CrossCheck()
+    for key in sorted(fixed.keys() | epub.keys()):
+        damaged = key in epub_damaged
+        text = epub.get(key, "")
+        if not normalize(text):
+            result.findings.append(Finding(key, Verdict.EPUB_VISIBLE, "missing in EPUB", True))
+            continue
+        damaged = damaged or any(
+            is_scrap(t) or _non_word(t, ctx.vocabulary) for t in normalize(text).split(" ") if t
+        )
+        if key not in fixed:
+            verdict = Verdict.EPUB_VISIBLE if damaged else Verdict.OPEN
+            result.findings.append(Finding(key, verdict, "missing in PDF", damaged))
+            continue
+        result.findings.append(
+            _compare(key, fixed[key], raw.get(key, ""), solo, text, damaged, None, ctx, verified)
+        )
     return result
 
 

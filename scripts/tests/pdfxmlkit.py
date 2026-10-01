@@ -3,7 +3,9 @@
 A synthetic book places the 66 canonical books in the outline, ``BOOK_PAGES`` apart from
 ``FIRST_BOOK_PAGE``, followed by a "… Textual Notes" header, a feature index and the study
 notes index — the landmarks ``layout.find_layout`` looks for. Tests fill a few books' pages
-with ``T`` items; every other book stays empty.
+with ``T`` items; every other book stays empty. The textual notes go on ``NOTES_PAGE`` (whose
+first block, "Genesis 1 Textual Notes", the kit always prints) and the pages after it; the
+study notes on ``STUDY_NOTES_PAGE``.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ NAMES = {s.id: s.name for s in parse_canonical_books(load_canonical_books_text()
 NOTES_PAGE = FIRST_BOOK_PAGE + BOOK_PAGES * len(CODES)
 FEATURES_PAGE = NOTES_PAGE + 20
 STUDY_PAGE = FEATURES_PAGE + 20
+STUDY_NOTES_PAGE = STUDY_PAGE + 1
 PAGE_BOX = 'top="0" left="0" height="496" width="378"'
 
 
@@ -90,6 +93,42 @@ def callout(text: str, top: int) -> T:
     return T(text, top, 250, blue=True, bold=True, link=FEATURES_PAGE + 1)
 
 
+def notes_header(*parts: str, top: int = 43) -> list[T]:
+    """A textual-notes block header (bold, size 23); several parts make a wrapped one."""
+    return [T(part, top + 28 * n, 38, 23, bold=True) for n, part in enumerate(parts)]
+
+
+def label(text: str, top: int, page: int) -> T:
+    """A note's label: blue bold, linking back to the verse's page."""
+    return T(text, top, 38, blue=True, bold=True, link=page)
+
+
+def title_label(chapter: int, top: int, page: int) -> list[T]:
+    """A psalm-title note's label: "N:" and a small-caps "TITLE"."""
+    return [
+        T(f"{chapter}:", top, 38, blue=True, bold=True, link=page),
+        T("TITLE", top + 3, 47, 7, bold=True, link=page),
+    ]
+
+
+def study_head(abbreviation: str, reference: str, top: int, page: int) -> list[T]:
+    """A study note's heading: a bold book abbreviation and a blue bold reference."""
+    return [
+        T(f"{abbreviation} ", top, 38, bold=True),
+        T(reference, top, 63, blue=True, bold=True, link=page),
+    ]
+
+
+def link(text: str, top: int, left: int, page: int | None, width: int | None = None) -> T:
+    """A reference a study note links (blue, not bold)."""
+    return T(text, top, left, blue=True, link=page, width=width)
+
+
+def callout_number(n: str, top: int, page: int = STUDY_NOTES_PAGE, left: int = 38) -> T:
+    """A blue verse number: the book calls out a study note here."""
+    return T(n, top - 2, left, 7, blue=True, link=page, width=7)
+
+
 def box(top: int, ref_page: int) -> list[T]:
     """A Perspectives box: label, quoted text (with small caps), reference, attribution."""
     return [
@@ -135,7 +174,7 @@ def _text(item: T, fonts: dict[tuple[int, bool], int]) -> str:
 def document(pages: dict[int, list[T]], extra_outline: list[tuple[int, str]] | None = None) -> str:
     """A whole synthetic pdftohtml document around ``pages`` (page number → items)."""
     pages = dict(pages)
-    pages.setdefault(NOTES_PAGE, []).append(T("Genesis 1 Textual Notes", 60, 38, 23))
+    pages[NOTES_PAGE] = [T("Genesis 1 Textual Notes", 43, 38, 23), *pages.get(NOTES_PAGE, [])]
     fonts = _fonts(pages)
     out = ['<?xml version="1.0" encoding="UTF-8"?>', '<pdf2xml producer="poppler" version="test">']
     declared: set[int] = set()
@@ -176,6 +215,23 @@ def verse_texts(result: Any) -> dict[tuple[str, int, int], str]:
         for c in b.chapters
         for v in c.verses
     }
+
+
+def parse_notes(pages: dict[int, list[T]], public: tuple[str, ...] = ()) -> tuple[Any, Any]:
+    """Parse a synthetic document's Bible text, then its notes (``ParseResult``,
+    ``NotesResult``)."""
+    from emb_convert.clean import Fixes, PublicWords
+    from emb_convert.layout import find_layout
+    from emb_convert.notes import build_notes
+    from emb_convert.pdfxml import parse_pdf_xml
+    from emb_convert.skeleton import load_skeleton
+    from emb_convert.text import parse_bible
+
+    doc = parse_pdf_xml(document(pages))
+    layout = find_layout(doc)
+    words = PublicWords(public)
+    result = parse_bible(doc, layout, Fixes(), words)
+    return result, build_notes(doc, layout, result, words, load_skeleton())
 
 
 def parse(
