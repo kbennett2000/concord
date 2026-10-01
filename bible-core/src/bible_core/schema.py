@@ -106,7 +106,9 @@ _TABLES: tuple[str, ...] = (
     # This mirrors how `cross_references` / `place_verses` anchor (no `verses.id` FK). The
     # anchor is a single point (`char_offset`), not a span (SPEC v4 §4). `note_type` is a
     # constrained set; NULL is allowed for a plain footnote. Notes are user-supplied from
-    # `data/private/` and never ship in the public image (SPEC v4 §2).
+    # `data/private/` and never ship in the public image (SPEC v4 §2). The v8 columns after
+    # `ordinal` (ADR-0011) are optional: the source's `label` for the kind, a `title`,
+    # `text_format` ('markdown' or NULL for plain text) and `image` (reserved until V8-S4).
     """
     CREATE TABLE IF NOT EXISTS translator_notes (
         id             INTEGER PRIMARY KEY,
@@ -114,11 +116,16 @@ _TABLES: tuple[str, ...] = (
         book_id        TEXT NOT NULL REFERENCES books (id),
         chapter        INTEGER NOT NULL,
         verse          INTEGER NOT NULL,
-        note_type      TEXT CHECK (note_type IN ('tn', 'sn', 'tc', 'map', 'other')),
+        note_type      TEXT CHECK (note_type IN
+                           ('tn', 'sn', 'tc', 'map', 'other', 'article', 'chart')),
         text           TEXT NOT NULL,
         char_offset    INTEGER NOT NULL DEFAULT 0,
         marker         TEXT,
-        ordinal        INTEGER NOT NULL
+        ordinal        INTEGER NOT NULL,
+        label          TEXT,
+        title          TEXT,
+        text_format    TEXT CHECK (text_format IN ('markdown')),
+        image          TEXT
     )
     """,
     # A note's own cross-references → target canonical coords (range via to_verse_end, NULL
@@ -132,6 +139,18 @@ _TABLES: tuple[str, ...] = (
         to_chapter     INTEGER NOT NULL,
         to_verse_start INTEGER NOT NULL,
         to_verse_end   INTEGER
+    )
+    """,
+    # The canonical ranges a note covers beyond its anchor verse (v8, ADR-0011), in the note's
+    # own book; a range may cross chapters and a note may have several (kept in array order).
+    """
+    CREATE TABLE IF NOT EXISTS note_passages (
+        id             INTEGER PRIMARY KEY,
+        note_id        INTEGER NOT NULL REFERENCES translator_notes (id),
+        start_chapter  INTEGER NOT NULL,
+        start_verse    INTEGER NOT NULL,
+        end_chapter    INTEGER NOT NULL,
+        end_verse      INTEGER NOT NULL
     )
     """,
     # Section headings (additive). A heading anchors a CHAPTER position — it renders BEFORE
@@ -255,6 +274,8 @@ _TABLES: tuple[str, ...] = (
     "ON translator_notes (translation_id, book_id, chapter, verse)",
     # A note's cross-references.
     "CREATE INDEX IF NOT EXISTS idx_note_xref_note ON note_cross_references (note_id)",
+    # A note's passages.
+    "CREATE INDEX IF NOT EXISTS idx_note_passages_note ON note_passages (note_id)",
     # "all headings for this chapter in this translation" — the chapter-read lookup.
     "CREATE INDEX IF NOT EXISTS idx_headings_anchor "
     "ON section_headings (translation_id, book_id, chapter)",

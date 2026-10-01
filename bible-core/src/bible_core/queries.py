@@ -478,6 +478,16 @@ class NoteCrossRefRow:
 
 
 @dataclass(frozen=True)
+class NotePassageRow:
+    """A canonical range a note covers beyond its anchor verse, in the note's own book (v8)."""
+
+    start_chapter: int
+    start_verse: int
+    end_chapter: int
+    end_verse: int
+
+
+@dataclass(frozen=True)
 class NoteRow:
     """One translator's note for a passage, with its own cross-references nested."""
 
@@ -492,6 +502,27 @@ class NoteRow:
     marker: str | None
     ordinal: int
     cross_references: tuple[NoteCrossRefRow, ...]
+    # v8 (ADR-0011) — absent ⇒ None / ()
+    label: str | None
+    title: str | None
+    text_format: str | None
+    passages: tuple[NotePassageRow, ...]
+    image: str | None
+
+
+def _passages_by_note(
+    conn: sqlite3.Connection, note_ids: list[int]
+) -> dict[int, tuple[NotePassageRow, ...]]:
+    """The passages of each note in ``note_ids``, in their source order."""
+    placeholders = ",".join("?" * len(note_ids))
+    by_note: dict[int, list[NotePassageRow]] = defaultdict(list)
+    for r in conn.execute(
+        "SELECT note_id, start_chapter, start_verse, end_chapter, end_verse FROM note_passages "
+        f"WHERE note_id IN ({placeholders}) ORDER BY note_id, id",
+        note_ids,
+    ):
+        by_note[r[0]].append(NotePassageRow(r[1], r[2], r[3], r[4]))
+    return {note_id: tuple(rows) for note_id, rows in by_note.items()}
 
 
 def get_notes(
@@ -515,7 +546,7 @@ def get_notes(
 
     note_sql = (
         "SELECT n.id, n.book_id, b.name, n.chapter, n.verse, n.note_type, n.text, "
-        "n.char_offset, n.marker, n.ordinal "
+        "n.char_offset, n.marker, n.ordinal, n.label, n.title, n.text_format, n.image "
         "FROM translator_notes n JOIN books b ON b.id = n.book_id "
         f"WHERE n.translation_id = ? AND n.book_id = ? AND n.chapter = ?{verse_clause} "
         "ORDER BY n.verse, n.ordinal, n.id"
@@ -534,11 +565,27 @@ def get_notes(
     by_note: dict[int, list[NoteCrossRefRow]] = defaultdict(list)
     for r in conn.execute(xref_sql, ids):
         by_note[r[0]].append(NoteCrossRefRow(r[1], r[2], r[3], r[4], r[5]))
+    passages = _passages_by_note(conn, ids)
 
     return tuple(
         NoteRow(
-            r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], tuple(by_note.get(r[0], ()))
-        )
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            r[4],
+            r[5],
+            r[6],
+            r[7],
+            r[8],
+            r[9],
+            tuple(by_note.get(r[0], ())),
+            r[10],
+            r[11],
+            r[12],
+            passages.get(r[0], ()),
+            r[13],
+        )  # fmt: skip
         for r in note_rows
     )
 
@@ -595,6 +642,12 @@ class NoteSearchHit:
     marker: str | None
     ordinal: int
     snippet: str
+    # v8 (ADR-0011) — absent ⇒ None / ()
+    label: str | None
+    title: str | None
+    text_format: str | None
+    passages: tuple[NotePassageRow, ...]
+    image: str | None
 
 
 @dataclass(frozen=True)
@@ -639,7 +692,8 @@ def search_notes(
     )
     hits_sql = (
         f"SELECT n.book_id, b.name, n.chapter, n.verse, n.translation_id, n.note_type, "
-        f"n.char_offset, n.marker, n.ordinal, {snippet_fn} "
+        f"n.char_offset, n.marker, n.ordinal, {snippet_fn}, "
+        "n.label, n.title, n.text_format, n.image, n.id "
         "FROM notes_fts f "
         "JOIN translator_notes n ON n.id = f.rowid "
         "JOIN books b ON b.id = n.book_id "
@@ -659,8 +713,26 @@ def search_notes(
     except sqlite3.OperationalError as exc:
         raise SearchQueryError(str(exc)) from exc
 
+    passages = _passages_by_note(conn, [r[14] for r in hit_rows])
     hits = tuple(
-        NoteSearchHit(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]) for r in hit_rows
+        NoteSearchHit(
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            r[4],
+            r[5],
+            r[6],
+            r[7],
+            r[8],
+            r[9],
+            r[10],
+            r[11],
+            r[12],
+            passages.get(r[14], ()),
+            r[13],
+        )  # fmt: skip
+        for r in hit_rows
     )
     return NoteSearchPage(hits=hits, total=total)
 
@@ -689,6 +761,7 @@ class TranslationMeta:
     direction: str
     versification: str
     attribution: str | None
+    note_count: int  # notes loaded for this translation (v8, ADR-0011); 0 when none
 
 
 @dataclass(frozen=True)
@@ -714,12 +787,13 @@ def get_books(conn: sqlite3.Connection) -> list[BookMeta]:
 
 
 def get_translations(conn: sqlite3.Connection) -> list[TranslationMeta]:
-    """All loaded translations, ordered by id."""
+    """All loaded translations, ordered by id, each with its note count."""
     return [
-        TranslationMeta(r[0], r[1], r[2], r[3], r[4], r[5])
+        TranslationMeta(r[0], r[1], r[2], r[3], r[4], r[5], r[6])
         for r in conn.execute(
-            "SELECT id, name, language, direction, versification, attribution "
-            "FROM translations ORDER BY id"
+            "SELECT t.id, t.name, t.language, t.direction, t.versification, t.attribution, "
+            "(SELECT COUNT(*) FROM translator_notes n WHERE n.translation_id = t.id) "
+            "FROM translations t ORDER BY t.id"
         )
     ]
 
