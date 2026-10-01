@@ -22,6 +22,7 @@ def test_shape_and_order(client: TestClient) -> None:
         "direction",
         "versification",
         "attribution",
+        "note_count",  # v8 (ADR-0011): appended
     ]
     assert all(t["direction"] in ("ltr", "rtl") for t in translations)
 
@@ -33,6 +34,13 @@ def test_metadata(client: TestClient) -> None:
     assert kjv["language"] == "en"
     assert kjv["versification"] == "standard"
     assert kjv["attribution"]  # present and non-empty
+
+
+def test_note_count(client: TestClient) -> None:
+    counts = {
+        t["id"]: t["note_count"] for t in client.get("/v1/translations").json()["translations"]
+    }
+    assert counts == {"KJV": 7, "OSHB": 0, "SBLGNT": 0, "WEB": 0, "YLT": 0}
 
 
 def test_immutable_cache(client: TestClient) -> None:

@@ -20,6 +20,7 @@ from bible_core.queries import (
     JourneyStopRow,
     JourneySummaryRow,
     NoteCrossRefRow,
+    NotePassageRow,
     NoteRow,
     PlaceRow,
     QueryResult,
@@ -99,6 +100,7 @@ from .schemas import (
     JourneyStop,
     JourneySummary,
     NoteCrossReference,
+    NotePassage,
     NoteSearchHit,
     NoteSearchResponse,
     NotesResponse,
@@ -262,17 +264,20 @@ def search_endpoint(
 
 
 # The closed set of note types (mirrors the ``note_type`` CHECK constraint in bible_core.schema).
-# A fixed enum, so an unknown ``?type=`` is a 400 filter error (like ``/places`` status).
-NOTE_TYPES = ("tn", "sn", "tc", "map", "other")
+# A fixed enum, so an unknown ``?type=`` is a 400 filter error (like ``/places`` status). The v8
+# types are appended (ADR-0011), so the error's ``available`` list keeps the v4 order first.
+NOTE_TYPES = ("tn", "sn", "tc", "map", "other", "article", "chart")
 
 
-@router.get("/notes/search")
+@router.get("/notes/search", responses={200: {"model": NoteSearchResponse}})
 def notes_search_endpoint(
     request: Request,
     conn: Conn,
     q: Annotated[str, Query(min_length=1, max_length=MAX_QUERY_LENGTH)],
     translation: str | None = None,
-    type: str | None = None,
+    type: Annotated[
+        str | None, Query(description=f"Note type filter: one of {', '.join(NOTE_TYPES)}.")
+    ] = None,
     book: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -328,6 +333,11 @@ def notes_search_endpoint(
                 marker=hit.marker,
                 ordinal=hit.ordinal,
                 snippet=hit.snippet,
+                label=hit.label,
+                title=hit.title,
+                text_format=hit.text_format,
+                passages=[_note_passage(hit.book_name, p) for p in hit.passages],
+                image=hit.image,
             )
             for hit in page.hits
         ],
@@ -500,6 +510,24 @@ def _note_xref_reference(x: NoteCrossRefRow) -> str:
     return f"{x.to_book_name} {x.to_chapter}:{x.to_verse_start}"
 
 
+def _note_passage(book_name: str, p: NotePassageRow) -> NotePassage:
+    """A note's passage with its human reference (book name + start[-end], chapters as needed)."""
+    start = f"{p.start_chapter}:{p.start_verse}"
+    if (p.end_chapter, p.end_verse) == (p.start_chapter, p.start_verse):
+        reference = f"{book_name} {start}"
+    elif p.end_chapter == p.start_chapter:
+        reference = f"{book_name} {start}-{p.end_verse}"
+    else:
+        reference = f"{book_name} {start}-{p.end_chapter}:{p.end_verse}"
+    return NotePassage(
+        start_chapter=p.start_chapter,
+        start_verse=p.start_verse,
+        end_chapter=p.end_chapter,
+        end_verse=p.end_verse,
+        reference=reference,
+    )
+
+
 def _translator_note(row: NoteRow) -> TranslatorNote:
     return TranslatorNote(
         book=row.book_id,
@@ -521,10 +549,18 @@ def _translator_note(row: NoteRow) -> TranslatorNote:
             )
             for x in row.cross_references
         ],
+        label=row.label,
+        title=row.title,
+        text_format=row.text_format,
+        passages=[_note_passage(row.book_name, p) for p in row.passages],
+        image=row.image,
     )
 
 
-@router.get("/translations/{translation}/notes/{book}/{chapter}")
+@router.get(
+    "/translations/{translation}/notes/{book}/{chapter}",
+    responses={200: {"model": NotesResponse}},
+)
 def notes_endpoint(
     translation: str,
     book: str,
@@ -608,7 +644,7 @@ def books_endpoint(request: Request, conn: Conn) -> Response:
     return cached_json_response(BooksResponse(books=books), request)
 
 
-@router.get("/translations")
+@router.get("/translations", responses={200: {"model": TranslationsResponse}})
 def translations_endpoint(request: Request, conn: Conn) -> Response:
     translations = [
         Translation(
@@ -618,6 +654,7 @@ def translations_endpoint(request: Request, conn: Conn) -> Response:
             direction=t.direction,
             versification=t.versification,
             attribution=t.attribution,
+            note_count=t.note_count,
         )
         for t in get_translations(conn)
     ]

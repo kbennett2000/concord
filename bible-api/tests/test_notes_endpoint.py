@@ -22,6 +22,12 @@ NOTE_KEYS = [
     "marker",
     "ordinal",
     "cross_references",
+    # v8 (ADR-0011): appended, so every key above keeps its position
+    "label",
+    "title",
+    "text_format",
+    "passages",
+    "image",
 ]
 
 
@@ -73,6 +79,48 @@ def test_note_cross_references(client: TestClient) -> None:
             "to_verse_start": 2,
             "to_verse_end": 4,
             "reference": "John 4:2-4",
+        },
+    ]
+
+
+def test_notes_without_v8_fields_read_them_as_null_and_empty(client: TestClient) -> None:
+    for note in client.get("/v1/translations/KJV/notes/JHN/3").json()["notes"]:
+        assert [note[k] for k in ("label", "title", "text_format", "passages", "image")] == [
+            None,
+            None,
+            None,
+            [],
+            None,
+        ]
+
+
+def test_v8_fields_round_trip(client: TestClient) -> None:
+    (note,) = client.get("/v1/translations/KJV/notes/GEN/12").json()["notes"]
+    assert list(note.keys()) == NOTE_KEYS
+    assert (note["type"], note["label"], note["title"], note["text_format"], note["image"]) == (
+        "article",
+        "Made-up Series",
+        "A Made-up Title",
+        "markdown",
+        None,
+    )
+    assert note["text"] == (
+        "A made-up *feature* on [the famine](ref:GEN.12.10-20) and [chapter 20](ref:GEN.20)."
+    )
+    assert note["passages"] == [
+        {
+            "start_chapter": 12,
+            "start_verse": 10,
+            "end_chapter": 12,
+            "end_verse": 20,
+            "reference": "Genesis 12:10-20",
+        },
+        {
+            "start_chapter": 20,
+            "start_verse": 1,
+            "end_chapter": 21,
+            "end_verse": 3,
+            "reference": "Genesis 20:1-21:3",
         },
     ]
 

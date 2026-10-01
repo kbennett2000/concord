@@ -24,6 +24,12 @@ HIT_KEYS = [
     "marker",
     "ordinal",
     "snippet",
+    # v8 (ADR-0011): appended, so every key above keeps its position
+    "label",
+    "title",
+    "text_format",
+    "passages",
+    "image",
 ]
 
 
@@ -61,6 +67,25 @@ def test_hit_shape_omits_cross_references(client: TestClient) -> None:
         "sn",
     )
     assert (hit["char_offset"], hit["marker"], hit["ordinal"]) == (20, "2", 2)
+    assert [hit[k] for k in ("label", "title", "text_format", "passages", "image")] == [
+        None,
+        None,
+        None,
+        [],
+        None,
+    ]
+
+
+def test_hit_carries_v8_fields(client: TestClient) -> None:
+    (hit,) = client.get("/v1/notes/search", params={"q": "famine"}).json()["hits"]
+    assert (hit["type"], hit["label"], hit["title"], hit["text_format"], hit["image"]) == (
+        "article",
+        "Made-up Series",
+        "A Made-up Title",
+        "markdown",
+        None,
+    )
+    assert [p["reference"] for p in hit["passages"]] == ["Genesis 12:10-20", "Genesis 20:1-21:3"]
 
 
 # --- filters -------------------------------------------------------------------------
@@ -85,6 +110,23 @@ def test_type_filter(client: TestClient) -> None:
     assert body["total"] == 1
     assert body["hits"][0]["type"] == "tc"
     assert body["hits"][0]["reference"] == "John 3:17"
+
+
+def test_type_filter_accepts_the_v8_types(client: TestClient) -> None:
+    article = client.get("/v1/notes/search", params={"q": "feature", "type": "article"}).json()
+    assert [h["reference"] for h in article["hits"]] == ["Genesis 12:10"]
+    chart = client.get("/v1/notes/search", params={"q": "feature", "type": "chart"})
+    assert chart.status_code == 200
+    assert chart.json()["total"] == 0
+
+
+def test_api_note_types_match_core() -> None:
+    """The ?type= enum mirrors bible-core's set; the v4 five keep their order in the 400 list."""
+    from bible_api.routers import NOTE_TYPES
+    from bible_core.notes import NOTE_TYPES as CORE_NOTE_TYPES
+
+    assert set(NOTE_TYPES) == CORE_NOTE_TYPES
+    assert NOTE_TYPES[:5] == ("tn", "sn", "tc", "map", "other")
 
 
 def test_book_filter(client: TestClient) -> None:
