@@ -429,3 +429,20 @@ def test_fused_compound_gets_its_hyphen_back_from_the_pdfs_own_evidence() -> Non
     }
     assert verse_texts(parse(pages))[("GEN", 1, 2)] == "Then her father-in-law left."
     assert verse_texts(parse(pages, Fixes.none()))[("GEN", 1, 2)] == ("Then her fatherin-law left.")
+
+
+def test_heading_above_a_books_first_chapter_on_its_page_is_kept() -> None:
+    psa = start("PSA")
+    result = parse(
+        {
+            psa: [*nav("PSA", 2), heading("Old Intro Heading", 150)],
+            psa + 1: [
+                heading("Part One", 54),
+                body("An intro line between.", 100, 150),
+                *header("PSA", 1, 200),
+                vnum("1", 240, 46),
+                body("Words.", 240, 50),
+            ],
+        }
+    )
+    assert headings_of(result, "PSA", 1) == [(1, "Part One")]

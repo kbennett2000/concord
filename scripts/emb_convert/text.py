@@ -455,7 +455,7 @@ class _Parser:
                 f"chapter header {number} links outside its book at {line.page}"
             )
         if self.mode is _Mode.INTRO:
-            self.pending.extend(self.intro_headings)
+            self.pending.extend(d for d in self.intro_headings if d.last_page == line.page)
             self.intro_headings = []
         self.mode = _Mode.TEXT
         if self.chapter is not None and self.chapter.number == number:
@@ -484,12 +484,14 @@ class _Parser:
         single = self.book_range.code in _SINGLE_CHAPTER
         first = content[0]
         if single and self.is_verse_number(first) and first.stripped == "1":
-            self.pending.extend(self.intro_headings)
+            self.pending.extend(d for d in self.intro_headings if d.last_page == line.page)
             self.intro_headings = []
             self.mode = _Mode.TEXT
             self.new_chapter(1, line)
             return True
         if all(i.bold and i.italic for i in content):
+            # a heading above the first chapter ("Book One" over Psalm 1): kept only when it
+            # sits on the page where the chapter (or single-chapter text) starts
             draft = self.intro_headings[-1] if self.intro_headings else None
             if (
                 draft is not None
@@ -499,8 +501,6 @@ class _Parser:
                 self.extend_heading(draft, line)
             else:
                 self.intro_headings.append(self.new_heading(line, label=False))
-        else:
-            self.intro_headings = []
         return False
 
     # -- verses

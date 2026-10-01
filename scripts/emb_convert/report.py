@@ -13,7 +13,7 @@ EXPECTED: dict[str, int] = {
     "chapters": 1189,
     "verses": 31064,
     "combined": 24,
-    "headings": 2196,
+    "headings": 2197,
     "labels": 59,
     "markers": 4817,
     "perspectives-boxes": 26,
