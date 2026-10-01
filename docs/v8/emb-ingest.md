@@ -87,8 +87,8 @@ rm Dockerfile.dockerignore
 ```
 
 Check the image serves `EMB` before shipping it, and **never push that image** to a registry.
-The build re-runs the meaning-search embedding step (~20–30 minutes), because the data and
-scripts are copied in before it.
+The build re-runs the meaning-search embedding step (~20–30 minutes; 31 on the build machine in
+October 2026), because the data and scripts are copied in before it.
 
 ## Why this is safe
 

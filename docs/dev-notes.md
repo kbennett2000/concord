@@ -1902,6 +1902,16 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   documents a temporary, untracked `Dockerfile.dockerignore` instead. The build re-runs the
   ~23-minute embed (data and scripts are copied before it) — a stage split is proposed as a
   separate change.
+- **Deployed 2026-10-01** to the LAN Concord (192.168.1.62:8000), from this branch's head. The
+  temporary `Dockerfile.dockerignore` worked: build context 335.8 MB (June's private build:
+  322.8 MB), the in-image loader built 20 translations / 591,272 verses / 58,253 notes. Build
+  32 min, of which the embed 1,837 s; `docker save | gzip` 10 s (503 MB), `scp` 1 min,
+  `docker load` + `compose up -d` 37 s, healthy within seconds. The previous image is kept as
+  `concord:pre-emb` (rollback: `docker tag concord:pre-emb concord:latest && docker compose
+  up -d`). Read through songbird's own `ConcordClient` inside its container: NET John 3 text,
+  its 71 notes and 2 headings byte-identical to a capture taken before the swap; EMB Genesis 1
+  and Psalm 3 read; songbird's `/healthz` lists 20 translations. The image also brought #69 and
+  #73 to the server (it was built on 2026-06-10, before both).
 - **`make check` green** (739 unit, 47 deselected; ruff + pyright strict clean incl. the new
   `scripts/` paths, openapi.json unchanged). `make build-db` loads 20 translations; a local API
   on :8077 served EMB (Gen 1:1, Ps 3:1 with its title, Num 1:6–7 and Rev 7:5 table rows,
