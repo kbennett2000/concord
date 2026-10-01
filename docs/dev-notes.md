@@ -2065,5 +2065,15 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   to the server's in every existing field.
 - **Plan deviations:** three commits, not six (the parts share `notes.py`); about 3,000 changed
   lines with tests, not ~1,800.
+- **Deployed 2026-10-01** to the LAN Concord (192.168.1.62:8000) from this branch's head.
+  `make docker-build-private` took 1 min 23 s, with the embed `CACHED` (the in-image loader built
+  65,537 notes) and the temporary `Dockerfile.dockerignore` gone afterwards. The image checked on
+  :8077 (20 translations, EMB 7,284 notes, NET John 3's 71 equal to the server's, semantic search
+  on). `docker save | gzip` 10 s (504 MB), `scp` 38 s, `docker load` + `compose up -d` 46 s,
+  healthy. Rollback: `concord:pre-emb-notes` (the V8-S1 image) — `docker tag
+  concord:pre-emb-notes concord:latest && docker compose up -d` in `~/applications/concord`.
+  Read through Songbird's own `ConcordClient` inside `songbird-songbird-1`: NET John 3's 71 notes
+  identical to a capture taken before the swap in every field Songbird reads; EMB Genesis 1's 7
+  notes load; 20 translations, the same ids. Today's Songbird doesn't read `note_count` yet.
 - **`make check` green** (830 passed, 48 deselected; ruff and pyright strict clean, openapi.json
   unchanged).
