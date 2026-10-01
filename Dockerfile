@@ -1,21 +1,27 @@
 # Concord — production image (multi-stage), with semantic search (v2).
 #
-# Builder: install deps non-editably into a venv, bake bible.db from the committed
-# public-domain data, fetch the int8 embedding model (pinned revision), and bake the int8
-# embeddings.db. Runtime: a slim image carrying ONLY the venv + the baked databases + the
-# baked int8 model + the vendored offline docs assets — no source, no loader, no build
-# tools. A fresh container on a host with no internet serves the whole API, including
+# deps: third-party packages from the lockfile. builder: install the workspace non-editably
+# into a venv, bake bible.db from the committed public-domain data, and export the WEB verse
+# list. embeddings: fetch the int8 embedding model (pinned revision) and bake the int8
+# embeddings.db from that list. Runtime: a slim image carrying ONLY the venv + the baked
+# databases + the baked int8 model + the vendored offline docs assets — no source, no loader,
+# no build tools. A fresh container on a host with no internet serves the whole API, including
 # /v1/semantic-search and /docs (SPEC §3-§8). Build-time internet is fine (the model is
 # fetched then baked); none leaks into runtime.
+#
+# The embed takes ~30 min, so it has a stage of its own that sees only the WEB verse list, its
+# pinned packages, bible-semantic's source and its two scripts (V8-S1b). BuildKit keys a
+# `COPY --from` on file content: a data, converter or bible-core/bible-api change re-runs the
+# loader and the export (seconds), the list comes out byte-identical, and the embed is cached.
 #
 # int8 only: the 1.25 GB fp32 weights never enter the image (S3a). The model + embeddings.db
 # are baked, so the precision/model guard (S3a) catches a stale artifact at boot.
 
-# --- builder ----------------------------------------------------------------------------
+# --- base -------------------------------------------------------------------------------
 # Base images are pinned by digest for byte-reproducible builds; the tag in each comment is
 # the human-readable equivalent (refresh the digest when bumping the tag).
 # python:3.12-slim (3.12.13-slim-trixie)
-FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS builder
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS base
 
 # ghcr.io/astral-sh/uv:0.11
 COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c98858d3162bd28cf536f6 /uv /bin/uv
@@ -31,6 +37,9 @@ ENV BIBLE_DB_PATH=/app/bible.db \
     CONCORD_MODEL_PATH=/app/model \
     CONCORD_EMBEDDINGS_PATH=/app/embeddings.db
 
+# --- deps -------------------------------------------------------------------------------
+FROM base AS deps
+
 # Resolve dependencies first (cached layer) from manifests + lockfile only. Every workspace
 # member's pyproject is needed for `uv sync --frozen` to resolve the workspace.
 COPY pyproject.toml uv.lock ./
@@ -38,6 +47,15 @@ COPY bible-core/pyproject.toml bible-core/
 COPY bible-api/pyproject.toml bible-api/
 COPY bible-semantic/pyproject.toml bible-semantic/
 RUN uv sync --frozen --no-dev --no-install-workspace
+
+# The embeddings stage's own pinned packages (onnxruntime, tokenizers, numpy + theirs), from
+# the same lockfile. Workspace members, versions and tool config are left out, so a version
+# bump or a pyproject tool-config change leaves this file — and the embed — unchanged.
+RUN uv export --frozen --no-dev --package bible-semantic --no-emit-workspace \
+        --no-header --no-annotate -o /app/semantic-requirements.txt
+
+# --- builder ----------------------------------------------------------------------------
+FROM deps AS builder
 
 # Sources, then install the workspace packages *non-editably* (code + vendored docs assets
 # are copied into .venv, so the runtime stage needs no source tree). This installs
@@ -53,15 +71,32 @@ RUN uv sync --frozen --no-dev --no-editable
 COPY data/ data/
 RUN /app/.venv/bin/python -m bible_core.loader --output /app/bible.db
 
-# Fetch the int8 model (pinned revision; ~313 MB) then bake the int8 embeddings.db from the
-# WEB corpus. Late layers: the ~21-min embed re-runs only when the model, data, or semantic
-# code change. The model is baked into the image; runtime never downloads it.
-COPY scripts/ scripts/
+# The embeddings stage's corpus: the WEB verse list, byte-identical while the WEB text is.
+COPY scripts/build_embeddings.py scripts/
+RUN /app/.venv/bin/python scripts/build_embeddings.py --export-verses /app/web-verses.json
+
+# --- embeddings -------------------------------------------------------------------------
+# Sees only its pinned packages, bible-semantic's source, its two scripts and the verse list —
+# no bible-core, no data, no other scripts — so only those re-run the embed.
+FROM base AS embeddings
+
+COPY --from=deps /app/semantic-requirements.txt ./
+RUN uv venv /app/.venv && \
+    uv pip install --python /app/.venv/bin/python --no-deps -r semantic-requirements.txt
+
+ENV PYTHONPATH=/app/bible-semantic/src
+COPY bible-semantic/src/ bible-semantic/src/
+
+# Fetch the int8 model (pinned revision; ~313 MB), then bake the int8 embeddings.db from the
+# WEB verse list. The model is baked into the image; runtime never downloads it.
+COPY scripts/fetch_model.py scripts/
 RUN /app/.venv/bin/python scripts/fetch_model.py
-RUN /app/.venv/bin/python scripts/build_embeddings.py
+COPY scripts/build_embeddings.py scripts/
+COPY --from=builder /app/web-verses.json ./
+RUN /app/.venv/bin/python scripts/build_embeddings.py --verses web-verses.json
 
 # --- runtime ----------------------------------------------------------------------------
-# python:3.12-slim (3.12.13-slim-trixie) — pinned by digest (see builder stage).
+# python:3.12-slim (3.12.13-slim-trixie) — pinned by digest (see base stage).
 FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -80,8 +115,8 @@ RUN groupadd --system app && useradd --system --no-create-home --gid app app
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/bible.db /app/bible.db
-COPY --from=builder --chown=app:app /app/embeddings.db /app/embeddings.db
-COPY --from=builder --chown=app:app /app/model /app/model
+COPY --from=embeddings --chown=app:app /app/embeddings.db /app/embeddings.db
+COPY --from=embeddings --chown=app:app /app/model /app/model
 
 # Container always listens on 8000; the host port is remapped via compose.
 EXPOSE 8000

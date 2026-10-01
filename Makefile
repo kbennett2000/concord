@@ -1,6 +1,7 @@
 # Concord dev tasks. Every check is one command from the repo root, over both packages.
 .PHONY: install lint fmt fmt-check typecheck test check run build-db \
-        openapi openapi-check docker-build docker-up docker-down docker-verify
+        openapi openapi-check docker-build docker-build-private docker-up docker-down \
+        docker-verify
 
 install:           ## Create the shared .venv and editable-install both packages
 	uv sync
@@ -38,6 +39,15 @@ build-db:          ## Build bible.db from data/translations (+ local data/privat
 
 docker-build:      ## Build the production image
 	docker compose build
+
+# Your own image WITH data/private baked in (docs/v8/emb-ingest.md). BuildKit reads a temporary
+# Dockerfile.dockerignore (.dockerignore minus data/private/) in place of .dockerignore; the
+# trap deletes it however the build ends. Builds only, never pushes.
+docker-build-private:  ## Build YOUR image with data/private — local LAN only, never push
+	@trap 'rm -f Dockerfile.dockerignore' EXIT; trap 'exit 130' INT TERM; \
+	grep -vx 'data/private/' .dockerignore > Dockerfile.dockerignore && \
+	docker compose build && \
+	echo "Built concord:latest WITH your private data — for your LAN only; never push it."
 
 docker-up:         ## Start the service (detached)
 	docker compose up -d

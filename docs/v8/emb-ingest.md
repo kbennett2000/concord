@@ -31,8 +31,8 @@ documents and the Verse Finder follow in later slices (SPEC §7).
    witness. If `data/private/nlt.json` exists it is read as cross-check evidence only.
 4. **Read the summary** it prints (below). If any check fails, nothing is written and the exit
    code is non-zero.
-5. **Rebuild** Concord: `make build-db` for a local run, or rebuild your Docker image with your
-   private data in it (below). The build summary then counts one more translation.
+5. **Rebuild** Concord: `make build-db` for a local run, or `make docker-build-private` for your
+   own Docker image (below). The build summary then counts one more translation.
 6. **Served.** `EMB` appears in `GET /v1/translations` as "Every Man's Bible (NLT)" and reads
    through every existing endpoint; songbird lists it with no change.
 
@@ -76,19 +76,33 @@ No loader scans `data/private/work/`. Notes on the text:
 ## Getting your private data into your own Docker image
 
 `.dockerignore` excludes `data/private/` — that is what keeps the published image clean, and it
-stays. To bake your private translations into an image **for your own LAN only**, build with a
-temporary, untracked Dockerfile-specific ignore file, which BuildKit uses instead of the root
-one:
+stays. To bake your private translations into an image **for your own LAN only**, run one
+command from the repo root:
 
 ```bash
-grep -v '^data/private/$' .dockerignore > Dockerfile.dockerignore   # temporary, untracked
-docker compose build
-rm Dockerfile.dockerignore
+make docker-build-private
 ```
 
-Check the image serves `EMB` before shipping it, and **never push that image** to a registry.
-The build re-runs the meaning-search embedding step (~20–30 minutes; 31 on the build machine in
-October 2026), because the data and scripts are copied in before it.
+It writes a temporary, untracked `Dockerfile.dockerignore` (`.dockerignore` without the
+`data/private/` line), which BuildKit uses instead of the root one, runs `docker compose build`,
+and deletes the file however the build ends — success, failure or Ctrl-C. The result is your
+local `concord:latest`. Check it serves `EMB` before shipping it, and **never push that image** to
+a registry; the command only builds.
+
+**How long it takes.** The meaning-search embeddings depend only on the WEB verse text, the model
+and the embedding code, so the Dockerfile gives them a stage of their own that sees nothing else
+(V8-S1b). Measured on the build machine, 1 October 2026:
+
+| What changed since the last build | Build | Embeddings |
+|---|---|---|
+| First build with this Dockerfile | 49 min (the embed alone 30–47 min, depending on the machine's load) | built |
+| Anything under `data/private` (e.g. a re-run converter) | 52 s | reused |
+| The converter (`scripts/emb_convert`, `scripts/convert_emb.py`) | 4 s | reused |
+| bible-core or bible-api code | 75 s | reused |
+
+The embeddings are rebuilt only when the WEB text, bible-semantic's code or pinned packages,
+`scripts/fetch_model.py` / `scripts/build_embeddings.py`, or the base images change. The public
+image build shares the same cached embeddings.
 
 ## Why this is safe
 
@@ -99,6 +113,10 @@ under it. The converter itself holds no EMB text, and its tests use small synthe
 
 - `test_licensing_safety.test_private_data_dir_is_ignored` — `data/private/` stays in both
   ignore files.
+- `test_licensing_safety.test_every_committed_dockerignore_excludes_private_data` — any committed
+  `*.dockerignore` (which BuildKit would use in place of `.dockerignore`) keeps `data/private/`
+  out; `test_private_build_ignore_file_is_gitignored` keeps the temporary
+  `Dockerfile.dockerignore` out of git.
 - `test_licensing_safety.test_clean_checkout_bakes_zero_private_translations` — a build from a
   checkout with no `data/private/` bakes only committed translations; a local `private/` is
   added, and its `work/` folder is never read as translations.

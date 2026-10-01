@@ -14,12 +14,17 @@ ignored, which would silently drop the public-domain notes from the image.
 Complements ``test_notes_loader.test_clean_build_bakes_public_notes_but_zero_private_notes``,
 which proves the *behavior* (a clean build bakes public notes, zero private notes); this proves
 the *ignore-file* guards that keep the clean build clean and the public path shippable.
+
+V8-S1b: BuildKit lets a ``<Dockerfile>.dockerignore`` replace ``.dockerignore``. A private build
+writes a temporary ``Dockerfile.dockerignore`` without ``data/private/`` — so that file must stay
+gitignored, and every *committed* ignore file must still exclude ``data/private/``.
 """
 
 # pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -44,6 +49,28 @@ def test_private_data_dir_is_ignored(ignore_file: str) -> None:
     assert "data/private/" in _ignore_lines(ignore_file), (
         f"data/private/ must stay in {ignore_file} — it is the only barrier keeping "
         "copyrighted translations and translator's notes out of the repo and the image."
+    )
+
+
+def test_every_committed_dockerignore_excludes_private_data() -> None:
+    """A committed ``*.dockerignore`` (e.g. a ``Dockerfile.dockerignore``) replaces the root one for
+    its Dockerfile — published builds included — so each must keep ``data/private/`` out."""
+    committed = subprocess.run(
+        ["git", "ls-files", "--", "*.dockerignore"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert ".dockerignore" in committed, f"git ls-files found no .dockerignore: {committed}"
+    missing = [name for name in committed if "data/private/" not in _ignore_lines(name)]
+    assert not missing, f"committed ignore files that let data/private/ in: {missing}"
+
+
+def test_private_build_ignore_file_is_gitignored() -> None:
+    assert "Dockerfile.dockerignore" in _ignore_lines(".gitignore"), (
+        "Dockerfile.dockerignore must stay in .gitignore — make docker-build-private writes it "
+        "without data/private/, and committing it would let private data into every build."
     )
 
 

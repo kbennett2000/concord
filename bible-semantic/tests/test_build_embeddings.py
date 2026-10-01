@@ -15,7 +15,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from bible_semantic.build import build_embeddings, default_bible_db_path
+from bible_semantic.build import (
+    build_embeddings,
+    default_bible_db_path,
+    embed_corpus,
+    read_corpus,
+    read_verse_list,
+    write_verse_list,
+)
 from bible_semantic.model import (
     _ONNX_FILENAMES,
     EMBEDDING_DIM,
@@ -122,3 +129,23 @@ def test_build_is_idempotent_and_byte_identical(tmp_path: Path) -> None:
     vec_a = conn_a.execute(f"SELECT vector FROM verse_embeddings {where}").fetchone()[0]
     vec_b = conn_b.execute(f"SELECT vector FROM verse_embeddings {where}").fetchone()[0]
     assert vec_a == vec_b
+
+
+def test_verse_list_embeds_identically_to_bible_db(tmp_path: Path) -> None:
+    """The Docker path (export the list, embed it without bible-core) gives the same vectors."""
+    bible_db = _require_inputs()
+    from_db = tmp_path / "from_db.db"
+    from_list = tmp_path / "from_list.db"
+    verse_list = tmp_path / "verses.json"
+    build_embeddings(from_db, bible_db, limit=128)
+    write_verse_list(verse_list, "WEB", read_corpus(bible_db, "WEB"))
+    translation, verses = read_verse_list(verse_list)
+    embed_corpus(from_list, verses[:128], translation)
+
+    rows = "SELECT book_id, chapter, verse, vector FROM verse_embeddings ORDER BY rowid"
+    meta = (
+        "SELECT model, model_revision, dim, precision, translation, normalized FROM embedding_meta"
+    )
+    conn_db, conn_list = sqlite3.connect(from_db), sqlite3.connect(from_list)
+    assert conn_db.execute(rows).fetchall() == conn_list.execute(rows).fetchall()
+    assert conn_db.execute(meta).fetchall() == conn_list.execute(meta).fetchall()
