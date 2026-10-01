@@ -16,11 +16,15 @@ which proves the *behavior* (a clean build bakes public notes, zero private note
 the *ignore-file* guards that keep the clean build clean and the public path shippable.
 """
 
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
+from bible_core.loader import _default_data_dirs, build_database
+from loaderkit import book, chapter, translation, verse, write_translation
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,3 +57,31 @@ def test_public_notes_dir_is_not_ignored(ignore_file: str) -> None:
         f"data/notes/ must NOT be in {ignore_file} — it is the committed public-domain notes "
         f"path that ships in the image (ADR-0004). Found: {offenders}."
     )
+
+
+def _build(base: Path) -> list[str]:
+    """Build from the directories the loader's CLI picks under ``base``; list the baked ids."""
+    db = base / "bible.db"
+    build_database(db, _default_data_dirs(base))
+    with sqlite3.connect(db) as conn:
+        return [row[0] for row in conn.execute("SELECT id FROM translations ORDER BY id")]
+
+
+def _one_verse(code: str) -> dict[str, object]:
+    return translation(code, [book("Gen", 1, [chapter(1, [verse(1, "Made-up words.")])])])
+
+
+def test_clean_checkout_bakes_zero_private_translations(tmp_path: Path) -> None:
+    """A clean checkout has no data/private/: only committed translations are baked. This is
+    what keeps an operator's private study Bible (v8: data/private/EMB.json) out of any build
+    made from the repository alone."""
+    write_translation(tmp_path / "translations", _one_verse("PUB"))
+    assert _build(tmp_path) == ["PUB"]
+
+
+def test_local_private_translations_are_added_only_when_present(tmp_path: Path) -> None:
+    write_translation(tmp_path / "translations", _one_verse("PUB"))
+    write_translation(tmp_path / "private", _one_verse("PRIV"))
+    write_translation(tmp_path / "private" / "work" / "PRIV", _one_verse("WORK"))
+    # work/ files (the v8 converter's markers and reports) are never scanned as translations
+    assert _build(tmp_path) == ["PRIV", "PUB"]
