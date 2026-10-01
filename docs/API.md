@@ -676,18 +676,42 @@ $ curl -s 'localhost:8000/v1/translations/NET/notes/John/3?verse=16'
       "cross_references": [
         { "to_book": "ROM", "to_chapter": 5, "to_verse_start": 8, "to_verse_end": null,
           "reference": "Romans 5:8" }
-      ]
+      ],
+      "label": null, "title": null, "text_format": null, "passages": [], "image": null
     }
   ]
 }
 ```
 
-Each note carries its **canonical anchor** (`book`/`chapter`/`verse` + a human `reference`), the
-`type` (`tn` translator's · `sn` study · `tc` text-critical · `map` · or `null` for a plain
-footnote), the `text`, the **`char_offset`** (a point — where the marker attaches in the verse
-text — not a span), the source `marker`, the `ordinal` (stable order within a verse), and the
-note's own `cross_references` (each a target by canonical coords, `to_verse_end` null for a single
-verse, set for a range).
+Each note carries:
+- its **canonical anchor** (`book`/`chapter`/`verse`, plus a human `reference`);
+- the `type`: `tn` translator's · `sn` study · `tc` text-critical · `map` · `article` (a study
+  Bible's feature series) · `chart` · or `null` for a plain footnote;
+- the `text`;
+- the **`char_offset`**: a point where the marker attaches in the verse text, not a span;
+- the source `marker`;
+- the `ordinal`, its stable order within a verse;
+- the note's own `cross_references`. Each is a target by canonical coordinates, with
+  `to_verse_end` null for a single verse and set for a range.
+
+The **v8 fields** ([ADR-0011](adr/ADR-0011-v8-note-fields.md)) come last. They're `null` (or `[]`)
+when a source doesn't use them, as for NET:
+
+| Field | Meaning |
+|---|---|
+| `label` | The source's own name for the kind of note, for display ("Study Note", "Chart", …). `type` stays the coarse class. |
+| `title` | The item's heading. |
+| `text_format` | `"markdown"` when `text` is Markdown; `null` means plain text. |
+| `passages` | The ranges the note covers beyond its anchor verse, in the same book: `start_chapter`, `start_verse`, `end_chapter`, `end_verse` and a `reference` ("Genesis 12:10-20", "Genesis 12:10-13:4"). |
+| `image` | Reserved for charts (the images slice); always `null` for now. |
+
+**`ref:` links.** Markdown `text` marks a reference a client can jump to as an inline link,
+`[display text](ref:TARGET)`. TARGET is a USFM book code, then `.C` (chapter), `.C-C` (chapter
+range), `.C.V` (verse), `.C.V-V` (range) or `.C.V-C.V` (cross-chapter range).
+
+To read a target with this API, replace the first `.` with a space and a chapter–verse `.` with
+`:`: `ref:JHN.3.16-4.2` becomes `GET /v1/verses/JHN 3:16-4:2`, and `ref:GEN.12-14` becomes
+`/v1/verses/GEN 12-14`.
 
 **Empty results** return `200` with `"total": 0` and `"notes": []` — a translation with no notes
 loaded (every translation on the public image) is a normal state, **not** a 404. Likewise a valid
@@ -714,7 +738,7 @@ read endpoint above fetches notes by passage, this one finds them by text.
 |---|---|---|---|
 | `q` | string | — (required) | FTS5 query; same syntax as [`/v1/search`](#get-v1search). |
 | `translation` | string | — (all) | Optional **filter** to one notes translation (e.g. `NET`). Case-insensitive. Omitted ⇒ all loaded. |
-| `type` | string | — (all) | Optional filter: `tn` (translator's) · `sn` (study) · `tc` (text-critical) · `map` · `other`. |
+| `type` | string | — (all) | Optional filter: `tn` (translator's) · `sn` (study) · `tc` (text-critical) · `map` · `other` · `article` · `chart`. |
 | `book` | string | — | Optional filter; USFM id or alias. |
 | `limit` | int | `20` | 1–100. |
 | `offset` | int | `0` | ≥ 0. |
@@ -729,14 +753,19 @@ $ curl -s 'localhost:8000/v1/notes/search?q=Greek&translation=NET&type=tn&limit=
   "hits": [
     { "book": "JHN", "chapter": 3, "verse": 16, "reference": "John 3:16",
       "translation": "NET", "type": "tn", "char_offset": 8, "marker": "23", "ordinal": 1,
-      "snippet": "The <mark>Greek</mark> construction here indicates result, not purpose." }
+      "snippet": "The <mark>Greek</mark> construction here indicates result, not purpose.",
+      "label": null, "title": null, "text_format": null, "passages": [], "image": null }
   ]
 }
 ```
 
 Each hit carries the note's **canonical anchor** (`book`/`chapter`/`verse` + a human `reference`),
 the owning `translation`, the `type` (or `null` for a plain footnote), the `char_offset`, source
-`marker`, `ordinal`, and a `<mark>`-tagged `snippet` of the note body. The note's own
+`marker`, `ordinal`, and a `<mark>`-tagged `snippet` of the note body.
+
+The v8 fields (`label`, `title`, `text_format`, `passages`, `image`) follow, exactly as on the
+passage read. For a Markdown note (`text_format: "markdown"`), the snippet is cut from the raw
+Markdown, so it can contain markup and link syntax. The note's own
 `cross_references` are **omitted** here for leanness — fetch the full note (with its cross-references)
 via the [passage read](#get-v1translationstranslationnotesbookchapter) above. Results are
 relevance-ranked (FTS5 `rank`) with a canonical tiebreak (verse → ordinal → id).
@@ -1038,13 +1067,20 @@ $ curl -s 'localhost:8000/v1/translations'
 {
   "translations": [
     { "id": "AKJV", "name": "American King James Version", "language": "en",
-      "direction": "ltr", "versification": "standard", "attribution": "The American King James Version is in the public domain." },
+      "direction": "ltr", "versification": "standard", "attribution": "The American King James Version is in the public domain.",
+      "note_count": 0 },
     { "id": "OSHB", "name": "Open Scriptures Hebrew Bible", "language": "hbo",
-      "direction": "rtl", "versification": "standard", "attribution": "Hebrew Old Testament … CC BY 4.0 …" },
+      "direction": "rtl", "versification": "standard", "attribution": "Hebrew Old Testament … CC BY 4.0 …",
+      "note_count": 0 },
     ...
   ]
 }
 ```
+
+`note_count` is the number of notes loaded for the translation. It's `0` for every translation on
+the public image, and higher only once you've baked your own notes in
+([notes-ingest](v4/notes-ingest.md)). A client offers any translation with `note_count > 0` as a
+notes source.
 
 `direction` is `ltr` for everything except the Hebrew OT (`OSHB`), which is `rtl`. The
 original-language texts (`SBLGNT`, `OSHB`) are ordinary translations — usable as `?translation=` on

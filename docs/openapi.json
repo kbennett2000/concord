@@ -62,6 +62,332 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "NoteCrossReference": {
+        "description": "A cross-reference carried by a translator's note \u2192 a target verse or range.",
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "to_book": {
+            "title": "To Book",
+            "type": "string"
+          },
+          "to_chapter": {
+            "title": "To Chapter",
+            "type": "integer"
+          },
+          "to_verse_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Verse End"
+          },
+          "to_verse_start": {
+            "title": "To Verse Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "to_book",
+          "to_chapter",
+          "to_verse_start",
+          "to_verse_end",
+          "reference"
+        ],
+        "title": "NoteCrossReference",
+        "type": "object"
+      },
+      "NotePassage": {
+        "description": "A canonical range a note covers beyond its anchor verse, in the note's own book (v8,\nADR-0011). ``reference`` is the human form (``\"Genesis 12:10-20\"``).",
+        "properties": {
+          "end_chapter": {
+            "title": "End Chapter",
+            "type": "integer"
+          },
+          "end_verse": {
+            "title": "End Verse",
+            "type": "integer"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "start_chapter": {
+            "title": "Start Chapter",
+            "type": "integer"
+          },
+          "start_verse": {
+            "title": "Start Verse",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_chapter",
+          "start_verse",
+          "end_chapter",
+          "end_verse",
+          "reference"
+        ],
+        "title": "NotePassage",
+        "type": "object"
+      },
+      "NoteSearchHit": {
+        "description": "One note-search match: the note's canonical anchor, owning translation, and a highlighted\nsnippet of its body. The note's own ``cross_references`` are omitted for leanness \u2014 fetch the\nfull note via the passage read (SPEC v5 \u00a74). The v8 fields follow, as on ``TranslatorNote``.",
+        "properties": {
+          "book": {
+            "title": "Book",
+            "type": "string"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "char_offset": {
+            "title": "Char Offset",
+            "type": "integer"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/NotePassage"
+            },
+            "title": "Passages",
+            "type": "array"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "text_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Format"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "verse": {
+            "title": "Verse",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "book",
+          "chapter",
+          "verse",
+          "reference",
+          "translation",
+          "type",
+          "char_offset",
+          "marker",
+          "ordinal",
+          "snippet",
+          "label",
+          "title",
+          "text_format",
+          "passages",
+          "image"
+        ],
+        "title": "NoteSearchHit",
+        "type": "object"
+      },
+      "NoteSearchResponse": {
+        "description": "A page of note-search results: the echoed filter state, total count, and hits.\n``translation``, ``type``, and ``book`` echo the optional filters (null when unset). No notes\nloaded (the public image) or no matches returns ``total: 0`` / ``hits: []`` (200), not an\nerror.",
+        "properties": {
+          "book": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/NoteSearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "translation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "query",
+          "translation",
+          "type",
+          "book",
+          "limit",
+          "offset",
+          "total",
+          "hits"
+        ],
+        "title": "NoteSearchResponse",
+        "type": "object"
+      },
+      "NotesResponse": {
+        "description": "A passage's translator's notes. ``verse`` echoes the ``?verse`` filter (null when the\nwhole chapter was requested). A known translation with no notes returns ``notes: []`` (200),\nnot an error \u2014 the published image ships zero notes.",
+        "properties": {
+          "book": {
+            "title": "Book",
+            "type": "string"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/TranslatorNote"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "string"
+          },
+          "verse": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verse"
+          }
+        },
+        "required": [
+          "translation",
+          "book",
+          "chapter",
+          "verse",
+          "total",
+          "notes"
+        ],
+        "title": "NotesResponse",
+        "type": "object"
+      },
       "SemanticHealth": {
         "description": "Semantic-search readiness: the embedded translation, vector count, model, and dim.",
         "properties": {
@@ -118,6 +444,206 @@
           "enabled"
         ],
         "title": "SemanticHealth",
+        "type": "object"
+      },
+      "Translation": {
+        "description": "A loaded translation's catalog metadata. ``note_count`` is the number of notes loaded for\nit (0 when none) \u2014 a client offers any translation with notes as a notes source.",
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note_count": {
+            "title": "Note Count",
+            "type": "integer"
+          },
+          "versification": {
+            "title": "Versification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "language",
+          "direction",
+          "versification",
+          "attribution",
+          "note_count"
+        ],
+        "title": "Translation",
+        "type": "object"
+      },
+      "TranslationsResponse": {
+        "description": "All loaded translations.",
+        "properties": {
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Translation"
+            },
+            "title": "Translations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "translations"
+        ],
+        "title": "TranslationsResponse",
+        "type": "object"
+      },
+      "TranslatorNote": {
+        "description": "One translator's note: its canonical anchor, the point ``char_offset`` a client uses to\nplace the marker, and the note's own cross-references. ``type`` is one of tn, sn, tc, map,\nother, article, chart, or null. The v8 fields (ADR-0011) follow: the source's ``label`` for\nthe kind, a ``title``, ``text_format`` (``\"markdown\"`` or null for plain text; Markdown may\ncarry ``ref:`` links), the ``passages`` covered, and ``image`` (reserved, always null) \u2014\nnull or empty when a source doesn't use them.",
+        "properties": {
+          "book": {
+            "title": "Book",
+            "type": "string"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "char_offset": {
+            "title": "Char Offset",
+            "type": "integer"
+          },
+          "cross_references": {
+            "items": {
+              "$ref": "#/components/schemas/NoteCrossReference"
+            },
+            "title": "Cross References",
+            "type": "array"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/NotePassage"
+            },
+            "title": "Passages",
+            "type": "array"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "text_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Format"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "verse": {
+            "title": "Verse",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "book",
+          "chapter",
+          "verse",
+          "reference",
+          "type",
+          "text",
+          "char_offset",
+          "marker",
+          "ordinal",
+          "cross_references",
+          "label",
+          "title",
+          "text_format",
+          "passages",
+          "image"
+        ],
+        "title": "TranslatorNote",
         "type": "object"
       },
       "ValidationError": {
@@ -498,6 +1024,7 @@
             }
           },
           {
+            "description": "Note type filter: one of tn, sn, tc, map, other, article, chart.",
             "in": "query",
             "name": "type",
             "required": false,
@@ -510,6 +1037,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Note type filter: one of tn, sn, tc, map, other, article, chart.",
               "title": "Type"
             }
           },
@@ -557,7 +1085,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NoteSearchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1552,7 +2082,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1671,7 +2203,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotesResponse"
+                }
               }
             },
             "description": "Successful Response"

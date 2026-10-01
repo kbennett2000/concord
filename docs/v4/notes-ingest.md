@@ -56,7 +56,16 @@ One file per translation. The loader (`bible_core.notes`) reads every `*.json` d
       "cross_references": [      // optional — references THIS note carries
         { "book": "ROM", "chapter": 8, "verse_start": 1, "verse_end": null }
         // verse_end null = single verse; otherwise a range (>= verse_start)
+      ],
+      // --- optional v8 fields (ADR-0011); NET uses none of them ---
+      "label": "Study Note",     // optional — the source's own name for the kind, for display
+      "title": "Love for the world", // optional — the item's heading
+      "text_format": "markdown", // optional — "markdown" when text is Markdown; omit = plain text
+      "passages": [              // optional — ranges covered beyond the anchor, in the same book
+        { "start_chapter": 3, "start_verse": 16, "end_chapter": 3, "end_verse": 21 }
+        // a range may cross chapters; a note may have several
       ]
+      // "image" is reserved for charts until the images slice (V8-S4): omit it or use null
     }
   ]
 }
@@ -69,10 +78,24 @@ Notes on the contract:
   translation-specific because `char_offset` indexes into *that translation's* verse text.
 - The anchor is a **point** (`char_offset`), not a span — a marker renders at a position
   (SPEC v4 §4).
-- `note_type` is a **constrained set** (`tn`/`sn`/`tc`/`map`/`other`); omit it for a plain
-  footnote (stored as `NULL`).
-- The loader **fails loudly** (`LoaderError`) on malformed input: unknown translation, unknown
-  book, bad note type, empty text, negative `char_offset`, or invalid JSON.
+- `note_type` is a **constrained set** (`tn`/`sn`/`tc`/`map`/`other`, plus `article` and `chart`
+  for v8 study Bibles); omit it for a plain footnote (stored as `NULL`).
+- **The v8 fields are optional** ([ADR-0011](../adr/ADR-0011-v8-note-fields.md)). The API returns
+  them as `null` (or `[]` for `passages`) when a source doesn't use them.
+  - `label` and `title` must be non-empty strings.
+  - `text_format` accepts only `"markdown"`.
+  - A passage's four numbers are ≥ 1, and its end is not before its start.
+- **References inside Markdown text** are `ref:` links: `[see John 3:16](ref:JHN.3.16)`. The target
+  is a USFM book code plus `.C`, `.C-C`, `.C.V`, `.C.V-V` or `.C.V-C.V`; ADR-0011 has the exact
+  grammar.
+- The loader **fails loudly** (`LoaderError`) on malformed input, naming the file and note:
+  - unknown translation or unknown book;
+  - bad note type, empty text or negative `char_offset`;
+  - invalid JSON;
+  - an empty `label` or `title`, or a `text_format` other than `"markdown"`;
+  - a malformed or backwards passage;
+  - any `image` value;
+  - a `ref:` target outside the grammar.
 - The load is **idempotent** — note ids are assigned deterministically (files in sorted-path
   order, notes in array order), so the same inputs produce a byte-identical `bible.db`.
 

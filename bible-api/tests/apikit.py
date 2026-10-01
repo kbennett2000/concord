@@ -254,6 +254,21 @@ def build_corpus(path: Path) -> None:
         "(note_id, to_book_id, to_chapter, to_verse_start, to_verse_end) VALUES (?, ?, ?, ?, ?)",
         note_cross_refs,
     )
+    # A v8 note (ADR-0011) carrying every new field, in a chapter no other test reads (GEN 12):
+    # an article with a label, a title, Markdown text with ref: links, and two passages (one
+    # crossing chapters). The rows above leave the new columns NULL — the NET-like case.
+    conn.execute(
+        "INSERT INTO translator_notes (id, translation_id, book_id, chapter, verse, note_type, "
+        "text, char_offset, marker, ordinal, label, title, text_format, image) "
+        "VALUES (7, 'KJV', 'GEN', 12, 10, 'article', ?, 0, NULL, 1, 'Made-up Series', "
+        "'A Made-up Title', 'markdown', NULL)",
+        ("A made-up *feature* on [the famine](ref:GEN.12.10-20) and [chapter 20](ref:GEN.20).",),
+    )
+    conn.executemany(
+        "INSERT INTO note_passages (note_id, start_chapter, start_verse, end_chapter, end_verse) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [(7, 12, 10, 12, 20), (7, 20, 1, 21, 3)],
+    )
     conn.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
 
     # Deterministic section headings for the headings endpoint tests. WEB carries headings on

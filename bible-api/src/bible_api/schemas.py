@@ -150,9 +150,24 @@ class NoteCrossReference(BaseModel):
     reference: str
 
 
+class NotePassage(BaseModel):
+    """A canonical range a note covers beyond its anchor verse, in the note's own book (v8,
+    ADR-0011). ``reference`` is the human form (``"Genesis 12:10-20"``)."""
+
+    start_chapter: int
+    start_verse: int
+    end_chapter: int
+    end_verse: int
+    reference: str
+
+
 class TranslatorNote(BaseModel):
     """One translator's note: its canonical anchor, the point ``char_offset`` a client uses to
-    place the marker, and the note's own cross-references."""
+    place the marker, and the note's own cross-references. ``type`` is one of tn, sn, tc, map,
+    other, article, chart, or null. The v8 fields (ADR-0011) follow: the source's ``label`` for
+    the kind, a ``title``, ``text_format`` (``"markdown"`` or null for plain text; Markdown may
+    carry ``ref:`` links), the ``passages`` covered, and ``image`` (reserved, always null) —
+    null or empty when a source doesn't use them."""
 
     book: str
     chapter: int
@@ -164,6 +179,11 @@ class TranslatorNote(BaseModel):
     marker: str | None
     ordinal: int
     cross_references: list[NoteCrossReference]
+    label: str | None
+    title: str | None
+    text_format: str | None
+    passages: list[NotePassage]
+    image: str | None
 
 
 class NotesResponse(BaseModel):
@@ -205,7 +225,7 @@ class HeadingsResponse(BaseModel):
 class NoteSearchHit(BaseModel):
     """One note-search match: the note's canonical anchor, owning translation, and a highlighted
     snippet of its body. The note's own ``cross_references`` are omitted for leanness — fetch the
-    full note via the passage read (SPEC v5 §4)."""
+    full note via the passage read (SPEC v5 §4). The v8 fields follow, as on ``TranslatorNote``."""
 
     book: str
     chapter: int
@@ -217,6 +237,11 @@ class NoteSearchHit(BaseModel):
     marker: str | None
     ordinal: int
     snippet: str
+    label: str | None
+    title: str | None
+    text_format: str | None
+    passages: list[NotePassage]
+    image: str | None
 
 
 class NoteSearchResponse(BaseModel):
@@ -252,7 +277,8 @@ class BooksResponse(BaseModel):
 
 
 class Translation(BaseModel):
-    """A loaded translation's catalog metadata."""
+    """A loaded translation's catalog metadata. ``note_count`` is the number of notes loaded for
+    it (0 when none) — a client offers any translation with notes as a notes source."""
 
     id: str
     name: str
@@ -260,6 +286,7 @@ class Translation(BaseModel):
     direction: str
     versification: str
     attribution: str | None
+    note_count: int
 
 
 class TranslationsResponse(BaseModel):

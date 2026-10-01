@@ -23,6 +23,17 @@ def note_xref(
     }
 
 
+def note_passage(
+    start_chapter: int, start_verse: int, end_chapter: int, end_verse: int
+) -> dict[str, Any]:
+    return {
+        "start_chapter": start_chapter,
+        "start_verse": start_verse,
+        "end_chapter": end_chapter,
+        "end_verse": end_verse,
+    }
+
+
 def note(
     book: str,
     chapter: int,
@@ -34,9 +45,13 @@ def note(
     marker: str | None = None,
     ordinal: int | None = None,
     cross_references: list[dict[str, Any]] | None = None,
+    label: str | None = None,
+    title: str | None = None,
+    text_format: str | None = None,
+    passages: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One note in the input shape. Optional fields are omitted when None, so the loader's
-    defaulting (NULL type, char_offset 0, per-verse ordinal) is exercised."""
+    defaulting (NULL type, char_offset 0, per-verse ordinal, no v8 fields) is exercised."""
     payload: dict[str, Any] = {"book": book, "chapter": chapter, "verse": verse, "text": text}
     if type is not None:
         payload["type"] = type
@@ -48,6 +63,8 @@ def note(
         payload["ordinal"] = ordinal
     if cross_references is not None:
         payload["cross_references"] = cross_references
+    optional = {"label": label, "title": title, "text_format": text_format, "passages": passages}
+    payload.update({k: v for k, v in optional.items() if v is not None})
     return payload
 
 

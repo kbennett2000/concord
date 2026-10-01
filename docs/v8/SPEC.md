@@ -63,20 +63,20 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 
 ## 4. Data model (all additive)
 
-**4.1 Text — `data/private/EMB.json`.** The existing translation contract, unchanged: code `EMB`, name `Every Man's Bible (NLT)`, language `en`, `copyright` = the book's own copyright-page lines. `*` markers are removed from verse text; their positions become textual-note offsets (S2) — S1 records them in `data/private/work/EMB/markers.json` (book, chapter, verse, offset, where: verse / title / heading / chapter, target page, order in chapter; 4,817). A combined verse is stored under its first number and the other numbers are absent (honest absence: `null` in parallel reads). As S1 settled:
+**4.1 Text — `data/private/EMB.json`.** The existing translation contract, unchanged: code `EMB`, name `Every Man's Bible (NLT)`, language `en`, `copyright` = the book's own copyright-page lines. `*` markers are removed from verse text; their positions become textual-note offsets (S2b) — S1 records them in `data/private/work/EMB/markers.json` (book, chapter, verse, offset, where: verse / title / heading / chapter, target page, order in chapter; 4,817). A combined verse is stored under its first number and the other numbers are absent (honest absence: `null` in parallel reads). As S1 settled:
 - **Psalm titles** are prefixed to verse 1, as in WEB, KJV, ASV, BSB, JPS, YLT, ESV and NKJV, so parallel reads line up.
 - **Ps 119's stanza labels and Song of Songs' speaker labels** are section headings (editorial, not Scripture). Interlude, refrains and italic book titles stay verse text.
 - **Mid-verse headings** (23, e.g. Gen 2:4, Obad 1:1, five Song of Songs speaker labels) attach before the verse they interrupt: `before_verse` has no mid-verse position, so a speaker label can sit above words the previous speaker says. A known limit of the headings contract.
 - **Tables** — cells joined " - ", header rows dropped (§3).
 
-**4.2 Notes — `data/private/notes/EMB.json` (ADR-0011, S2).** The v4 contract plus appended, optional fields:
+**4.2 Notes — `data/private/notes/EMB.json` (ADR-0011: contract S2a, data S2b).** The v4 contract plus appended, optional fields:
 - `label` — the source's own name for the kind ("Textual Note", "Study Note", "Men, Women, and God", …, "Chart"). Clients show it; `type` stays the coarse class.
 - `title` — the item's heading, where it has one.
 - `text_format` — `"markdown"` when `text` is Markdown (paragraphs, italics, bold, lists, quotes); absent means plain text (NET is unchanged).
-- `passages` — the canonical ranges the note covers, when that is more than its anchor verse. A note on "Genesis 12:10-20 and chapter 20" has two.
-- `image` — an image name (§4.4), for charts.
+- `passages` — the canonical ranges the note covers, when that is more than its anchor verse. A note on "Genesis 12:10-20 and chapter 20" has two. **As S2a settled:** each is `{start_chapter, start_verse, end_chapter, end_verse}` in the note's own book. A range may cross chapters, a whole chapter is written with its last verse, and the response adds a `reference`.
+- `image` — an image name (§4.4), for charts. **Reserved in S2a:** always `null`, and the loader rejects a value until S4 adds images.
 - The `type` set gains `article` (the five features) and `chart`. Textual notes are `tn`, study notes `sn`.
-- **Where the marker goes:** a textual note at its `*`; a study note at the start of its first verse; a feature or chart where the book puts its callout. A feature the book calls out more than once shows at each callout; one it never calls out anchors at the start of its first passage (S3's plan checks both against the data). References the book links inside a note become `cross_references`, or `ref:` links in the Markdown (grammar in ADR-0011).
+- **Where the marker goes:** a textual note at its `*`; a study note at the start of its first verse; a feature or chart where the book puts its callout. A feature the book calls out more than once shows at each callout; one it never calls out anchors at the start of its first passage (S3's plan checks both against the data). References the book links inside a note become `cross_references`, or `ref:` links in the Markdown. ADR-0011 gives the grammar: `[text](ref:JHN.3.16)` with the forms `BOOK.C`, `BOOK.C-C`, `BOOK.C.V`, `BOOK.C.V-V` and `BOOK.C.V-C.V`. Each maps onto a reference `/v1/verses/{ref}` accepts, and the loader rejects a malformed target in a Markdown note.
 
 **4.3 Documents — `data/private/documents/EMB.json` (ADR-0012, S5).** New table `translation_documents`: `slug`, `kind` (`book-introduction`, `front-matter`, `reading-plan`, `about`), `title`, `book` (book introductions only), `ordinal`, Markdown `text`, and the image names it uses. References inside the text are `ref:` links.
 
@@ -86,8 +86,8 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 
 ## 5. Endpoints (appended fields per ADR-0009, plus new paths)
 
-- `GET /v1/translations` — each entry gains `note_count` (S2) and `document_count` (S5). songbird offers any translation with `note_count > 0` as a notes source.
-- `GET /v1/translations/{t}/notes/{book}/{chapter}` and `GET /v1/notes/search` — notes gain the §4.2 fields (null or empty when absent). Paths unchanged.
+- `GET /v1/translations` — each entry gains `note_count` (S2a) and `document_count` (S5). songbird offers any translation with `note_count > 0` as a notes source.
+- `GET /v1/translations/{t}/notes/{book}/{chapter}` and `GET /v1/notes/search` — notes gain the §4.2 fields (null or empty when absent), appended after the existing keys in the order `label, title, text_format, passages, image` (S2a). Paths unchanged. These two endpoints and `/v1/translations` now declare their bodies in `docs/openapi.json`.
 - `GET /v1/translations/{t}/documents` (`?book=`, `?kind=`) — summaries. `GET /v1/translations/{t}/documents/{slug}` — one document. (S5)
 - `GET /v1/translations/{t}/assets/{name}` — the image bytes, their content type, an immutable ETag. (S4)
 - `GET /v1/topics*` — topics gain `source`; `/v1/topics` gains `?source=`. (S6)
@@ -108,7 +108,8 @@ Each slice ends with Kris able to use the result. songbird's matching slices (it
 |---|---|---|---|
 | V8-S1 | The text | This spec; the converter foundation; `EMB.json` (verses + headings); the PDF-vs-EPUB cross-check; the user-flow doc; EMB live in Kris's Concord | EMB in songbird's translation menu, reading cleanly |
 | V8-S1b | Faster private rebuilds | The embeddings get their own Docker stage keyed on the WEB verse list; `make docker-build-private` (temporary `Dockerfile.dockerignore`, always deleted); guards that every committed `*.dockerignore` excludes `data/private/` | A private rebuild after a converter or data change in about a minute, not ~32 |
-| V8-S2 | Textual + study notes | ADR-0011 (§4.2 fields, two new types, `note_count`); the converter emits textual and study notes | EMB's footnotes and study notes in songbird's reader |
+| V8-S2a | Notes contract | ADR-0011: the §4.2 fields, `article` and `chart`, `note_count`, the `ref:` grammar; schema, loader validation, queries and API; the three bodies in `docs/openapi.json`. No converter, no deploy | — (nothing a user sees changes yet) |
+| V8-S2b | Textual + study notes | The converter emits EMB's textual and study notes; deploy | EMB's footnotes and study notes in songbird's reader |
 | songbird A | Notes from any source | Per-translation "show notes from" choices replacing the NET-only checkbox (an existing NET choice is kept); labels, titles, passages, Markdown | EMB notes on every other translation, like NET's |
 | V8-S3 | Features | The converter emits the five feature types | Features in the reader, on any translation |
 | V8-S4 | Images + charts | ADR-0012 (images): table, endpoint; charts and reading-time figures | Chart notes resolve to images |
