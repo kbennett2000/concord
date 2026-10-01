@@ -36,7 +36,9 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 # --- Pytest ------------------------------------------------------------------
 # One `pytest` run from the repo root covers both packages' test suites.
 [tool.pytest.ini_options]
-testpaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests"]
+testpaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests", "scripts/tests"]
+# scripts/ holds the v8 converter package (emb_convert), imported by its tests.
+pythonpath = ["scripts"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: slow/integration tests, excluded from the default run (CLAUDE.md)",
@@ -57,7 +59,10 @@ include = [
     "bible-api/tests",
     "bible-semantic/src",
     "bible-semantic/tests",
+    "scripts/emb_convert",
+    "scripts/convert_emb.py",
+    "scripts/tests",
 ]
 # Let tests import sibling test-helper modules (e.g. bible-core/tests/loaderkit.py),
 # matching pytest's prepend import mode at runtime.
-extraPaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests"]
+extraPaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests", "scripts", "scripts/tests"]
