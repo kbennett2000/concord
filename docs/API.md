@@ -14,6 +14,15 @@ original-language texts — the SBL Greek New Testament (`SBLGNT`) and the Hebre
   Unicode, editorial brackets (`[is]`), and punctuation are preserved untouched. The one
   exception is a translation's images, which come back as their own bytes
   ([assets](#get-v1translationstranslationassetsname)).
+- **A study Bible you own (v8):** the notes' `label`, `title`, `text_format`, `passages` and
+  `image` fields, a translation's [images](#get-v1translationstranslationassetsname) and
+  [documents](#get-v1translationstranslationdocuments), and a second topical source beside Nave's
+  are served only once an operator bakes their own data in under the gitignored `data/private/`
+  ([emb-ingest](v8/emb-ingest.md)). The published image carries none of it, so there they answer
+  empty: every `note_count` and `document_count` is `0`, notes and documents are `200` with an
+  empty list, an image name is a `404`, and `/v1/topics` lists Nave's alone. Examples for a
+  translation's notes, images and documents come from such a private build (`NET`, `EMB`), with
+  the book's own words left out (`…`).
 
 ## Contents
 
@@ -91,6 +100,9 @@ Every error uses one envelope:
 | `no_verses_found` | 404 | A well-formed reference matches no verse in any requested translation (e.g. `Genesis 999:1`). |
 | `no_match` | 404 | `/random` filters match nothing (e.g. `book=GEN&testament=NT`). |
 | `unknown_place` | 404 | A place id in a path resolves to no place (`/places/nope`). `detail.place_id` echoes it. |
+| `unknown_journey` | 404 | A journey id in a path resolves to no journey (`/journeys/nope`). `detail.journey_id` echoes it. |
+| `unknown_topic` | 404 | A topic id in a path resolves to no topic (`/topics/nope`). `detail.topic_id` echoes it. |
+| `unknown_strongs` | 404 | A Strong's number in a path resolves to no lexicon entry (`/strongs/G99999`). `detail.strongs_id` echoes it. |
 | `unknown_asset` | 404 | A loaded translation has no image by that name (`/translations/EMB/assets/nope.jpg`). `detail` echoes `translation` and `name`. |
 | `unknown_document` | 404 | A loaded translation has no document by that slug (`/translations/EMB/documents/nope`). `detail` echoes `translation` and `slug`. |
 | `unknown_type` | 400 | A `/places?type=` filter value isn't a known place type; `detail.available` lists the valid types. |
@@ -653,8 +665,9 @@ anchored to a point in the verse text, each with its own cross-references. Order
 then `ordinal`.
 
 > **Notes are user-supplied and never shipped.** The published image contains **zero** notes
-> (the richest source, NET, is copyrighted — see [notes-ingest](v4/notes-ingest.md)), so on a
-> stock image this endpoint returns `200` with an empty list for every translation. A note set
+> (the richest sources, NET's notes and a study Bible's, are copyrighted — see
+> [notes-ingest](v4/notes-ingest.md) and [emb-ingest](v8/emb-ingest.md)), so on a stock image
+> this endpoint returns `200` with an empty list for every translation. A note set
 > appears only after a user bakes their own legally-obtained notes into `bible.db` locally.
 >
 > **To supply your own:** drop a `<TRANSLATION>.json` file into the gitignored
@@ -1252,7 +1265,7 @@ $ curl -s 'localhost:8000/healthz'
 ```json
 {
   "status": "ok",
-  "translation_count": 14, "verse_count": 412806, "cross_ref_count": 344799, "book_count": 66,
+  "translation_count": 15, "verse_count": 435951, "cross_ref_count": 344799, "book_count": 66,
   "place_count": 1340,
   "semantic": {
     "enabled": true, "translation": "WEB", "embedding_count": 31054,

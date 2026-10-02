@@ -109,7 +109,7 @@ rest are below.
 
 ## What's in the box
 
-Twenty-seven endpoints. Each is documented in full — with real request/response examples — in
+Thirty endpoints. Each is documented in full — with real request/response examples — in
 [`docs/API.md`](docs/API.md).
 
 | Endpoint | What it does |
@@ -128,8 +128,11 @@ Twenty-seven endpoints. Each is documented in full — with real request/respons
 | `GET /v1/places/{id}/journeys` | The journeys that pass through a place (the reverse lookup). |
 | `GET /v1/translations/{translation}/notes/{book}/{chapter}` | Translator's, study, and text-critical notes for a passage — user-supplied, never shipped in the public image. |
 | `GET /v1/notes/search` | Keyword search over translator's notes — user-supplied, never shipped in the public image. |
+| `GET /v1/translations/{translation}/documents` | A translation's documents — a study Bible's book introductions, front matter, reading plan — user-supplied, never shipped in the public image. |
+| `GET /v1/translations/{translation}/documents/{slug}` | One document in full: Markdown with links into the Bible and the images it places. |
+| `GET /v1/translations/{translation}/assets/{name}` | One of a translation's images (a chart, a figure), as its own bytes — user-supplied, never shipped in the public image. |
 | `GET /v1/translations/{translation}/headings/{book}/{chapter}` | The section headings that anchor a chapter ("The Creation", "The Beatitudes"), per translation. |
-| `GET /v1/topics` | Browse topical-Bible subjects (Nave's), filtered by name or section. |
+| `GET /v1/topics` | Browse topical-Bible subjects in one A–Z list (Nave's, plus any source you load privately), filtered by name, section, or source. |
 | `GET /v1/topics/{id}` | One topic's detail — its verse count and any "see also" redirect. |
 | `GET /v1/topics/{id}/verses` | The verses curated under a topic, optionally with text. |
 | `GET /v1/verses/{ref}/topics` | The topics a verse or passage appears under. |
@@ -200,9 +203,11 @@ curl 'localhost:8000/v1/verses/Philippians%204:6/topics' # Care, Prayer, Thankfu
 ```
 
 Nave's own "See X" cross-references are preserved: a redirect topic carries a `see_also` pointer
-and no verses of its own (so `anxiety` points you to `care`, where the verses live). The full
-parameters — name/section filters, pagination, and `include_text` — are in
-[`docs/API.md`](docs/API.md).
+and no verses of its own (so `anxiety` points you to `care`, where the verses live). Every topic
+names its `source`, and topics list in **one A–Z order**, ignoring case, so on your own build a
+study Bible's topical index sits beside Nave's in one alphabet (see
+[Your own study Bible](#your-own-study-bible)). The full parameters — name/section/source filters,
+pagination, and `include_text` — are in [`docs/API.md`](docs/API.md).
 
 ### Word study
 
@@ -253,6 +258,44 @@ route itself: each journey is **one commonly proposed reconstruction**, carrying
 `note` saying so, dated as a whole. Competing routes, route variants, and segment-level dating are
 deliberately out of scope. The itineraries follow the biblical narrative; the link runs **both
 ways** (`/v1/places/{id}/journeys` is the reverse). Full parameters are in [`docs/API.md`](docs/API.md).
+
+### Your own study Bible
+
+Concord v8 lets you serve a **study Bible you own** — its translation text and everything printed
+around it — through the same API, kept on your own machine. A study Bible is copyrighted, so
+Concord ships the *capability*, never the *content*: you supply the data under the gitignored
+`data/private/`, it is baked only into **your** `bible.db` and **your** image, and **the
+published image carries none of it.**
+
+What a study Bible's data adds, every piece optional and appended to the existing `/v1` shapes:
+
+- **The text** is an ordinary translation: every verse, chapter, search and topic endpoint reads it.
+- **Notes with more to say.** Each note can carry a `label` (the source's own name for the kind,
+  such as "Study Note" or "Chart"), a `title`, `text_format: "markdown"` (Markdown with `ref:` links
+  a client can jump to), the `passages` it covers beyond its anchor verse, and an `image`. Two new
+  note types, `article` (a feature series) and `chart`, join `tn`/`sn`/`tc`/`map`.
+  `GET /v1/translations` gives each translation's `note_count` and `document_count`.
+- **Images**: a chart or figure, served as its own bytes from
+  `GET /v1/translations/{translation}/assets/{name}`, baked into `bible.db` like everything else.
+- **Documents**: what is tied to a whole book or to no verse — book introductions, front matter, a
+  reading plan, notes about the edition — from `GET /v1/translations/{translation}/documents`, as
+  Markdown with `ref:` links and the images it places.
+- **Private topics and sources**: a study Bible's topical index loads beside Nave's (from
+  `data/private/topics/`). Every topic carries its `source`, `GET /v1/topics?source=` pages one
+  source, and each page lists every loaded source with its count in `sources`.
+
+Build your own image with `make docker-build-private` — it bakes `data/private/` in, for your LAN
+only, and never pushes. The repo ships a converter for one study Bible, the **Every Man's Bible
+(NLT)**, that reads **your own copy** of the book and writes everything under `data/private/`:
+[`docs/v8/emb-ingest.md`](docs/v8/emb-ingest.md). The file contracts are in
+[`docs/v4/notes-ingest.md`](docs/v4/notes-ingest.md),
+[`docs/v8/documents-ingest.md`](docs/v8/documents-ingest.md) and
+[`docs/v8/topics-ingest.md`](docs/v8/topics-ingest.md). Only load data you have the legal right
+to use.
+
+On the published image, these endpoints simply answer with nothing private: every `note_count`
+and `document_count` is `0`, notes and documents come back as `200` with an empty list, an image
+name is a `404`, and `/v1/topics` lists Nave's alone.
 
 ## Configuration
 
@@ -306,8 +349,8 @@ immediately ready and identical to every other container built from the same sou
 can skip the ~20-min build entirely and just pull it (no auth required):
 
 ```bash
-docker pull ghcr.io/kbennett2000/concord:v1.2.0     # or :latest
-docker run -d -p 8000:8000 ghcr.io/kbennett2000/concord:v1.2.0
+docker pull ghcr.io/kbennett2000/concord:v1.3.0     # or :latest
+docker run -d -p 8000:8000 ghcr.io/kbennett2000/concord:v1.3.0
 curl localhost:8000/healthz
 ```
 
@@ -422,8 +465,9 @@ runtime.
 
 ## What Concord doesn't do (yet)
 
-Concord is deliberately scoped. Semantic search landed in v2, geography in v3, and a curated
-journeys layer in v7; a few things still haven't made a release, on purpose:
+Concord is deliberately scoped. Semantic search landed in v2, geography in v3, a curated
+journeys layer in v7, and private study Bibles in v8; a few things still haven't made a release,
+on purpose:
 
 - **Competing routes for the journeys.** The curated journeys (Paul's missionary journeys, the
   Exodus) shipped in v7 as **one commonly proposed reconstruction each** — ordered sequences of
@@ -442,14 +486,15 @@ journeys layer in v7; a few things still haven't made a release, on purpose:
   search is already translation-agnostic: it ranks verse *references* in one meaning-space (WEB) and
   renders them in whatever translation you ask for, so "search all translations" has no meaning for
   it. (Keyword multi-translation search *did* ship in v5 — see `GET /v1/search?translations=`.)
-- **Ship translator's notes.** The notes endpoint
-  (`GET /v1/translations/{translation}/notes/{book}/{chapter}`) is fully wired and live, but
-  the public image ships **zero** notes — the richest source (NET) is copyrighted, and notes
-  are user-supplied by design. So on a stock image this endpoint returns `200` with an empty
-  list for every translation. To populate it, bake your own legally-obtained notes in via the
-  gitignored `data/private/notes/` directory — see
+- **Ship translator's notes or a study Bible's content.** The notes, documents and images
+  endpoints are fully wired and live, and topics take more than one source, but the public image
+  ships **zero** notes, documents and images, and Nave's as its only topical source — the richest
+  sources (NET's notes, a study Bible) are copyrighted, and this content is user-supplied by
+  design. So on a stock image the notes and documents endpoints return `200` with an empty list
+  for every translation. To populate them, bake your own legally-obtained data in via the
+  gitignored `data/private/` directory — see [Your own study Bible](#your-own-study-bible),
   [`docs/API.md`](docs/API.md#get-v1translationstranslationnotesbookchapter) and
-  [`examples/notes-sample.json`](examples/notes-sample.json) for the file shape.
+  [`examples/notes-sample.json`](examples/notes-sample.json) for the notes file shape.
 
 If any of these would unblock a project of yours, open an issue and say so — it shapes what
 gets built next.

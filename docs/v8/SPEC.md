@@ -180,7 +180,8 @@ Each slice ends with Kris able to use the result. songbird's matching slices (it
 | V8-S6a | Topics contract | ADR-0013: the private topics path, `source` on every topic, `?source=` and `sources`, the shared id/section rules; `docs/openapi.json`. No converter, no deploy. (V8-S6 split in two — Kris's call, 2 Oct 2026.) | — (nothing a user sees changes yet) |
 | V8-S6b | Verse Finder | The converter emits the Verse Finder as a second topical source and as an EMB document (its statements and pointers); the Perspectives boxes' quotation and saying in italics; deploy | Verse Finder topics beside Nave's |
 | songbird D | Topics by source | The Topics page and verse topics show the source, with a filter | Verse Finder beside Nave's |
-| V8-S7 | Release | README, `docs/API.md`, OpenAPI, version bump, release notes | Published image — still zero EMB content |
+| V8-S7a | Topics in one A–Z order | `/v1/topics` and `/v1/verses/{ref}/topics` order by name ignoring case, then id (ADR-0013, amended): one alphabet across sources; Nave's moves in one place; deploy. (V8-S7 split in two — Kris's call, 2 Oct 2026.) | Verse Finder and Nave's topics in one A–Z list |
+| V8-S7b | Release v1.3.0 | Version bump; README, `docs/API.md`, `CLAUDE.md`, OpenAPI; release notes (`docs/releases/v1.3.0.md`); the pre-release gate on a public-image-equivalent build | Published image `v1.3.0` — still zero EMB content |
 
 ## 8. Out of scope
 
