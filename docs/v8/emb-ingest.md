@@ -14,9 +14,10 @@ your **local** `bible.db`. The published image ships **zero** EMB content.
 This page covers the **text** (verses and section headings, V8-S1), the **textual and study
 notes** (V8-S2b), all five **features**: the articles the text calls out at a passage — Men,
 Women, and God; Someone You Should Know; Personal Gold (V8-S3a) — and What the Bible Says About
-and Perspectives (V8-S3b), the **charts** with their images (V8-S4b), and the 66 **book
-introductions** with their reading-time figures, as documents (V8-S5b). The front matter, the
-Personal Gold author notes, the reading plan and the Verse Finder follow in later slices (SPEC §7).
+and Perspectives (V8-S3b), the **charts** with their images (V8-S4b), the 66 **book
+introductions** with their reading-time figures (V8-S5b), and the **front matter**, the **One
+Year Reading Plan** and **Personal Gold's author notes and credits** (V8-S5c), as documents. The
+Verse Finder follows in a later slice (SPEC §7).
 
 ## The user flow
 
@@ -38,12 +39,13 @@ Personal Gold author notes, the reading plan and the Verse Finder follow in late
    code is non-zero.
 5. **Rebuild** Concord: `make build-db` for a local run, or `make docker-build-private` for your
    own Docker image (below). The build summary then counts one more translation, EMB's notes,
-   its 110 images (assets: 44 charts and 66 reading-time figures) and its 66 documents.
+   its 110 images (assets: 44 charts and 66 reading-time figures) and its 73 documents (66 book
+   introductions, 5 front-matter pieces, the reading plan and Personal Gold's authors).
 6. **Served.** `EMB` appears in `GET /v1/translations` as "Every Man's Bible (NLT)", with its
    `note_count`, and reads through every existing endpoint; its notes through
    `/v1/translations/EMB/notes/{book}/{chapter}` and `/v1/notes/search`; a chart's image through
-   `/v1/translations/EMB/assets/{name}`, the name its note gives in `image`; the book
-   introductions through `/v1/translations/EMB/documents` (`?book=`, `?kind=`) and
+   `/v1/translations/EMB/assets/{name}`, the name its note gives in `image`; the documents
+   through `/v1/translations/EMB/documents` (`?book=`, `?kind=`) and
    `/v1/translations/EMB/documents/{slug}` ([documents-ingest](documents-ingest.md)).
 
 The same PDF always gives byte-identical output, so re-running is safe.
@@ -54,7 +56,7 @@ The same PDF always gives byte-identical output, so re-running is safe.
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
 | `data/private/notes/EMB.json` | Its textual and study notes, its five features and its charts: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
-| `data/private/documents/EMB.json` | The 66 book introductions: the documents contract (`docs/v8/documents-ingest.md`, ADR-0012) |
+| `data/private/documents/EMB.json` | The 66 book introductions, then the front matter, the reading plan and Personal Gold's authors: the documents contract (`docs/v8/documents-ingest.md`, ADR-0012) |
 | `data/private/assets/EMB/chart-01.jpg` … `chart-44.jpg` | Each chart's image, exactly as the PDF stores it, numbered in the book's order (ADR-0012) |
 | `data/private/assets/EMB/reading-time-gen.jpg` … | Each introduction's reading-time figure, exactly as the PDF stores it, named by its book |
 | `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors |
@@ -64,6 +66,7 @@ The same PDF always gives byte-identical output, so re-running is safe.
 | `data/private/work/EMB/topics-crosscheck.tsv` | Every topic and box cross-check finding by feature, topic number or box passage, and class (local only) |
 | `data/private/work/EMB/charts-crosscheck.tsv` | Each chart's index entry and image against the EPUB's (local only) |
 | `data/private/work/EMB/introductions-crosscheck.tsv` | Every introduction finding by book, section and class (local only) |
+| `data/private/work/EMB/documents-crosscheck.tsv` | Every other document's finding by piece and section, plan day, author note or credit, and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 
 No loader scans `data/private/work/`. Notes on the text:
@@ -155,6 +158,25 @@ Notes on the book introductions (documents, `kind` `book-introduction`; SPEC §4
 - **Topic titles:** three What the Bible Says About titles the index sorts with "The" last read in
   normal word order since V8-S5b.
 
+Notes on the front matter, the reading plan and Personal Gold's authors (documents; SPEC §4.3):
+
+- **The front matter** is five documents, `front-matter-1` … `front-matter-5`, in the book's
+  order: the copyright page (titled "Copyright": the book prints no title on it), then each
+  section the book's outline lists before the Verse Finder, titled as the outline names it.
+  Each is read by its layout: paragraphs and their one-per-line lists; heads, paragraphs,
+  bulleted items (an item's own further paragraph stays inside it) and the signature; centred
+  roles over their names; a team's divisions, groups and people, one per line. Every reference
+  the book links is a `ref:` link. The contents pages and the cover are not copied: a client
+  builds its own contents from the documents.
+- **The reading plan** is one document, `reading-plan-1`: each day a heading (the date as
+  printed) over its four readings, each a `ref:` link a client can open. A reading that runs on
+  into the next book is two links, the text unchanged; a reading ending on part of a verse
+  ("…a") links the whole verse. The plan's month list is navigation and isn't copied.
+- **Personal Gold's authors** is one document, `about-1`: the author index's notes as printed
+  (each author's name in bold), then the Personal Gold index's entries — each excerpt's title,
+  its author, and the credit for the book it is taken from. Each ties to its article; the
+  summary lists the one article whose author has no note.
+
 ## Reading the summary
 
 - **Text** — counts against the S1 targets (✓ or ≠ target): 1,189 chapters, 31,064 verses,
@@ -237,6 +259,21 @@ Notes on the book introductions (documents, `kind` `book-introduction`; SPEC §4
   marked damaged (listed). The same classes and evidence rules; again *fix regressions* and
   *open, EPUB text without damage* must be **0**. The EPUB's re-encoded figures witness only
   whether a figure stands under its caption.
+- **Front matter, reading plan, Personal Gold authors** — the front-matter pieces (5) and what
+  each prints by kind (heads, paragraphs, lists and items, roles and names, divisions, groups and
+  people) and its words; the contents pages and reference sections set aside; the links by
+  evidence; the plan's days (365), readings (1,460) and links (1,465), its readings by shape,
+  those that run into the next book, carry a part-verse letter or end on a verse the NLT omits
+  (listed), and its link pages by evidence; the author notes (23) and credits (24), how many tie
+  to an article, and the article without a note (listed); words and fixes. The checks: five
+  pieces, titled; every line placed; links explained; 365 days of 4 readings; every `ref:`
+  target a real passage; the plan's link pages explained; notes and credits tied; hygiene and
+  Markdown. Any ✗ blocks the write.
+- **Documents cross-check** (with `--epub`) — keyed by front-matter piece and section, plan day,
+  author note and credit, each found in the EPUB by its opening words and ended at its closing
+  words; one found only loosely (words run together, a scrap glued on) is damaged, and one whose
+  opening the EPUB lost runs into the part before it (listed). The same classes and evidence
+  rules; again *fix regressions* and *open, EPUB text without damage* must be **0**.
 - **Charts cross-check** (with `--epub`) — the EPUB's images are re-encoded smaller, so it can't
   witness bytes. Its Charts Index witnesses each title and reference (*agree*, *visible EPUB
   damage*, or *open*, which must be **0**), and its images witness where each chart stands: a

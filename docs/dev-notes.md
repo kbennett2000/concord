@@ -2616,3 +2616,93 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - Matthew 24's notes differ only in one topic's title, now in normal word order. Songbird
       can't show documents until its slice C.
 
+
+### Feature V8-S5c — EMB's front matter, reading plan and Personal Gold authors (private)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s5c-emb-front-matter-plan`). The converter
+  emits the rest of the book's documents (ADR-0012): the front matter, the One Year Reading Plan
+  and Personal Gold's author notes and credits. No contract change.
+- **What landed:**
+  - `scripts/emb_convert/documents.py` (where each stands in the front, read by its links; the
+    Markdown blocks and their checks; the cross-check texts; the EPUB cut),
+    `frontmatter.py` (four readers: the copyright page, prose, roles, people), `readingplan.py`
+    and `pgauthors.py`. `convert.py` appends their documents after the 66 introductions and
+    writes `work/EMB/documents-crosscheck.tsv`; the summary gains a section; the copyright
+    page's rule (`documents.copyright_page`) is shared, unchanged.
+  - `clean.py`: the letter-spacing join leaves printed initials apart ("Q. Z."), as the
+    broken-word check already did — a fix regression the EPUB showed in the team list. No
+    earlier output changes.
+  - 24 synthetic tests in `test_emb_documents.py` and one in `test_emb_notetext.py` (made-up
+    text). A run takes ~2 min 25 s and is byte-identical on re-run: all 121 files compared by
+    sha256.
+- **Unchanged:** `EMB.json`, `markers.json`, `notes/EMB.json` (7,623 notes), the 110 images and
+  the six earlier cross-check TSVs are byte-identical (119 files by sha256); the 66 introductions
+  are the same entries, first in the file and byte for byte.
+- **Where they stand** (pp. 1–308 before Genesis): cover and title images (pp. 1–3, no text),
+  the copyright page (pp. 4–5), the contents (pp. 6–9, set aside), four outline sections
+  (pp. 10–40), the Verse Finder (pp. 41–231, S6's) and the plan (pp. 232–308). A section is told
+  by its links: the plan is the one whose every line but its title is a link, the Verse Finder
+  the one where most lines carry one (87%), the others carry almost none. Nothing else stands in
+  the front. The Personal Gold author index (pp. 7366–7368) prints before the Personal Gold index
+  (pp. 7369–7373), though the outline lists it after.
+- **Front matter** (5 documents, `front-matter-1` … `-5`, in print order):
+  - 1, the copyright page: 17 paragraphs and one list (8 one-per-line lines); 479 words. Titled
+    "Copyright": the book prints no title on it.
+  - 2, prose: 9 heads, 12 paragraphs (one opens a page unindented), the signature; 722 words.
+  - 3, roles: 9 roles (one wraps) over 11 names; 62 words.
+  - 4, prose: 10 heads, 24 paragraphs, 2 bulleted lists (10 + 6 items; 3 items with a paragraph
+    of their own, an indented paragraph inside the item), the signature; 21 links in 18 runs (18
+    agree with the book's own target, 3 named in a run of four that targets the first);
+    4,138 words.
+  - 5, people: a subtitle, 8 division heads, 6 senior members with their school, 30 group labels,
+    132 people (6 wrapped); 708 words.
+  - Titles are the outline's names, checked against the printed titles (one is a suffix of its
+    name, its other title-size line a subtitle).
+- **Reading plan** (`reading-plan-1`): 365 days, 1,460 readings, 1,465 `ref:` links; 12 month
+  links and the dates' back-links set aside; 12 dates in capitals (each month's first day), kept.
+  Shapes: 942 in one chapter, 410 across chapters, 98 verses, 5 one-chapter books, 5 into the
+  next book (GEN 50–EXO 2, LEV 27–NUM 1, NUM 36–DEU 1, DEU 34–JOS 2, JDG 21–RUT 1: two links
+  each); 2 part-verse letters (NEH 7:73a, 7:73b); 1 ending on a verse the NLT omits (MRK 11:1-26,
+  served as 11:1–25). Link pages: 1,416 on the first verse's page, 44 one page off. 3,823 words,
+  61,947 bytes of Markdown.
+- **Personal Gold's authors** (`about-1`): 23 author notes (9 / 16 / 26 words) and 24 credits
+  (14 / 20 / 37); every note and credit ties to one article; the article without a note is index
+  entry #3 (p7378). The article bylines print the author in capitals, one with a title, so a note
+  ties by its link page and by the index's author line, the byline holding the name.
+- **Text fixes, measured:** the italic "k" break on a line that isn't justified (3, the team list:
+  a no-word rest, or a no-word head and a one-letter rest; the notes' rule reads justified lines
+  only); initials kept apart (1); letter-spaced items 4 + 4; line hyphens. The articles'
+  fused-word split is off here: it split a trademark and a college's name (both checked against
+  the EPUB). Web and e-mail addresses pass the punctuation checks as one word.
+- **Cross-check (with `--epub`)**, 442 parts (30 front-matter sections, 365 days, 23 notes, 24
+  credits): 403 agree; 8 fixed PDF quirks (4 letter-spacing, 4 line hyphens); **0 fix
+  regressions**; 26 visible EPUB damage; 3 splices; 2 hyphenation variants; **0 open**; 0 parts
+  lost. The EPUB fused two dates with their day or a scrap (found loosely, marked damaged) and
+  wraps linked author names in bare anchors, leaving a dropped-text mark inside "Name ,": the cut
+  searches the text with the marks taken out.
+- **Plan deviations:**
+  - **Slugs** are `front-matter-<n>`, `reading-plan-1`, `about-1` (kind and number), not taken
+    from titles — titles are book text, and the slugs stay stable.
+  - **Readers** are chosen by layout: a group label in italic capitals marks the list of people
+    (the share of justified lines, tried first, misread short synthetic prose).
+  - **The italic "k" break** and **initials** needed rules of their own (above); the plan
+    expected the notes' fixes to suffice.
+  - **Paragraphs:** 24 in piece 4, not the 27 the census counted (the census counted three item
+    paragraphs as body); one paragraph's short last line reaches the wrap margin, so the
+    paragraph indent, not the wrap, opens a paragraph.
+- **Proof:**
+  - `make build-db` loads 65,876 notes, 110 assets and 73 documents with no error; `bible.db`
+    305,733,632 → 305,848,320 bytes (+0.1 MiB).
+  - A local API on :8077 served:
+    - EMB `document_count` 73, every other field and the other 19 entries equal to the server's;
+    - `?kind=front-matter` 5, `reading-plan` 1, `about` 1, `book-introduction` 66; the list in
+      kind order;
+    - `front-matter-4`, `about-1` and `reading-plan-1` in full, as written;
+    - plan links through `/v1/verses`: `GEN.1.1-2.25`, a book change's two parts (`GEN.50.1-26`,
+      `EXO.1.1-2.10`), `NEH.7.73-9.21`, `MRK.11.1-26` (25 verses);
+    - all 66 introductions and every chapter's EMB notes equal to the server's; NET John 3's 71
+      equal.
+  - Layouts checked on the rendered pages (an item's own paragraph, the team list, the plan's
+    first page).
+- **`make check` green** (1,031 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.
