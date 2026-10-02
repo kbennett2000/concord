@@ -10,6 +10,7 @@ study notes on ``STUDY_NOTES_PAGE``.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
 from typing import Any
@@ -35,6 +36,7 @@ PG_AUTHORS_PAGE = FEATURES_PAGE + 13
 PG_PAGE = FEATURES_PAGE + 14
 # V8-S3b: the topics' section and the Perspectives index, after Personal Gold
 WBSA_PAGE = FEATURES_PAGE + 20
+CHARTS_PAGE = FEATURES_PAGE + 25  # V8-S4b: a test adds "Charts Index" to the outline itself
 PERSP_PAGE = FEATURES_PAGE + 27
 STUDY_PAGE = FEATURES_PAGE + 30
 STUDY_NOTES_PAGE = STUDY_PAGE + 1
@@ -59,6 +61,17 @@ class T:
     italic: bool = False
     link: int | None = None
     width: int | None = None
+
+
+@dataclass(frozen=True)
+class Img:
+    """One ``<image>`` (V8-S4b): its place and size on the page, and its file."""
+
+    top: int
+    src: str
+    height: int = 311
+    width: int = 303
+    left: int = 38
 
 
 # -- common item shapes ---------------------------------------------------------------
@@ -154,11 +167,12 @@ def box(top: int, ref_page: int) -> list[T]:
 # -- document assembly ----------------------------------------------------------------
 
 
-def _fonts(pages: dict[int, list[T]]) -> dict[tuple[int, bool], int]:
+def _fonts(pages: dict[int, list[T | Img]]) -> dict[tuple[int, bool], int]:
     specs: dict[tuple[int, bool], int] = {}
     for items in pages.values():
         for item in items:
-            specs.setdefault((item.size, item.blue), len(specs))
+            if isinstance(item, T):
+                specs.setdefault((item.size, item.blue), len(specs))
     for extra in ((12, False), (23, False)):
         specs.setdefault(extra, len(specs))
     return specs
@@ -180,9 +194,18 @@ def _text(item: T, fonts: dict[tuple[int, bool], int]) -> str:
     )
 
 
-def document(pages: dict[int, list[T]], extra_outline: list[tuple[int, str]] | None = None) -> str:
-    """A whole synthetic pdftohtml document around ``pages`` (page number → items)."""
-    pages = dict(pages)
+def _image(item: Img) -> str:
+    return (
+        f'<image top="{item.top}" left="{item.left}" width="{item.width}" '
+        f'height="{item.height}" src="{escape(item.src)}"/>'
+    )
+
+
+def document(
+    given: Mapping[int, Sequence[T | Img]], extra_outline: list[tuple[int, str]] | None = None
+) -> str:
+    """A whole synthetic pdftohtml document around ``given`` (page number → items)."""
+    pages: dict[int, list[T | Img]] = {number: list(items) for number, items in given.items()}
     pages[NOTES_PAGE] = [T("Genesis 1 Textual Notes", 43, 38, 23), *pages.get(NOTES_PAGE, [])]
     fonts = _fonts(pages)
     out = ['<?xml version="1.0" encoding="UTF-8"?>', '<pdf2xml producer="poppler" version="test">']
@@ -195,7 +218,7 @@ def document(pages: dict[int, list[T]], extra_outline: list[tuple[int, str]] | N
                 out.append(f'<fontspec id="{fid}" size="{size}" family="Times" color="{colour}"/>')
                 declared.add(fid)
         for item in pages.get(number, []):
-            out.append(_text(item, fonts))
+            out.append(_text(item, fonts) if isinstance(item, T) else _image(item))
         out.append("</page>")
     outline = [(start(code), NAMES[code]) for code in CODES]
     outline += [

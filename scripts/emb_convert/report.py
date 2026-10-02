@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections import Counter
 
 from emb_convert.articles import FEATURES
+from emb_convert.charts import CENSUS
 from emb_convert.crosscheck import CrossCheck, Verdict
+from emb_convert.epub_charts import ChartsCross
 from emb_convert.notes import NotesResult
 from emb_convert.quotes import QuoteClass
 from emb_convert.text import ParseResult
@@ -48,6 +50,27 @@ EXPECTED: dict[str, int] = {
     "WBSA-callouts": 50,
     "PERSP-boxes": 26,
     "PERSP-entries": 26,
+    # V8-S4b (docs/v8/SPEC.md §3, as corrected by the S4b parse: 31 ranges, 5 verses, 1 run)
+    "charts-entries": 44,
+    "charts-claimed": 44,
+    "charts-notes": 44,
+    "charts-range": 31,
+    "charts-whole-chapter-ranges": 6,
+    "charts-cross-chapter": 7,
+    "charts-verse": 5,
+    "charts-whole chapters": 1,
+    "charts-closes its passage": 39,
+    "charts-inside it": 3,
+    "charts-after it": 2,
+    "charts-passages": 40,
+    "images": 491,
+    "images-chart": 44,
+    "images-callout icon": 274,  # 269 callouts; 5 split by a page print their icon twice
+    "images-introduction figure": 66,  # one per book (V8-S5)
+    "images-page of its own": 1,  # the New Testament's title page
+    "images-front matter": 4,  # cover and title images, the Old Testament's title page
+    "images-feature region": 102,  # the Men, Women, and God banner (V8-S3a)
+    "images-unclassified": 0,
 }
 
 
@@ -528,4 +551,88 @@ def features_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
                 cross, "Cross-check: topics and boxes, PDF vs EPUB, item by item", headings=False
             ),
         ]
+    return lines
+
+
+_CHART_SHAPES = ("range", "cross-chapter", "verse", "whole chapters")
+_CHART_PLACES = ("closes its passage", "inside it", "after it", "before it")
+
+
+def _sizes(values: list[int]) -> str:
+    ordered = sorted(values)
+    if not ordered:
+        return "—"
+    return f"{ordered[0]:,} / {ordered[len(ordered) // 2]:,} / {ordered[-1]:,}"
+
+
+def charts_summary(notes: NotesResult, cross: ChartsCross | None, stale: list[str]) -> list[str]:
+    """The V8-S4b section: the charts, their images, and every image in the PDF by kind."""
+    found = notes.charts
+    region = found.region
+    claimed = [c for c in region.charts if c.media_type]
+    sizes = [len(c.data) for c in claimed]
+    types = Counter(c.media_type for c in claimed)
+    lines = [
+        "Charts (notes/EMB.json type chart; assets/EMB)",
+        _row("Charts Index entries", len(region.charts), "charts-entries"),
+        _row("  images claimed", len(claimed), "charts-claimed"),
+        _row("  on the page the index links", sum(
+            1 for c in claimed if c.image is not None and c.image.page == c.page)),
+        _row("  on the page after it", sum(
+            1 for c in claimed if c.image is not None and c.image.page == c.page + 1)),
+        _row("  notes", found.notes, "charts-notes"),
+        *(_row(f"  passage: {shape}", found.shapes[shape], f"charts-{shape}")
+          for shape in _CHART_SHAPES),
+        _row("    ranges that are a whole chapter", found.whole_chapters,
+             "charts-whole-chapter-ranges"),
+        *(_row(f"  stands: {where}", found.places[where], f"charts-{where}")
+          for where in _CHART_PLACES if found.places[where] or where != "before it"),
+        *(f"      {where}" for where in found.away),
+        _row("  with passages", found.passages, "charts-passages"),
+        *(f"  {'  ' + kind:<34}{n:>8,}" for kind, n in sorted(types.items())),
+        f"  {'  bytes (min / median / max)':<34}{_sizes(sizes):>8}",
+        _row("  bytes in all", sum(sizes)),
+        f"  {'  pixels wide (min / median / max)':<34}{_sizes([c.width for c in claimed]):>8}",
+        f"  {'  pixels high (min / median / max)':<34}{_sizes([c.height for c in claimed]):>8}",
+        _row("Images in the PDF", sum(region.census.values()), "images"),
+        *(_row(f"  {kind}", region.census[kind], f"images-{kind}") for kind in CENSUS),
+        "",
+        "Charts checks (any failure blocks writing)",
+        f"  every entry claims one image      {_ok(len(claimed) == len(region.charts))}",
+        f"  every chart-sized image claimed   {_ok(not region.unclaimed)}",
+        f"  every image named by one note     {_ok(not found.unused)}",
+        f"  index links in the chart's book   {_ok(not found.link_books)}",
+        f"  no chart inside a verse           {_ok(not found.mid_verse)}",
+        f"  assets/EMB holds only this run's  {_ok(not stale)}",
+        f"  titles: hygiene                   {_ok(not any(found.hygiene.values()))}",
+        f"  parse errors                      {_ok(not (found.errors or region.errors))}",
+    ]  # fmt: skip
+    problems = [
+        *(f"unclaimed chart-sized image on p{i.page}" for i in region.unclaimed),
+        *(f"image not named by exactly one note: {name}" for name in found.unused),
+        *(f"index link outside the chart's book: {where}" for where in found.link_books),
+        *(f"chart inside a verse: {where}" for where in found.mid_verse),
+        *(f"assets/EMB holds a file this run doesn't write: {name}" for name in stale),
+        *region.errors,
+        *found.errors,
+    ]
+    lines += [f"    ✗ {problem}" for problem in problems[:40]]
+    for name, where in found.hygiene.items():
+        lines.append(f"    ✗ {name}: {len(where)} — {', '.join(where[:8])}")
+    if cross is not None:
+        lines += [
+            "",
+            "Cross-check: charts, PDF vs EPUB (the EPUB's images are re-encoded: no bytes)",
+            _row("EPUB index entries", cross.entries),
+            *(_row(f"  {verdict}", cross.index[verdict])
+              for verdict in ("agree", "visible EPUB damage")),
+            f"  {'  open':<34}{cross.open:>8,}  (target 0)",
+            _row("EPUB large images in the chapters", cross.large),
+            *(_row(f"  chart {verdict}", cross.images[verdict])
+              for verdict in ("at the same place", "not in the EPUB")),
+            *(f"      {key} ({reference})" for key, reference, _, image in cross.rows
+              if image != "at the same place"),
+            _row("  at no chart's place", len(cross.elsewhere)),
+            *(f"      {where}" for where in cross.elsewhere),
+        ]  # fmt: skip
     return lines

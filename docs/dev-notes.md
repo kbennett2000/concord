@@ -2369,3 +2369,108 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   NET 58,253), unchanged.
 - **`make check` green** (908 passed, 48 deselected; ruff and pyright strict clean; openapi.json
   up to date after regeneration).
+
+### Feature V8-S4b — EMB's charts (private)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s4b-emb-charts`). The converter emits the
+  book's 44 charts as `chart` notes that carry an image (ADR-0012, landed in S4a).
+- **What landed:**
+  - `scripts/emb_convert/` gains `charts.py` (the Charts Index, each entry's image and bytes, the
+    image census, where a chart stands) and `epub_charts.py` (the EPUB witness).
+  - `pdfxml.py` parses `<image>` elements. pdftohtml now runs with images on, into a temporary
+    directory: never `-stdout`, which writes the images beside the PDF (found while measuring).
+    The XML with images on, `<image>` lines removed, is byte-identical to the `-i` XML.
+  - The text pass records where each chart's image stands (`text.ChartImage`), its output
+    unchanged. The EPUB reader notes the verse open at each image (`EpubBible.images`).
+  - Notes gain a tier 3 (`notes._charts`); the summary gains a Charts section, its checks and the
+    image census; the converter writes `data/private/assets/EMB/` and
+    `work/EMB/charts-crosscheck.tsv`.
+  - 13 synthetic tests (made-up titles, JPEGs made in the test); `pdfxmlkit` gains `Img`.
+  - A run takes ~2 min and is byte-identical on re-run: all 52 files compared by sha256, the 44
+    images included (`summary.txt` aside from its output path).
+- **Unchanged:** `EMB.json`, `markers.json` and the four earlier cross-check TSVs are
+  byte-identical. The 7,579 existing notes are identical and in the same order in the file, and no
+  verse's ordinals or order change. Over HTTP, all 1,189 chapters' existing EMB notes equal the
+  server's.
+- **The charts:**
+  - The Charts Index lists 44. Each title links to the chart's page (41) or the page before (3:
+    #17, #32, #41). Each entry claims exactly one chart-sized image, and none is left unclaimed.
+  - **Titles** come from the index.
+  - **Text** is the printed reference as a `ref:` link (the approved plan's choice).
+  - **Images:** 44 baseline JPEGs, 564–1,024 px wide, 625–1,024 px high, 64,002 / 113,358 /
+    135,720 bytes (min / median / max), 4,796,684 in all. Each is byte-identical to its PDF
+    object stream (checked against all 44).
+- **Spec correction (shapes):** 31 ranges (6 a whole chapter printed in full: #6, #14, #25, #28,
+  #39, #43) · 7 cross-chapter · 5 verses · 1 run of two whole chapters (#24, Ps 9–10). The
+  measuring session said 30 · 7 · 6 · 1 whole chapter, without a method.
+- **Anchors:** S3a's rule. Each chart anchors at the end of the verse its image follows:
+  - 39 close their passage;
+  - 3 stand inside it: PSA 9:1, PRO 2:19, AMO 2:16;
+  - 2 stand just after it: JER 1:3 (Jer 1:1), ACT 28:10 (Acts 28:7-8).
+
+  None stands inside a verse or in an introduction. 40 carry passages; 4 single verses anchored
+  at their verse don't (#10, #17, #18, #26).
+- **Order:** charts follow every earlier note at their verse, with default ordinals, so each shows
+  last. At JON 1:3 and 1TI 3:13 the book prints an article's callout first too. JER 1:1's chart is
+  followed by a Someone You Should Know callout, which anchors at JER 1:4.
+- **Every image in the PDF** (491 placements, 189 objects):
+  - 44 charts;
+  - 274 callout icons: one beside each of the 269 callout lines, and 5 callouts split by a page
+    print theirs twice (pp. 316, 871, 3804, 4267, 4597);
+  - 66 introduction figures (the reading-time figures, now V8-S5);
+  - 102 banners in the feature region;
+  - 4 front-matter images (cover and title images; the Old Testament's title page);
+  - 1 page of its own (the New Testament's title page);
+  - 0 unclassified.
+
+  Only the charts are copied.
+- **Charts cross-check (with `--epub`):**
+  - The EPUB's images are re-encoded at 566 px, so they can't witness bytes.
+  - **Its Charts Index:** 41 agree and 3 carry visible markup damage (#13, #23, #41); 0 open.
+  - **Its images stand at the same verse as 39 charts.** It lacks #5, #24, #25, #29 and #40, and
+    its one other large image in a chapter is the New Testament's title page (after MAL 4:6).
+- **Plan deviations:**
+  - **The EPUB's missing five** were #6, #22, #23, #24 and #40 in the plan. That list came from
+    aligning image shapes alone, which can't tell same-shaped neighbours apart; the converter's
+    witness uses the verse each image follows instead.
+  - **The EPUB index** was "agrees on every reference" in the plan; 3 entries are damaged.
+  - **The census** groups the Old Testament's title page with the front matter (it precedes
+    Genesis).
+  - **Two EPUB icons have zero padding after their end marker.** The witness strips it before
+    reading a header; the S4a loader's rule for assets is unchanged.
+- **Proof:**
+  - `make build-db` loads 65,876 notes (EMB 7,623) and 44 assets (4,796,684 bytes) with no error;
+    `bible.db` 299,307,008 → 304,152,576 bytes (+4.6 MiB).
+  - A local API on :8077 served:
+    - EMB `note_count` 7,623, the other 19 entries equal to the server's;
+    - GEN 13's chart with its label, title, passages and `chart-01.jpg`;
+    - that image as `image/jpeg`, byte-identical to the file, with the same ETag twice and 304 on
+      `If-None-Match`;
+    - `chart-99.jpg` → 404 `unknown_asset`;
+    - every chapter's existing EMB notes equal to the server's;
+    - NET John 3's 71 equal.
+- **`make check` green** (921 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  - **Build:** `make docker-build-private` took 1 min 7 s, with the embed `CACHED`; the temporary
+    `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (8332b4ac9e4f) checked on :8077:**
+    - 20 translations, the same ids as the server; only EMB's `note_count` changed (7,579 → 7,623);
+    - GEN 13's chart with its label, title, passages and image;
+    - all 44 images served byte-identical as `image/jpeg`, with a stable ETag, 304, and a 404 for
+      an unknown name;
+    - every chapter's existing EMB notes equal to the server's; NET John 3's 71 equal; semantic
+      search on.
+  - **Ship:** `docker save | gzip` 11 s (509 MB, about 5 MB more than S3b's); `scp` 38 s;
+    `docker load` 34 s + `compose up -d` 10 s; healthy after ~15 s; both tarballs removed.
+  - **Rollback:** `concord:pre-emb-charts` (the V8-S3b image, 506e1ab14375) —
+    `docker tag concord:pre-emb-charts concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now:** `latest`, `pre-emb-charts`, `pre-emb-topics`, `pre-emb-articles`,
+    `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.62–1.65 GB each, layers shared; 20 GB free).
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`:
+    - NET John 3's 71 notes are identical to a capture taken before the swap, in every field
+      Songbird reads;
+    - EMB Genesis 13 keeps its 3 notes and gains its chart: label, title, Markdown text, passage
+      Genesis 13:1-4. Songbird's model ignores `image` until its charts slice;
+    - 20 translations, the same ids; only EMB's `note_count` changed.

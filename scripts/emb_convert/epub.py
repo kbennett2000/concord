@@ -60,6 +60,8 @@ class EpubBible:
     )
     damaged: set[Key] = field(default_factory=set[Key])  # scraps seen by the parser itself
     boxes: list[str] = field(default_factory=list[str])  # each Perspectives box's text (V8-S3b)
+    # each image placed in a book: (book, chapter, the verse open, its path in the archive) (V8-S4b)
+    images: list[tuple[str, int, int, str]] = field(default_factory=list[tuple[str, int, int, str]])
 
 
 def spine_documents(archive: zipfile.ZipFile) -> list[str]:
@@ -114,6 +116,7 @@ class _Reader(HTMLParser):
         self.parts: list[str] = []
         self.title: list[str] = []
         self.pending_headings: list[str] = []
+        self.document = ""  # the spine document being read
 
     # -- tag tracking
 
@@ -129,6 +132,8 @@ class _Reader(HTMLParser):
             self.end_block()
             if self.in_box:
                 self.box_text.append(" ")
+        if tag == "img":
+            self.image(dict(attrs).get("src"))
         if tag in ("img", "br", "hr", "meta", "link"):
             return
         if tag == "a":
@@ -136,6 +141,13 @@ class _Reader(HTMLParser):
         elif tag == "sup":
             self.bare_anchor = False  # <a><sup>N</sup></a> wraps a verse number
         self.stack.append(tag)
+
+    def image(self, src: str | None) -> None:
+        """Note where an image stands: after the verse open, in a chapter of a book."""
+        if src and self.book is not None and self.chapter:
+            path = posixpath.normpath(posixpath.join(posixpath.dirname(self.document), src))
+            verse = self.verse[0] if self.verse is not None else 0
+            self.out.images.append((self.book, self.chapter, verse, path))
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
@@ -344,6 +356,7 @@ def parse_epub(
         for name in spine_documents(archive):
             if not name.endswith((".html", ".xhtml", ".htm")):
                 continue
+            reader.document = name
             reader.feed(archive.read(name).decode("utf-8", errors="replace"))
             reader.end_block()
         reader.close()
