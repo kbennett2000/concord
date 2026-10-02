@@ -83,6 +83,7 @@ class BuildStats:
     notes: int
     note_cross_references: int
     assets: int
+    documents: int
     section_headings: int
     topics: int
     topic_verses: int
@@ -377,6 +378,7 @@ def build_database(
     tokens_dir: Path | None = None,
     journeys_dir: Path | None = None,
     assets_dirs: list[Path] | None = None,
+    documents_dirs: list[Path] | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
     ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), ``notes_dirs``
@@ -392,7 +394,11 @@ def build_database(
 
     ``assets_dirs`` is normally ``[data/private/assets]`` (ADR-0012): a translation's images,
     one folder per translation code. They load before the notes, which may name them in
-    ``image``; a clean build has no ``private/`` and bakes zero assets."""
+    ``image``; a clean build has no ``private/`` and bakes zero assets.
+
+    ``documents_dirs`` is normally ``[data/private/documents]`` (ADR-0012): a translation's
+    documents (book introductions, front matter, …), loaded after the assets their text places;
+    a clean build bakes zero documents."""
     start = time.perf_counter()
     cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
@@ -474,6 +480,12 @@ def build_database(
                 if notes_dirs is not None
                 else NotesStats(0, 0, {})
             )
+            # Documents, after the assets their text places (same local-import cycle break).
+            from .documents import load_documents
+
+            documents_stats = load_documents(
+                conn, documents_dirs or [], frozenset(seen_codes), alias_to_book, asset_names
+            )
 
             # Topics loader — same local-import cycle break (topics.py imports LoaderError).
             from .topics import TopicsStats, load_topics
@@ -532,6 +544,7 @@ def build_database(
         notes=notes_stats.notes,
         note_cross_references=notes_stats.note_cross_references,
         assets=assets_stats.assets,
+        documents=documents_stats.documents,
         section_headings=heading_total,
         topics=topics_stats.topics,
         topic_verses=topics_stats.topic_verses,
@@ -558,6 +571,11 @@ def _default_data_dirs(base: Path) -> list[Path]:
 def _default_assets_dirs(base: Path) -> list[Path]:
     """`<base>/private/assets` (ADR-0012): absent from a clean checkout, so zero assets."""
     return [base / "private" / "assets"]
+
+
+def _default_documents_dirs(base: Path) -> list[Path]:
+    """`<base>/private/documents` (ADR-0012): absent from a clean checkout, so zero documents."""
+    return [base / "private" / "documents"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -595,6 +613,8 @@ def main(argv: list[str] | None = None) -> int:
     journeys_dir = base / "journeys"
     # A translation's images (ADR-0012), user-supplied under the dual-ignored `data/private/`.
     assets_dirs = _default_assets_dirs(base)
+    # A translation's documents (ADR-0012), user-supplied under `data/private/` like its images.
+    documents_dirs = _default_documents_dirs(base)
     try:
         stats = build_database(
             Path(args.output),
@@ -607,6 +627,7 @@ def main(argv: list[str] | None = None) -> int:
             tokens_dir,
             journeys_dir,
             assets_dirs,
+            documents_dirs,
         )
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -624,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{stats.cross_references} cross-references{clamped}, "
             f"{stats.places} places, {stats.place_verses} place-verse links, "
             f"{stats.notes} notes, {stats.note_cross_references} note cross-references, "
-            f"{stats.assets} assets, "
+            f"{stats.assets} assets, {stats.documents} documents, "
             f"{stats.section_headings} section headings, "
             f"{stats.topics} topics, {stats.topic_verses} topic-verse links, "
             f"{stats.strongs_entries} Strong's entries, {stats.word_tokens} word tokens, "

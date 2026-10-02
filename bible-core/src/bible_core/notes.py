@@ -210,8 +210,10 @@ def _parse_passage(raw: Any, note_id: int, ctx: str) -> PassageRow:
     return (note_id, *start, *end)
 
 
-def _check_ref_links(text: str, book_ids: frozenset[str], ctx: str) -> None:
-    """Every ``ref:`` link target in Markdown ``text`` must follow ADR-0011's grammar."""
+def check_ref_links(text: str, book_ids: frozenset[str], ctx: str) -> None:
+    """Every ``ref:`` link target in Markdown ``text`` must follow ADR-0011's grammar.
+
+    Shared with the documents loader (ADR-0012), whose text is always Markdown."""
     for target in _REF_LINK.findall(text):
         match = _REF_TARGET.fullmatch(target)
         if match is None:
@@ -299,7 +301,7 @@ def parse_notes_file(
                 "(expected 'markdown', or omit it for plain text)."
             )
         if text_format == "markdown":
-            _check_ref_links(text, book_ids, ctx)
+            check_ref_links(text, book_ids, ctx)
         image = _opt_text(fields, "image", ctx)
         if image is not None and image not in assets:
             raise LoaderError(

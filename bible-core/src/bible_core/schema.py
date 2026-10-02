@@ -169,6 +169,37 @@ _TABLES: tuple[str, ...] = (
         UNIQUE (translation_id, name)
     )
     """,
+    # A translation's documents (v8, ADR-0012): what a study Bible prints that is tied to a
+    # whole book or to no verse — book introductions, front matter, a reading plan, notes about
+    # the edition. Markdown text; `book_id` is set exactly for a book introduction; `ordinal`
+    # is the document's place among its kind. User-supplied from `data/private/documents/`.
+    """
+    CREATE TABLE IF NOT EXISTS translation_documents (
+        id             INTEGER PRIMARY KEY,
+        translation_id TEXT NOT NULL REFERENCES translations (id),
+        slug           TEXT NOT NULL,
+        kind           TEXT NOT NULL
+                       CHECK (kind IN ('front-matter', 'reading-plan', 'book-introduction',
+                                       'about')),
+        title          TEXT NOT NULL,
+        book_id        TEXT REFERENCES books (id),
+        ordinal        INTEGER NOT NULL CHECK (ordinal >= 1),
+        text           TEXT NOT NULL,
+        UNIQUE (translation_id, slug),
+        UNIQUE (translation_id, kind, ordinal),
+        CHECK ((kind = 'book-introduction') = (book_id IS NOT NULL))
+    )
+    """,
+    # The images a document's text places (`![alt](asset:NAME)`), in order of first use; each
+    # names an asset of the document's own translation.
+    """
+    CREATE TABLE IF NOT EXISTS document_images (
+        document_id INTEGER NOT NULL REFERENCES translation_documents (id),
+        position    INTEGER NOT NULL,
+        name        TEXT NOT NULL,
+        PRIMARY KEY (document_id, position)
+    )
+    """,
     # Section headings (additive). A heading anchors a CHAPTER position — it renders BEFORE
     # `before_verse` — keyed by `translation_id` because headings are translation-specific
     # (editorial choices differ per translation; one translation may carry none, e.g. BSB).
@@ -292,6 +323,9 @@ _TABLES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_note_xref_note ON note_cross_references (note_id)",
     # A note's passages.
     "CREATE INDEX IF NOT EXISTS idx_note_passages_note ON note_passages (note_id)",
+    # At most one introduction per book in a translation.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_book_introduction "
+    "ON translation_documents (translation_id, book_id) WHERE kind = 'book-introduction'",
     # "all headings for this chapter in this translation" — the chapter-read lookup.
     "CREATE INDEX IF NOT EXISTS idx_headings_anchor "
     "ON section_headings (translation_id, book_id, chapter)",

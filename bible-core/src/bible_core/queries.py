@@ -764,6 +764,98 @@ def get_asset(conn: sqlite3.Connection, translation_id: str, name: str) -> Asset
     return AssetRow(row[0], row[1], row[2], row[3], row[4], bytes(row[5]))
 
 
+# --- documents (v8, ADR-0012) ----------------------------------------------------------
+
+# A list shows the kinds in this order (mirrors ``documents.DOCUMENT_KINDS``), then each
+# kind's documents by ordinal, then slug.
+_KIND_ORDER = (
+    "CASE d.kind WHEN 'front-matter' THEN 1 WHEN 'reading-plan' THEN 2 "
+    "WHEN 'book-introduction' THEN 3 ELSE 4 END"
+)
+
+
+@dataclass(frozen=True)
+class DocumentSummaryRow:
+    """One document in a translation's list: everything but its text and images."""
+
+    slug: str
+    kind: str
+    title: str
+    book_id: str | None
+    ordinal: int
+
+
+@dataclass(frozen=True)
+class DocumentImageRow:
+    """An image a document's text places: the asset's name, type and pixel size."""
+
+    name: str
+    media_type: str
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class DocumentRow:
+    """One document in full: its Markdown text and the images it places, in order of use."""
+
+    translation_id: str
+    slug: str
+    kind: str
+    title: str
+    book_id: str | None
+    ordinal: int
+    text: str
+    images: tuple[DocumentImageRow, ...]
+
+
+def list_documents(
+    conn: sqlite3.Connection,
+    translation_id: str,
+    book_id: str | None = None,
+    kind: str | None = None,
+) -> list[DocumentSummaryRow]:
+    """``translation_id``'s documents, optionally one book's or one kind's (both: AND), in
+    list order: kind, then ordinal, then slug."""
+    clauses = ["d.translation_id = ?"]
+    params: list[str] = [translation_id]
+    if book_id is not None:
+        clauses.append("d.book_id = ?")
+        params.append(book_id)
+    if kind is not None:
+        clauses.append("d.kind = ?")
+        params.append(kind)
+    return [
+        DocumentSummaryRow(r[0], r[1], r[2], r[3], r[4])
+        for r in conn.execute(
+            "SELECT d.slug, d.kind, d.title, d.book_id, d.ordinal FROM translation_documents d "
+            f"WHERE {' AND '.join(clauses)} ORDER BY {_KIND_ORDER}, d.ordinal, d.slug",
+            params,
+        )
+    ]
+
+
+def get_document(conn: sqlite3.Connection, translation_id: str, slug: str) -> DocumentRow | None:
+    """The document ``slug`` of ``translation_id`` (exact, case-sensitive), or ``None``."""
+    row = conn.execute(
+        "SELECT id, translation_id, slug, kind, title, book_id, ordinal, text "
+        "FROM translation_documents WHERE translation_id = ? AND slug = ?",
+        (translation_id, slug),
+    ).fetchone()
+    if row is None:
+        return None
+    images = tuple(
+        DocumentImageRow(r[0], r[1], r[2], r[3])
+        for r in conn.execute(
+            "SELECT i.name, a.media_type, a.width, a.height FROM document_images i "
+            "JOIN translation_assets a ON a.translation_id = ? AND a.name = i.name "
+            "WHERE i.document_id = ? ORDER BY i.position",
+            (translation_id, row[0]),
+        )
+    )
+    return DocumentRow(row[1], row[2], row[3], row[4], row[5], row[6], row[7], images)
+
+
 # --- metadata + random ---------------------------------------------------------------
 
 
@@ -789,6 +881,7 @@ class TranslationMeta:
     versification: str
     attribution: str | None
     note_count: int  # notes loaded for this translation (v8, ADR-0011); 0 when none
+    document_count: int  # documents loaded for this translation (v8, ADR-0012); 0 when none
 
 
 @dataclass(frozen=True)
@@ -814,12 +907,13 @@ def get_books(conn: sqlite3.Connection) -> list[BookMeta]:
 
 
 def get_translations(conn: sqlite3.Connection) -> list[TranslationMeta]:
-    """All loaded translations, ordered by id, each with its note count."""
+    """All loaded translations, ordered by id, each with its note and document counts."""
     return [
-        TranslationMeta(r[0], r[1], r[2], r[3], r[4], r[5], r[6])
+        TranslationMeta(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7])
         for r in conn.execute(
             "SELECT t.id, t.name, t.language, t.direction, t.versification, t.attribution, "
-            "(SELECT COUNT(*) FROM translator_notes n WHERE n.translation_id = t.id) "
+            "(SELECT COUNT(*) FROM translator_notes n WHERE n.translation_id = t.id), "
+            "(SELECT COUNT(*) FROM translation_documents d WHERE d.translation_id = t.id) "
             "FROM translations t ORDER BY t.id"
         )
     ]

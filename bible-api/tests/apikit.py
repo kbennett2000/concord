@@ -25,6 +25,23 @@ TRANSLATIONS = [
 CHART_JPEG = jpeg(20, 10)
 DIAGRAM_PNG = png(5, 4)
 
+# The made-up documents (ADR-0012): (id, translation_id, slug, kind, title, book_id, ordinal,
+# text).
+GEN_INTRODUCTION = (
+    "## A MADE-UP HEAD\n\nMade-up words on [chapter 1](ref:GEN.1).\n\n"
+    "![A made-up caption](asset:diagram.png)"
+)
+DOCUMENTS = [
+    (1, "KJV", "introduction-gen", "book-introduction", "Made-up Genesis", "GEN", 1,
+     GEN_INTRODUCTION),
+    (2, "KJV", "introduction-exo", "book-introduction", "Made-up Exodus", "EXO", 2,
+     "![One](asset:chart-01.jpg)\n\n![Two](asset:diagram.png)\n\n![One again](asset:chart-01.jpg)"),
+    (3, "KJV", "about-the-edition", "about", "About a Made-up Edition", None, 1,
+     "Made-up words about the edition."),
+    (4, "KJV", "made-up-preface", "front-matter", "A Made-up Preface", None, 1,
+     "Made-up words before the books."),
+]  # fmt: skip
+
 # (translation_id, book_id, chapter, verse) tuples intentionally absent.
 OMITTED = {("WEB", "JHN", 3, 16)}
 
@@ -295,6 +312,20 @@ def build_corpus(path: Path) -> None:
         "VALUES (8, 13, 1, 13, 4)"
     )
     conn.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
+
+    # A translation's documents (ADR-0012), made up: two book introductions (EXO's places both
+    # images, the JPEG first; GEN's places the PNG), front matter and an about document. Inserted
+    # out of list order, so the endpoint's order (kind, then ordinal) is observable. YLT has none.
+    conn.executemany(
+        "INSERT INTO translation_documents "
+        "(id, translation_id, slug, kind, title, book_id, ordinal, text) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        DOCUMENTS,
+    )
+    conn.executemany(
+        "INSERT INTO document_images (document_id, position, name) VALUES (?, ?, ?)",
+        [(1, 1, "diagram.png"), (2, 1, "chart-01.jpg"), (2, 2, "diagram.png")],
+    )
 
     # Deterministic section headings for the headings endpoint tests. WEB carries headings on
     # JHN 3 (two, to prove order); KJV carries one on GEN 1; YLT carries NONE (the empty-on-stock
