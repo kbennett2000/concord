@@ -120,11 +120,25 @@ class UnknownAssetError(Exception):
         return {"translation": self.translation, "name": self.name}
 
 
+class UnknownDocumentError(Exception):
+    """A requested document slug (a path resource) is not among a translation's documents → 404."""
+
+    def __init__(self, translation: str, slug: str) -> None:
+        super().__init__(f"unknown document {slug!r} in translation {translation!r}")
+        self.translation = translation
+        self.slug = slug
+
+    @property
+    def detail(self) -> dict[str, Any]:
+        return {"translation": self.translation, "slug": self.slug}
+
+
 class FilterError(Exception):
     """A query-param *filter* value did not match a known value (e.g. ``?type=``/``?status=``).
 
     Maps to 400 (a filter on a listing/search), distinct from a 404 path resource. Raised by
-    ``/v1/places`` (unknown type/status) and ``/v1/notes/search`` (unknown type). Carries its own
+    ``/v1/places`` (unknown type/status), ``/v1/notes/search`` (unknown type) and
+    ``/v1/translations/{translation}/documents`` (unknown kind). Carries its own
     ``code`` so each filter reports distinctly.
     """
 
@@ -224,6 +238,12 @@ async def _handle_unknown_asset(_request: Request, exc: Exception) -> Response:
     return _error_response(404, "unknown_asset", str(exc), cast(UnknownAssetError, exc).detail)
 
 
+async def _handle_unknown_document(_request: Request, exc: Exception) -> Response:
+    return _error_response(
+        404, "unknown_document", str(exc), cast(UnknownDocumentError, exc).detail
+    )
+
+
 async def _handle_filter(_request: Request, exc: Exception) -> Response:
     filter_exc = cast(FilterError, exc)
     return _error_response(400, filter_exc.code, str(exc), filter_exc.detail)
@@ -251,5 +271,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UnknownStrongsError, _handle_unknown_strongs)
     app.add_exception_handler(UnknownJourneyError, _handle_unknown_journey)
     app.add_exception_handler(UnknownAssetError, _handle_unknown_asset)
+    app.add_exception_handler(UnknownDocumentError, _handle_unknown_document)
     app.add_exception_handler(FilterError, _handle_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)

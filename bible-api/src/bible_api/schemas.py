@@ -223,6 +223,57 @@ class HeadingsResponse(BaseModel):
     headings: list[SectionHeading]
 
 
+class DocumentSummary(BaseModel):
+    """One of a translation's documents in its list (v8, ADR-0012): everything but the text.
+    ``kind`` is front-matter, reading-plan, book-introduction or about; ``book`` is the USFM
+    code of a book introduction's book (null for the other kinds); ``ordinal`` is the
+    document's place among its kind, in print order."""
+
+    slug: str
+    kind: str
+    title: str
+    book: str | None
+    ordinal: int
+
+
+class DocumentsResponse(BaseModel):
+    """A translation's documents, in list order: front matter, reading plan, book
+    introductions, about — each kind by ordinal. ``book`` and ``kind`` echo the filters (null
+    when not given). A known translation with no documents returns ``documents: []`` (200)."""
+
+    translation: str
+    book: str | None
+    kind: str | None
+    total: int
+    documents: list[DocumentSummary]
+
+
+class DocumentImage(BaseModel):
+    """An image a document's text places with ``![alt](asset:NAME)``: the asset's ``name``
+    (its bytes at ``/v1/translations/{translation}/assets/{name}``), media type and pixel
+    size."""
+
+    name: str
+    media_type: str
+    width: int
+    height: int
+
+
+class Document(BaseModel):
+    """One document in full (v8, ADR-0012). ``text`` is always Markdown: ``ref:`` links
+    (ADR-0011) and images placed as ``![alt](asset:NAME)``; ``images`` lists those, in order of
+    first use."""
+
+    translation: str
+    slug: str
+    kind: str
+    title: str
+    book: str | None
+    ordinal: int
+    text: str
+    images: list[DocumentImage]
+
+
 class NoteSearchHit(BaseModel):
     """One note-search match: the note's canonical anchor, owning translation, and a highlighted
     snippet of its body. The note's own ``cross_references`` are omitted for leanness — fetch the
@@ -279,7 +330,9 @@ class BooksResponse(BaseModel):
 
 class Translation(BaseModel):
     """A loaded translation's catalog metadata. ``note_count`` is the number of notes loaded for
-    it (0 when none) — a client offers any translation with notes as a notes source."""
+    it (0 when none) — a client offers any translation with notes as a notes source.
+    ``document_count`` (v8, ADR-0012) is the number of its documents (0 when none), listed at
+    ``/v1/translations/{translation}/documents``."""
 
     id: str
     name: str
@@ -288,6 +341,7 @@ class Translation(BaseModel):
     versification: str
     attribution: str | None
     note_count: int
+    document_count: int
 
 
 class TranslationsResponse(BaseModel):

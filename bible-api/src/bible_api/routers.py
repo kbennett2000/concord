@@ -14,6 +14,7 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Annotated, Any, Literal
 
 import structlog
+from bible_core.documents import DOCUMENT_KINDS
 from bible_core.parser import UnknownBookError, parse_reference
 from bible_core.queries import (
     CrossRefRow,
@@ -34,6 +35,7 @@ from bible_core.queries import (
     get_books,
     get_chapter,
     get_cross_references,
+    get_document,
     get_journey,
     get_journey_stops,
     get_journeys_for_place,
@@ -52,6 +54,7 @@ from bible_core.queries import (
     get_verse_text,
     get_verses,
     get_words_for_reference,
+    list_documents,
     list_journeys,
     list_places,
     list_strongs,
@@ -83,6 +86,7 @@ from .errors import (
     SemanticTimeoutError,
     SemanticUnavailableError,
     UnknownAssetError,
+    UnknownDocumentError,
     UnknownJourneyError,
     UnknownPlaceError,
     UnknownStrongsError,
@@ -96,6 +100,10 @@ from .schemas import (
     CrossRefResponse,
     CrossRefSource,
     CrossRefTarget,
+    Document,
+    DocumentImage,
+    DocumentsResponse,
+    DocumentSummary,
     HeadingsResponse,
     JourneyDetail,
     JourneysResponse,
@@ -616,6 +624,86 @@ def asset_endpoint(translation: str, name: str, request: Request, conn: Conn) ->
     return cached_bytes_response(asset.data, asset.media_type, request)
 
 
+@router.get("/translations/{translation}/documents", responses={200: {"model": DocumentsResponse}})
+def documents_endpoint(
+    translation: str,
+    request: Request,
+    conn: Conn,
+    book: Annotated[
+        str | None, Query(description="Only this book's introduction (any book alias).")
+    ] = None,
+    kind: Annotated[
+        str | None, Query(description=f"Only this kind: one of {', '.join(DOCUMENT_KINDS)}.")
+    ] = None,
+) -> Response:
+    # A translation's documents (ADR-0012), as summaries. Unknown translation → 404; an unknown
+    # ?book= or ?kind= → 400 (closed filters, as /notes/search). A KNOWN translation with no
+    # documents, or filters that match none, returns 200 with an empty list.
+    translation_id = resolve_translation(request, translation)
+
+    book_id: str | None = None
+    if book is not None and book.strip():
+        info = SqliteBookResolver(conn).resolve(book)
+        if info is None:
+            raise BookFilterError(f"unknown book filter {book!r}")
+        book_id = info.id
+
+    kind_filter: str | None = None
+    if kind is not None and kind.strip():
+        kind_filter = kind.strip()
+        if kind_filter not in DOCUMENT_KINDS:
+            raise FilterError(
+                "unknown_kind",
+                f"unknown document kind {kind_filter!r}",
+                {"kind": kind_filter, "available": list(DOCUMENT_KINDS)},
+            )
+
+    rows = list_documents(conn, translation_id, book_id, kind_filter)
+    response = DocumentsResponse(
+        translation=translation_id,
+        book=book_id,
+        kind=kind_filter,
+        total=len(rows),
+        documents=[
+            DocumentSummary(
+                slug=row.slug, kind=row.kind, title=row.title, book=row.book_id, ordinal=row.ordinal
+            )
+            for row in rows
+        ],
+    )
+    return cached_json_response(response, request)
+
+
+@router.get("/translations/{translation}/documents/{slug}", responses={200: {"model": Document}})
+def document_endpoint(translation: str, slug: str, request: Request, conn: Conn) -> Response:
+    # One document in full: its Markdown text and the images it places. Unknown translation →
+    # 404 unknown_translation; a slug the translation lacks → 404 unknown_document (exact match,
+    # as asset names).
+    translation_id = resolve_translation(request, translation)
+    row = get_document(conn, translation_id, slug)
+    if row is None:
+        raise UnknownDocumentError(translation_id, slug)
+    response = Document(
+        translation=row.translation_id,
+        slug=row.slug,
+        kind=row.kind,
+        title=row.title,
+        book=row.book_id,
+        ordinal=row.ordinal,
+        text=row.text,
+        images=[
+            DocumentImage(
+                name=image.name,
+                media_type=image.media_type,
+                width=image.width,
+                height=image.height,
+            )
+            for image in row.images
+        ],
+    )
+    return cached_json_response(response, request)
+
+
 def _section_heading(row: SectionHeadingRow) -> SectionHeading:
     return SectionHeading(
         book=row.book_id,
@@ -681,6 +769,7 @@ def translations_endpoint(request: Request, conn: Conn) -> Response:
             versification=t.versification,
             attribution=t.attribution,
             note_count=t.note_count,
+            document_count=t.document_count,
         )
         for t in get_translations(conn)
     ]

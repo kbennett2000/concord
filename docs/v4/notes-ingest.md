@@ -119,7 +119,9 @@ data/private/assets/<TRANSLATION>/chart-01.jpg
 - The build fails, naming the file, on anything else: an unknown translation folder, a sub-folder,
   a bad name, a wrong or truncated file.
 
-Images are loaded before notes, so a note's `image` is checked against them.
+Images are loaded before notes, so a note's `image` is checked against them. A translation's
+documents can place them too, with `![alt](asset:<name>)` in their text
+([documents-ingest](../v8/documents-ingest.md)).
 
 ## Why this is safe
 

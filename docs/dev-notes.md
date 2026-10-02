@@ -2474,3 +2474,38 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - EMB Genesis 13 keeps its 3 notes and gains its chart: label, title, Markdown text, passage
       Genesis 13:1-4. Songbird's model ignores `image` until its charts slice;
     - 20 translations, the same ids; only EMB's `note_count` changed.
+
+### Feature V8-S5a — the documents contract (ADR-0012)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s5a-documents-contract`). V8-S5 splits in
+  two cycles (Kris's call): this one is S5a, the documents contract with no converter work and no
+  deploy, then S5b, EMB's 66 book introductions with their reading-time figures (deployed); the
+  next cycle is S5c, the front matter, the Personal Gold author notes and the reading plan. SPEC
+  §7 shows the three rows.
+- **Contract** (ADR-0012's Documents part):
+  - `translation_documents` (`translation_id`, `slug`, `kind`, `title`, `book_id`, `ordinal`,
+    `text`) and `document_images` (`document_id`, `position`, `name`), baked into `bible.db`.
+    Unique per translation: the slug, the (kind, ordinal) pair, and a book's introduction.
+  - `bible_core.documents` loads `data/private/documents/<CODE>.json` after the assets. Kinds:
+    `front-matter`, `reading-plan`, `book-introduction`, `about`; `book` exactly for a book
+    introduction; `ordinal` per kind, so a later kind never renumbers another. Text is always
+    Markdown: `ref:` links checked as in notes (`check_ref_links`, now public in
+    `bible_core.notes`), and an image placed with `![alt](asset:NAME)`, NAME an asset of the
+    same translation; `asset:` as a plain link is refused. A document's images are read from
+    its text, in order of first use. Every violation fails the build, naming the file and the
+    document.
+  - `GET /v1/translations/{t}/documents` (`?book=`, `?kind=`): summaries in kind order (front
+    matter, reading plan, book introductions, about), then ordinal; `400 unknown_book` /
+    `400 unknown_kind`. `GET /v1/translations/{t}/documents/{slug}`: the text and its images
+    with type and size; `404 unknown_document`. Both cached like every read and declared in
+    `docs/openapi.json`. `/v1/translations` appends `document_count`.
+- **Tests:** 40 in `test_documents.py` (round trip, image order, list order and filters, exact
+  slugs, `document_count`, 25 refusals and 4 bad files), 25 in `test_documents_endpoint.py`, and
+  `test_clean_checkout_bakes_zero_documents` (shown non-vacuous). The API fixture gained four
+  made-up KJV documents (KJV `document_count` 4).
+- **Docs:** ADR-0012's Documents part; `docs/API.md` (two sections, two error codes,
+  `document_count`); a user-flow page, `docs/v8/documents-ingest.md`; SPEC §4.3, §5, §7.
+- **Proof with real private data:** `make build-db` loads 65,876 notes and 44 assets, unchanged,
+  and 0 documents; `bible.db` 304,152,576 → 304,177,152 bytes (the empty tables).
+- **`make check` green** (988 passed, 48 deselected; ruff and pyright strict clean; openapi.json
+  regenerated and up to date).

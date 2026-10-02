@@ -1,6 +1,186 @@
 {
   "components": {
     "schemas": {
+      "Document": {
+        "description": "One document in full (v8, ADR-0012). ``text`` is always Markdown: ``ref:`` links\n(ADR-0011) and images placed as ``![alt](asset:NAME)``; ``images`` lists those, in order of\nfirst use.",
+        "properties": {
+          "book": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentImage"
+            },
+            "title": "Images",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "translation",
+          "slug",
+          "kind",
+          "title",
+          "book",
+          "ordinal",
+          "text",
+          "images"
+        ],
+        "title": "Document",
+        "type": "object"
+      },
+      "DocumentImage": {
+        "description": "An image a document's text places with ``![alt](asset:NAME)``: the asset's ``name``\n(its bytes at ``/v1/translations/{translation}/assets/{name}``), media type and pixel\nsize.",
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "media_type",
+          "width",
+          "height"
+        ],
+        "title": "DocumentImage",
+        "type": "object"
+      },
+      "DocumentSummary": {
+        "description": "One of a translation's documents in its list (v8, ADR-0012): everything but the text.\n``kind`` is front-matter, reading-plan, book-introduction or about; ``book`` is the USFM\ncode of a book introduction's book (null for the other kinds); ``ordinal`` is the\ndocument's place among its kind, in print order.",
+        "properties": {
+          "book": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "kind",
+          "title",
+          "book",
+          "ordinal"
+        ],
+        "title": "DocumentSummary",
+        "type": "object"
+      },
+      "DocumentsResponse": {
+        "description": "A translation's documents, in list order: front matter, reading plan, book\nintroductions, about \u2014 each kind by ordinal. ``book`` and ``kind`` echo the filters (null\nwhen not given). A known translation with no documents returns ``documents: []`` (200).",
+        "properties": {
+          "book": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentSummary"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "translation",
+          "book",
+          "kind",
+          "total",
+          "documents"
+        ],
+        "title": "DocumentsResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -447,7 +627,7 @@
         "type": "object"
       },
       "Translation": {
-        "description": "A loaded translation's catalog metadata. ``note_count`` is the number of notes loaded for\nit (0 when none) \u2014 a client offers any translation with notes as a notes source.",
+        "description": "A loaded translation's catalog metadata. ``note_count`` is the number of notes loaded for\nit (0 when none) \u2014 a client offers any translation with notes as a notes source.\n``document_count`` (v8, ADR-0012) is the number of its documents (0 when none), listed at\n``/v1/translations/{translation}/documents``.",
         "properties": {
           "attribution": {
             "anyOf": [
@@ -463,6 +643,10 @@
           "direction": {
             "title": "Direction",
             "type": "string"
+          },
+          "document_count": {
+            "title": "Document Count",
+            "type": "integer"
           },
           "id": {
             "title": "Id",
@@ -492,7 +676,8 @@
           "direction",
           "versification",
           "attribution",
-          "note_count"
+          "note_count",
+          "document_count"
         ],
         "title": "Translation",
         "type": "object"
@@ -2146,6 +2331,129 @@
           }
         },
         "summary": "Asset Endpoint"
+      }
+    },
+    "/v1/translations/{translation}/documents": {
+      "get": {
+        "operationId": "documents_endpoint_v1_translations__translation__documents_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "translation",
+            "required": true,
+            "schema": {
+              "title": "Translation",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only this book's introduction (any book alias).",
+            "in": "query",
+            "name": "book",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this book's introduction (any book alias).",
+              "title": "Book"
+            }
+          },
+          {
+            "description": "Only this kind: one of front-matter, reading-plan, book-introduction, about.",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this kind: one of front-matter, reading-plan, book-introduction, about.",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Documents Endpoint"
+      }
+    },
+    "/v1/translations/{translation}/documents/{slug}": {
+      "get": {
+        "operationId": "document_endpoint_v1_translations__translation__documents__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "translation",
+            "required": true,
+            "schema": {
+              "title": "Translation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Document Endpoint"
       }
     },
     "/v1/translations/{translation}/headings/{book}/{chapter}": {

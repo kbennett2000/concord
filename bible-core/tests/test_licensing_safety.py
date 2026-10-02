@@ -21,17 +21,26 @@ gitignored, and every *committed* ignore file must still exclude ``data/private/
 
 V8-S4a (ADR-0012): a translation's images live under ``data/private/assets/`` — a clean checkout
 bakes zero of them, and no image is ever committed under ``data/``.
+
+V8-S5a (ADR-0012): a translation's documents (book introductions, front matter, …) live under
+``data/private/documents/`` — a clean checkout bakes zero of them.
 """
 
 # pyright: reportPrivateUsage=false
 from __future__ import annotations
 
+import json
 import sqlite3
 import subprocess
 from pathlib import Path
 
 import pytest
-from bible_core.loader import _default_assets_dirs, _default_data_dirs, build_database
+from bible_core.loader import (
+    _default_assets_dirs,
+    _default_data_dirs,
+    _default_documents_dirs,
+    build_database,
+)
 from imagekit import png
 from loaderkit import book, chapter, translation, verse, write_translation
 
@@ -136,6 +145,35 @@ def test_clean_checkout_bakes_zero_assets(tmp_path: Path) -> None:
     image.parent.mkdir(parents=True)
     image.write_bytes(png())
     assert _asset_count(tmp_path) == 1
+
+
+def _document_count(base: Path) -> int:
+    """Build from the directories the loader's CLI picks under ``base``; count the baked
+    documents."""
+    db = base / "bible.db"
+    build_database(
+        db,
+        _default_data_dirs(base),
+        assets_dirs=_default_assets_dirs(base),
+        documents_dirs=_default_documents_dirs(base),
+    )
+    with sqlite3.connect(db) as conn:
+        return conn.execute("SELECT COUNT(*) FROM translation_documents").fetchone()[0]
+
+
+def test_clean_checkout_bakes_zero_documents(tmp_path: Path) -> None:
+    """No data/private/ → no documents baked (ADR-0012). The second half proves the build would
+    have picked one up had it been there, so the zero isn't vacuous."""
+    write_translation(tmp_path / "translations", _one_verse("PUB"))
+    assert _document_count(tmp_path) == 0
+    write_translation(tmp_path / "private", _one_verse("PRIV"))
+    documents = tmp_path / "private" / "documents"
+    documents.mkdir(parents=True)
+    made_up = {"slug": "made-up", "kind": "about", "title": "Made up", "ordinal": 1, "text": "x"}
+    (documents / "PRIV.json").write_text(
+        json.dumps({"translation": "PRIV", "documents": [made_up]}), encoding="utf-8"
+    )
+    assert _document_count(tmp_path) == 1
 
 
 def test_no_image_is_committed_under_data() -> None:

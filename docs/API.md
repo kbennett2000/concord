@@ -33,6 +33,8 @@ original-language texts — the SBL Greek New Testament (`SBLGNT`) and the Hebre
 - [`GET /v1/places/{id}/journeys`](#get-v1placesidjourneys)
 - [`GET /v1/translations/{translation}/notes/{book}/{chapter}`](#get-v1translationstranslationnotesbookchapter)
 - [`GET /v1/translations/{translation}/assets/{name}`](#get-v1translationstranslationassetsname)
+- [`GET /v1/translations/{translation}/documents`](#get-v1translationstranslationdocuments)
+- [`GET /v1/translations/{translation}/documents/{slug}`](#get-v1translationstranslationdocumentsslug)
 - [`GET /v1/notes/search`](#get-v1notessearch)
 - [`GET /v1/topics`](#get-v1topics)
 - [`GET /v1/topics/{id}`](#get-v1topicsid)
@@ -90,7 +92,9 @@ Every error uses one envelope:
 | `no_match` | 404 | `/random` filters match nothing (e.g. `book=GEN&testament=NT`). |
 | `unknown_place` | 404 | A place id in a path resolves to no place (`/places/nope`). `detail.place_id` echoes it. |
 | `unknown_asset` | 404 | A loaded translation has no image by that name (`/translations/EMB/assets/nope.jpg`). `detail` echoes `translation` and `name`. |
+| `unknown_document` | 404 | A loaded translation has no document by that slug (`/translations/EMB/documents/nope`). `detail` echoes `translation` and `slug`. |
 | `unknown_type` | 400 | A `/places?type=` filter value isn't a known place type; `detail.available` lists the valid types. |
+| `unknown_kind` | 400 | A `/translations/{translation}/documents?kind=` value isn't one of front-matter / reading-plan / book-introduction / about; `detail.available` lists them. |
 | `unknown_status` | 400 | A `/places?status=` filter value isn't one of identified / disputed / unknown / symbolic / multiple. |
 | `invalid_search_query` | 400 | Malformed FTS5 syntax; the SQLite message is in `detail.fts5_error`. |
 | `invalid_parameter` | 422 | A query/path parameter fails validation (bad `format`, `limit` out of range, `min_votes` < 0, non-integer chapter). |
@@ -757,6 +761,95 @@ same on every request; `If-None-Match` returns `304`.
 **Errors:** `404 unknown_translation` · `404 unknown_asset` (`detail.translation`,
 `detail.name`). Any name the translation lacks is a 404, whatever its shape. **Caching:** immutable.
 
+## `GET /v1/translations/{translation}/documents`
+
+A translation's documents: what its source prints that is tied to a whole book or to no verse —
+book introductions, front matter, a reading plan, notes about the edition
+([ADR-0012](adr/ADR-0012-images-and-documents.md)). This lists them; the next endpoint reads one.
+
+> **Documents are user-supplied and never shipped**, like notes and images. The published image
+> holds **zero**, so on a stock image every translation's list is empty. They appear only after
+> you bake your own: put a `<TRANSLATION>.json` in the gitignored `data/private/documents/` and
+> rebuild (`make build-db`); see [documents-ingest](v8/documents-ingest.md).
+
+| Param | In | Type | Default | Notes |
+|---|---|---|---|---|
+| `translation` | path | string | — | A loaded translation id (case-insensitive). Unknown → `404 unknown_translation`. |
+| `book` | query | string | — | Only that book's introduction (USFM id or any alias). Unknown → `400 unknown_book`. |
+| `kind` | query | string | — | Only that kind: `front-matter`, `reading-plan`, `book-introduction` or `about`. Unknown → `400 unknown_kind`. |
+
+The two filters combine. The list is ordered by kind — front matter, reading plan, book
+introductions, about, the order a study Bible prints them — then by `ordinal` (each document's
+place among its kind), then `slug`.
+
+```bash
+$ curl -s 'localhost:8000/v1/translations/EMB/documents?kind=book-introduction'
+```
+```json
+{
+  "translation": "EMB",
+  "book": null,
+  "kind": "book-introduction",
+  "total": 66,
+  "documents": [
+    { "slug": "introduction-gen", "kind": "book-introduction", "title": "…", "book": "GEN",
+      "ordinal": 1 },
+    ...
+  ]
+}
+```
+
+`book` and `kind` echo the filters (`null` when not given). Each summary's `book` is the USFM id
+of a book introduction's book, `null` for the other kinds.
+
+**Empty results** return `200` with `"total": 0` and `"documents": []`: a translation with no
+documents (every translation on the public image), or filters that match none.
+
+**Errors:** `404 unknown_translation` · `400 unknown_book` · `400 unknown_kind`
+(`detail.available`). **Caching:** immutable.
+
+## `GET /v1/translations/{translation}/documents/{slug}`
+
+One document in full.
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `translation` | path | string | A loaded translation id (case-insensitive). Unknown → `404 unknown_translation`. |
+| `slug` | path | string | The document's slug, exactly as the list gives it (case-sensitive). Unknown → `404 unknown_document`. |
+
+```bash
+$ curl -s 'localhost:8000/v1/translations/EMB/documents/introduction-gen'
+```
+```json
+{
+  "translation": "EMB",
+  "slug": "introduction-gen",
+  "kind": "book-introduction",
+  "title": "…",
+  "book": "GEN",
+  "ordinal": 1,
+  "text": "## …\n\n- [Chapters 1–3](ref:GEN.1-3): …\n\n![…](asset:reading-time-gen.jpg)\n\n…",
+  "images": [
+    { "name": "reading-time-gen.jpg", "media_type": "image/jpeg", "width": 1024, "height": 187 }
+  ]
+}
+```
+
+`text` is always Markdown (CommonMark):
+
+- **`ref:` links** — `[Chapters 1–3](ref:GEN.1-3)`, the same grammar as notes'
+  ([ADR-0011](adr/ADR-0011-v8-note-fields.md)); each target maps onto a reference
+  `/v1/verses/{ref}` accepts.
+- **Images** — `![alt](asset:NAME)` places one of the translation's images where the source prints
+  it. A client fetches it from [`/v1/translations/{translation}/assets/{NAME}`](#get-v1translationstranslationassetsname);
+  a renderer that doesn't resolve `asset:` shows the alt text.
+
+`images` lists the images the text places, in order of first use, with each one's media type and
+pixel size, so a client can lay a figure out before fetching its bytes.
+
+**Errors:** `404 unknown_translation` · `404 unknown_document` (`detail.translation`,
+`detail.slug`). **Caching:** immutable.
+
 ## `GET /v1/notes/search`
 
 Full-text keyword search over translator-note **bodies** (the `notes_fts` FTS5 mirror), across all
@@ -1105,10 +1198,10 @@ $ curl -s 'localhost:8000/v1/translations'
   "translations": [
     { "id": "AKJV", "name": "American King James Version", "language": "en",
       "direction": "ltr", "versification": "standard", "attribution": "The American King James Version is in the public domain.",
-      "note_count": 0 },
+      "note_count": 0, "document_count": 0 },
     { "id": "OSHB", "name": "Open Scriptures Hebrew Bible", "language": "hbo",
       "direction": "rtl", "versification": "standard", "attribution": "Hebrew Old Testament … CC BY 4.0 …",
-      "note_count": 0 },
+      "note_count": 0, "document_count": 0 },
     ...
   ]
 }
@@ -1117,7 +1210,8 @@ $ curl -s 'localhost:8000/v1/translations'
 `note_count` is the number of notes loaded for the translation. It's `0` for every translation on
 the public image, and higher only once you've baked your own notes in
 ([notes-ingest](v4/notes-ingest.md)). A client offers any translation with `note_count > 0` as a
-notes source.
+notes source. `document_count` is the number of its
+[documents](#get-v1translationstranslationdocuments) — likewise `0` on the public image.
 
 `direction` is `ltr` for everything except the Hebrew OT (`OSHB`), which is `rtl`. The
 original-language texts (`SBLGNT`, `OSHB`) are ordinary translations — usable as `?translation=` on
