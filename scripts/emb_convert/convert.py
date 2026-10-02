@@ -5,7 +5,9 @@ Writes, only when every structural check passes:
 - ``<out>/EMB.json`` — the translation (Concord's translation contract, code ``EMB``);
 - ``<out>/notes/EMB.json`` — its textual and study notes, feature articles and charts (ADR-0011);
 - ``<out>/documents/EMB.json`` — its 66 book introductions (ADR-0012, V8-S5b), then its front
-  matter, reading plan and Personal Gold authors (V8-S5c);
+  matter, reading plan and Personal Gold authors (V8-S5c), then the Verse Finder as printed
+  (V8-S6b);
+- ``<out>/topics/EMB.json`` — the Verse Finder as a topical source (ADR-0013, V8-S6b);
 - ``<out>/assets/EMB/chart-NN.jpg`` — each chart's image as the PDF stores it (ADR-0012, V8-S4b);
 - ``<out>/assets/EMB/reading-time-<book>.jpg`` — each introduction's figure, likewise (V8-S5b);
 - ``<out>/work/EMB/markers.json`` — where each removed ``*`` sat (the textual notes' anchors);
@@ -16,6 +18,7 @@ Writes, only when every structural check passes:
 - ``<out>/work/EMB/charts-crosscheck.tsv`` — each chart against the EPUB (V8-S4b);
 - ``<out>/work/EMB/introductions-crosscheck.tsv`` — every introduction finding (V8-S5b);
 - ``<out>/work/EMB/documents-crosscheck.tsv`` — every other document's finding (V8-S5c);
+- ``<out>/work/EMB/verse-finder-crosscheck.tsv`` — every Verse Finder topic's finding (V8-S6b);
 - ``<out>/work/EMB/summary.txt`` — the printed summary.
 
 ``work/`` is never scanned by a loader. The same PDF gives byte-identical files. The run
@@ -64,6 +67,7 @@ from emb_convert.report import (
     charts_summary,
     documents_summary,
     features_summary,
+    finder_summary,
     introductions_summary,
     notes_summary,
     summary,
@@ -71,6 +75,7 @@ from emb_convert.report import (
 from emb_convert.skeleton import load_public_texts, load_skeleton, load_verses
 from emb_convert.text import Marker, ParseResult, parse_bible
 from emb_convert.validate import validate
+from emb_convert.versefinder import build_finder
 
 CODE = "EMB"
 NAME = "Every Man's Bible (NLT)"
@@ -290,22 +295,29 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     front_matter = build_front(front, layout, ctx)
     plan = build_plan(front.plan, ctx) if front.plan is not None else PlanFindings()
     authors = build_authors(doc, layout, notes.articles.region, ctx)
+    finder = build_finder(front.references, ctx)
     witnessed = Witnessed()
     for part in (front_matter.witnessed, plan.witnessed, authors.witnessed):
         witnessed.extend(part)
-    epub_documents = (
-        epub_cut("".join(text for text, _ in read_runs(epub)), witnessed) if epub else None
-    )
+    flat = "".join(text for text, _ in read_runs(epub)) if epub else None
+    epub_documents = epub_cut(flat, witnessed) if flat is not None else None
     documents_cross = (
         cross_check_documents(witnessed, epub_documents, doc, _texts(result))
         if epub_documents is not None
+        else None
+    )
+    # the Verse Finder's own cut, so the other documents' findings stay as they were
+    epub_finder = epub_cut(flat, finder.witnessed) if flat is not None else None
+    finder_cross = (
+        cross_check_documents(finder.witnessed, epub_finder, doc, _texts(result))
+        if epub_finder is not None
         else None
     )
     documents = documents_payload(intros, CODE)
     documents["documents"] = [
         *intros.documents,
         *front_matter.documents,
-        *(d for d in (plan.document, authors.document) if d is not None),
+        *(d for d in (plan.document, authors.document, finder.document) if d is not None),
     ]
     assets = {**notes.charts.assets, **intros.assets}
     assets_dir = out_dir / "assets" / CODE
@@ -321,6 +333,7 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     lines += ["", *charts_summary(notes, charts_cross, stale)]
     lines += ["", *introductions_summary(intros, intros_cross, intros_witness)]
     lines += ["", *documents_summary(front_matter, plan, authors, documents_cross, epub_documents)]
+    lines += ["", *finder_summary(finder, finder_cross, epub_finder)]
     ok = (
         validation.ok
         and not result.diagnostics.unclassified
@@ -330,11 +343,13 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         and front_matter.ok
         and plan.ok
         and authors.ok
+        and finder.ok
         and not stale
     )
     work = out_dir / "work" / CODE
     notes_file = out_dir / "notes" / f"{CODE}.json"
     documents_file = out_dir / "documents" / f"{CODE}.json"
+    topics_file = out_dir / "topics" / f"{CODE}.json"
     if ok:
         work.mkdir(parents=True, exist_ok=True)
         notes_file.parent.mkdir(parents=True, exist_ok=True)
@@ -342,6 +357,8 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         (out_dir / f"{CODE}.json").write_text(_dump(translation_payload(result, rights)), "utf-8")
         notes_file.write_text(_dump(notes_payload(notes, CODE)), "utf-8")
         documents_file.write_text(_dump(documents), "utf-8")
+        topics_file.parent.mkdir(parents=True, exist_ok=True)
+        topics_file.write_text(_dump(finder.payload), "utf-8")
         (work / "markers.json").write_text(_dump(marker_payload(result.markers)), "utf-8")
         if cross is not None:
             (work / "crosscheck.tsv").write_text(crosscheck_tsv(cross), "utf-8")
@@ -367,11 +384,15 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
             (work / "documents-crosscheck.tsv").write_text(
                 crosscheck_tsv(documents_cross, "document\tchapter\toccurrence"), "utf-8"
             )
+        if finder_cross is not None:
+            (work / "verse-finder-crosscheck.tsv").write_text(
+                crosscheck_tsv(finder_cross, "topic\tchapter\toccurrence"), "utf-8"
+            )
         write_assets(assets_dir, assets)
         lines += [
             "",
-            f"Wrote {out_dir / f'{CODE}.json'}, {notes_file}, {documents_file}, {assets_dir}/ "
-            f"and {work}/",
+            f"Wrote {out_dir / f'{CODE}.json'}, {notes_file}, {documents_file}, {topics_file}, "
+            f"{assets_dir}/ and {work}/",
         ]
     else:
         lines += ["", "Checks failed — nothing written."]

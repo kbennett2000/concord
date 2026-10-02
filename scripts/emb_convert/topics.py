@@ -23,6 +23,7 @@ text: it is read from the operator's PDF.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -31,7 +32,7 @@ from dataclasses import dataclass, field
 from emb_convert.articles import Section, pick
 from emb_convert.layout import Layout, LinkKind
 from emb_convert.lines import Line, group_lines
-from emb_convert.notetext import NoteText, Piece, emphasis_ok, plain_of, render
+from emb_convert.notetext import NoteText, Piece, emphasis_ok, normalize, plain_of, render
 from emb_convert.pdfxml import PdfDocument, TextItem
 from emb_convert.text import FeatureCallout
 
@@ -328,11 +329,21 @@ class Writer:
         self.printed: list[str] = []
         self.problems: list[str] = []
 
-    def unit(self, lines: Sequence[Line], *, heading: bool = False) -> NoteText:
+    def unit(
+        self, lines: Sequence[Line], *, heading: bool = False, italic: bool = False
+    ) -> NoteText:
+        """``italic``: set the unit in italics (V8-S6b, the Perspectives boxes); text already
+        italic there is a problem, as setting it all in italics would hide the emphasis."""
         pieces = self.inline(lines)
         self.printed.append(" ".join(p.text for p in pieces))
         if heading:  # a heading is bold already; its weight stays out of the Markdown
             pieces = [Piece(p.text, False, p.run, False) for p in pieces]
+        if italic:
+            if any(p.italic and p.text.strip() for p in pieces):
+                self.problems.append("italics-inside-italics")
+            pieces = normalize(
+                [dataclasses.replace(p, italic=True) for p in pieces], collapse=False
+            )
         pieces, targets = self.relink(pieces)
         rendered = render(pieces, targets, always=True)
         assert rendered.markdown is not None
@@ -342,16 +353,21 @@ class Writer:
             self.problems.append("markdown-round-trip")
         return rendered
 
-    def quoted(self, lines: Sequence[Line], counts: Counter[str]) -> tuple[list[str], list[str]]:
+    def quoted(
+        self, lines: Sequence[Line], counts: Counter[str], *, italic: bool = False
+    ) -> tuple[list[str], list[str]]:
         """Quoted lines → (Markdown, plain) paragraphs; a paragraph's printed lines are apart by
-        hard breaks."""
+        hard breaks. ``italic``: each line or paragraph set in italics, closed before each hard
+        break (``unit``)."""
         markdown: list[str] = []
         plain: list[str] = []
         for block in blocks(lines):
             counts["paragraphs or stanzas"] += 1
             if len(block) > 1:
                 counts["printed lines (hard breaks)"] += len(block)
-            texts = [self.unit(group) for group in block]
+            if italic:
+                counts["units set in italics"] += len(block)
+            texts = [self.unit(group, italic=italic) for group in block]
             markdown.append("\\\n".join(_md(t) for t in texts))
             plain.append("\n".join(t.plain for t in texts))
         return markdown, plain

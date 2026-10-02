@@ -225,15 +225,17 @@ def shape(box: Box, last_verse: dict[tuple[str, int], int]) -> str:
 
 def write(box: Box, inline: Inline, relink: Relink) -> Written:
     """The box as Markdown: its quotation of the passage, the reference on a hard-break line
-    under it, the person's words, the attribution."""
+    under it, the person's words, the attribution. The quotation and the words are set in
+    italics (Kris's call, V8-S6b; the book prints them roman), the reference and the
+    attribution as printed."""
     writer = Writer(inline, relink)
     counts: Counter[str] = Counter()
-    markdown, plain = writer.quoted(box.quote, counts)
+    markdown, plain = writer.quoted(box.quote, counts, italic=True)
     reference = writer.unit([box.reference_line])
     assert reference.markdown is not None
     markdown[-1] += f"\\\n{reference.markdown}"
     plain[-1] += f"\n{reference.plain}"
-    md, pl = writer.quoted(box.words, counts)
+    md, pl = writer.quoted(box.words, counts, italic=True)
     attribution = writer.unit(box.attribution)
     assert attribution.markdown is not None
     written = writer.done([*markdown, *md, attribution.markdown], [*plain, *pl, attribution.plain])

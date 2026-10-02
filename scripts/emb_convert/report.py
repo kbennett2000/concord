@@ -24,6 +24,7 @@ from emb_convert.text import ParseResult
 from emb_convert.textual import LabelKind
 from emb_convert.topics import Topic
 from emb_convert.validate import Validation
+from emb_convert.versefinder import FinderFindings
 
 # The S1 acceptance targets (docs/v8/SPEC.md §3, as corrected by the S1 parse).
 EXPECTED: dict[str, int] = {
@@ -128,6 +129,27 @@ EXPECTED: dict[str, int] = {
     "pg-notes": 23,
     "pg-credits": 24,
     "pg-without-note": 1,  # the author index prints no note for one author
+    # V8-S6b (docs/v8/SPEC.md §3, as measured)
+    "vf-pages": 191,  # a 7-page index, then 184 topic pages (one topic takes two)
+    "vf-index": 183,
+    "vf-topics": 183,
+    "vf-entries": 1286,
+    "vf-other": 0,  # sub-entries or any other form: the book prints none
+    "vf-references": 1286,  # one per entry
+    "vf-a verse": 799,  # 797, plus the two verses of the one list
+    "vf-verses in one chapter": 486,
+    "vf-across chapters": 1,
+    "vf-a whole chapter": 1,
+    "vf-lists": 1,  # "C:V, V"
+    "vf-redirects": 8,
+    "vf-redirect-targets": 11,  # 6 name one topic, 1 two, 1 three
+    "vf-see-also": 21,
+    "vf-see-also-targets": 23,  # 19 name one topic, 2 two
+    "vf-links": 3157,
+    "vf-repeats": 3,
+    "vf-omitted": 2,  # MRK 9:44 and 9:46, inside one range
+    "vf-agrees": 1243,
+    "vf-a page off": 43,
 }
 
 
@@ -889,6 +911,61 @@ def documents_summary(
             "",
             *cross_summary(cross, "Cross-check: documents, PDF vs EPUB", headings=False),
             _row("  parts whose opening it lost", len(epub.lost)),
+            *(f"      {key[0]}" for key in epub.lost),
+        ]
+    return lines
+
+
+def finder_summary(
+    found: FinderFindings, cross: CrossCheck | None, epub: EpubDocuments | None
+) -> list[str]:
+    """The V8-S6b section: the Verse Finder, as topics and as a document."""
+    redirect_targets = sum(len(t.targets) for t in found.redirects)
+    see_also_targets = sum(len(t.targets) for t in found.see_also)
+    real = not any("names no verse" in e for e in found.errors)
+    pointers = not any("pointer" in e for e in found.errors)
+    paired = len(found.topics) == len(found.index) and not any("index" in e for e in found.errors)
+    clean = not any(found.hygiene.values())
+    lines = [
+        "Verse Finder (topics/EMB.json; documents/EMB.json front-matter-6)",
+        _row("pages", found.pages, "vf-pages"),
+        _row("  index links", len(found.index), "vf-index"),
+        _row("topics", len(found.topics), "vf-topics"),
+        _row("  entries", found.entries, "vf-entries"),
+        _row("  lines of another form", found.other_lines, "vf-other"),
+        _row("  references", found.references, "vf-references"),
+        *(_row(f"    {shape}", n, f"vf-{shape}") for shape, n in sorted(found.shapes.items())),
+        _row("    printing a list", found.lists, "vf-lists"),
+        _row("  \"see\" redirects", len(found.redirects), "vf-redirects"),
+        _row("    topics they name", redirect_targets, "vf-redirect-targets"),
+        _row("  \"see also\" pointers", len(found.see_also), "vf-see-also"),
+        _row("    topics they name", see_also_targets, "vf-see-also-targets"),
+        _row("topic-verse links", found.links, "vf-links"),
+        _row("  a verse cited twice under a topic", found.repeats, "vf-repeats"),
+        _row("  verses the NLT omits, skipped", len(found.omitted), "vf-omitted"),
+        *(f"      {where}" for where in found.omitted),
+        *(_row(f"  link page: {kind}", n, f"vf-{kind}")
+          for kind, n in sorted(found.evidence.items())),
+        _row("document words", found.words),
+        _row("  Markdown bytes", found.size),
+        *(_row(f"  fixes: {name}", n) for name, n in sorted(found.fixes.items()) if n),
+        "",
+        "Verse Finder checks (any failure blocks writing)",
+        f"  183 topics, paired with the index   {_ok(paired and len(found.topics) == 183)}",
+        f"  every line placed; parse errors     {_ok(not found.errors and not found.other_lines)}",
+        f"  every reference a real passage      {_ok(real)}",
+        f"  every pointer names a real topic    {_ok(pointers)}",
+        f"  link pages explained                {_ok(not found.evidence['unexplained'])}",
+        f"  text: hygiene and Markdown          {_ok(clean)}",
+    ]  # fmt: skip
+    lines += [f"    ✗ {problem}" for problem in found.errors[:40]]
+    for name, where in found.hygiene.items():
+        lines.append(f"    ✗ {name}: {len(where)} — {', '.join(where[:8])}")
+    if cross is not None and epub is not None:
+        lines += [
+            "",
+            *cross_summary(cross, "Cross-check: Verse Finder, PDF vs EPUB", headings=False),
+            _row("  topics whose opening it lost", len(epub.lost)),
             *(f"      {key[0]}" for key in epub.lost),
         ]
     return lines

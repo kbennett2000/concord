@@ -238,9 +238,11 @@ def test_boxes_split_into_their_parts_and_anchor_where_they_stand() -> None:
     first, second = featured(notes, "Perspectives")
     assert (first["chapter"], first["verse"], first["char_offset"]) == (1, 3, len(verses[3]))
     assert "title" not in first and "passages" not in first  # its one verse is its anchor
+    # the quotation and the saying in italics (V8-S6b), each printed line apart, the edge
+    # punctuation outside the emphasis; the reference and the attribution as printed
     assert first["text"].split("\n\n") == [
-        f"{V3}\\\n[GENESIS 1:3](ref:GEN.1.3)",
-        "A made-up saying,\\\non two short lines.",
+        f"*{V3.removesuffix('.')}*.\\\n[GENESIS 1:3](ref:GEN.1.3)",
+        "*A made-up saying*,\\\n*on two short lines*.",
         "Q. Z. SOMEONE (1900–1950), 12TH *MADE-UP BOOK*",
     ]
     # inside verse 4, after its passage: the end of 1:4, both parts as passages
@@ -257,6 +259,19 @@ def test_boxes_split_into_their_parts_and_anchor_where_they_stand() -> None:
         "Someone",
         "Another One",
     ]
+
+
+def test_a_box_whose_saying_prints_italics_of_its_own_blocks_the_write() -> None:
+    """Setting the saying in italics would hide a word the book sets in italics in it."""
+    pages = document()
+    genesis = [*GENESIS]
+    at = genesis.index(T("A made-up saying,", 270, 61, width=120))
+    genesis[at] = T("A made-up saying,", 270, 61, italic=True, width=120)
+    pages[GEN] = genesis
+    _, notes = parse_notes(pages, PUBLIC)
+    found = notes.features
+    assert found.hygiene["italics-inside-italics"] == ["PERSP Genesis 1:3"]
+    assert not found.ok
 
 
 def test_a_box_whose_index_prints_another_passage_is_listed() -> None:
