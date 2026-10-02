@@ -7,7 +7,9 @@ from collections import Counter
 from emb_convert.articles import FEATURES
 from emb_convert.charts import CENSUS
 from emb_convert.crosscheck import CrossCheck, Verdict
+from emb_convert.documents import EpubDocuments
 from emb_convert.epub_charts import ChartsCross
+from emb_convert.frontmatter import FrontFindings
 from emb_convert.introductions import (
     FIGURE_WITNESS,
     EpubIntroductions,
@@ -15,7 +17,9 @@ from emb_convert.introductions import (
     word_sizes,
 )
 from emb_convert.notes import NotesResult
+from emb_convert.pgauthors import AuthorFindings
 from emb_convert.quotes import QuoteClass
+from emb_convert.readingplan import PlanFindings
 from emb_convert.text import ParseResult
 from emb_convert.textual import LabelKind
 from emb_convert.topics import Topic
@@ -92,6 +96,38 @@ EXPECTED: dict[str, int] = {
     "intro-links": 595,
     "intro-callouts": 3,  # Someone You Should Know callouts the S3a articles anchor at 1:1
     "intro-headings": 5,  # chapter 1's heading, printed above the first verse (S1's)
+    # V8-S5c (docs/v8/SPEC.md §3, as measured)
+    "front-pieces": 5,
+    "front-contents": 4,  # contents pages, set aside
+    "front-references": 1,  # the Verse Finder (V8-S6), set aside
+    "front-links": 21,
+    "front-1-paragraph": 17,
+    "front-1-list items": 8,
+    "front-2-head": 9,
+    "front-2-paragraph": 12,
+    "front-2-signature": 1,
+    "front-3-roles": 9,
+    "front-3-names": 11,
+    "front-4-head": 10,
+    "front-4-paragraph": 24,
+    "front-4-list": 2,
+    "front-4-list items": 16,
+    "front-4-item paragraphs": 3,
+    "front-4-signature": 1,
+    "front-5-subtitle": 1,
+    "front-5-head": 8,
+    "front-5-senior": 6,
+    "front-5-label": 30,
+    "front-5-people": 132,
+    "plan-days": 365,
+    "plan-readings": 1460,
+    "plan-links": 1465,
+    "plan-months": 12,
+    "plan-capitals": 12,  # each month's first day
+    "plan-into the next book": 5,
+    "pg-notes": 23,
+    "pg-credits": 24,
+    "pg-without-note": 1,  # the author index prints no note for one author
 }
 
 
@@ -757,5 +793,102 @@ def introductions_summary(
             ),
             _row("  sections whose head it lost", len(witness.lost_heads)),
             *(f"      {where}" for where in witness.lost_heads),
+        ]
+    return lines
+
+
+def documents_summary(
+    front: FrontFindings,
+    plan: PlanFindings,
+    authors: AuthorFindings,
+    cross: CrossCheck | None,
+    epub: EpubDocuments | None,
+) -> list[str]:
+    """The V8-S5c section: the front matter, the reading plan, Personal Gold's authors."""
+    evidence = Counter(f.evidence for f in front.links)
+    placed = not front.errors and not plan.errors and not authors.errors
+    explained = all(f.evidence != "unexplained" for f in front.links)
+    days = len(plan.days) == 365 and all(len(d.readings) == 4 for d in plan.days)
+    real = not any("no verse" in e for e in plan.errors)
+    tied = all(n.article for n in authors.notes) and all(c.article for c in authors.credits)
+    clean = not any([*front.hygiene.values(), *plan.hygiene.values(), *authors.hygiene.values()])
+    lines = [
+        "Front matter, reading plan, Personal Gold authors (documents/EMB.json)",
+        _row("front-matter pieces", len(front.documents), "front-pieces"),
+        _row("  contents pages set aside", front.contents, "front-contents"),
+        _row("  reference sections set aside", front.references, "front-references"),
+    ]
+    for piece in front.pieces:
+        lines.append(_row(f"  piece {piece.number} ({piece.reader}): words", piece.words))
+        lines += [
+            _row(f"    {what}", n, f"front-{piece.number}-{what}")
+            for what, n in sorted(piece.structures.items())
+            if n
+        ]
+    lines += [
+        _row("  links", len(front.links), "front-links"),
+        *(_row(f"    {kind}", n) for kind, n in sorted(evidence.items())),
+        _row("  list bullets the Markdown carries", front.bullets),
+        *(_row(f"  fixes: {name}", n) for name, n in sorted(front.fixes.items()) if n),
+        "",
+        _row("Reading plan: days", len(plan.days), "plan-days"),
+        _row("  readings", plan.readings, "plan-readings"),
+        _row("  ref: links", plan.links, "plan-links"),
+        _row("  month list links set aside", plan.months, "plan-months"),
+        _row("  dates in capitals", plan.capitals, "plan-capitals"),
+        *(
+            _row(f"  {shape}", n, f"plan-{shape}")
+            for shape, n in sorted(plan.shapes.items())
+            if shape != "into the next book"
+        ),
+        _row("  into the next book", len(plan.cross_book), "plan-into the next book"),
+        *(f"      {reading}" for reading in plan.cross_book),
+        _row("  a part-verse letter", len(plan.part_verse)),
+        *(f"      {reading}" for reading in plan.part_verse),
+        _row("  ending on a verse the NLT omits", len(plan.omitted)),
+        *(f"      {reading}" for reading in plan.omitted),
+        *(_row(f"  link page: {kind}", n) for kind, n in sorted(plan.evidence.items())),
+        _row("  words", plan.words),
+        _row("  Markdown bytes", plan.size),
+        "",
+        _row("Personal Gold author notes", len(authors.notes), "pg-notes"),
+        _row("  tied to an article", sum(1 for n in authors.notes if n.article is not None)),
+        _row("credits", len(authors.credits), "pg-credits"),
+        _row("  tied to an article", sum(1 for c in authors.credits if c.article is not None)),
+        _row("articles without an author note", len(authors.without_note), "pg-without-note"),
+        *(f"      #{n} (p{article.page})" for n, article in authors.without_note),
+        *(
+            f"  {'  words, ' + what:<34}{_sizes(sizes):>8}  (min / median / max)"
+            for what, sizes in authors.words.items()
+        ),
+        *(_row(f"  fixes: {name}", n) for name, n in sorted(authors.fixes.items()) if n),
+        "",
+        "Documents checks (any failure blocks writing)",
+        f"  five front-matter pieces, titled  {_ok(len(front.documents) == 5)}",
+        f"  every line placed; parse errors   {_ok(placed)}",
+        f"  links explained                   {_ok(explained)}",
+        f"  365 days, 4 readings each         {_ok(days)}",
+        f"  every ref: target a real passage  {_ok(real)}",
+        f"  plan link pages explained         {_ok(not plan.evidence['unexplained'])}",
+        f"  author notes and credits tied     {_ok(tied)}",
+        f"  text: hygiene and Markdown        {_ok(clean)}",
+    ]  # fmt: skip
+    problems = [
+        *(f"unexplained link {f.note}: {f.link}" for f in front.links
+          if f.evidence == "unexplained"),
+        *front.errors,
+        *plan.errors,
+        *authors.errors,
+    ]  # fmt: skip
+    lines += [f"    ✗ {problem}" for problem in problems[:40]]
+    for found in (front.hygiene, plan.hygiene, authors.hygiene):
+        for name, where in found.items():
+            lines.append(f"    ✗ {name}: {len(where)} — {', '.join(where[:8])}")
+    if cross is not None and epub is not None:
+        lines += [
+            "",
+            *cross_summary(cross, "Cross-check: documents, PDF vs EPUB", headings=False),
+            _row("  parts whose opening it lost", len(epub.lost)),
+            *(f"      {key[0]}" for key in epub.lost),
         ]
     return lines
