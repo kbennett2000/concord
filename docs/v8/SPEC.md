@@ -28,7 +28,7 @@ Not copied: the book's indexes and contents pages. They are navigation; a client
 
 A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibre conversions (21 Apr 2014) of the same Kindle edition (ASIN B008847REW).
 
-- **The PDF is the source.** 8,350 single-column e-reader pages, a real text layer, every internal link intact, an 81-entry outline. All 10 spots checked where the EPUB is damaged read correctly in it. Read it with `pdftohtml -xml` (poppler-utils): font size, colour and link targets carry the structure. Charts are its embedded 1,024 px JPGs.
+- **The PDF is the source.** 8,350 single-column e-reader pages, a real text layer, every internal link intact, an 81-entry outline. All 10 spots checked where the EPUB is damaged read correctly in it. Read it with `pdftohtml -xml` (poppler-utils): font size, colour and link targets carry the structure. Charts are its embedded JPGs (564–1,024 px wide, stored as the PDF holds them — S4b).
 - **The EPUB is not a source.** Its conversion dropped and fused words and left markup scraps in about one verse in nine; 3,189 verses disagree with the PDF, 936 of them with no visible sign. It serves only as an independent cross-check of the PDF parse.
 - **No clean second-edition reference text exists locally.** Kris's private `NLT` is the 1996 first edition (73% of verses word differently). So the verse text is proven by cross-check: PDF vs EPUB, every disagreement classified (S1's classes: fixed PDF quirk, fix regression, EPUB damage, EPUB splice, EPUB loss with evidence at the spot, hyphenation variant, verified on the rendered page, open). S1's result: 25,500 verses agree, 0 fix regressions, 0 open where the EPUB verse shows no damage.
 - **PDF quirks the converter must handle** *(as measured by S1)*:
@@ -54,9 +54,10 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 | What the Bible Says About | 50 topics (S3b; measured 51), 502 quotations citing 503 references, 240 subheads, 50 callouts | a topic; each called out once, at the end of the verse the line follows (S3b) |
 | Perspectives | 26 text boxes | 12 ranges · 10 verses · 3 multi-part · 1 whole chapter; each where it stands (S3b) |
 | Personal Gold | 24 articles, 24 callouts | 20 ranges (4 of them whole chapters, printed as full ranges) · 4 verses |
-| Charts | 44 images | 30 ranges · 7 cross-chapter · 6 verses · 1 whole chapter |
+| Charts | 44 images, one per Charts Index entry (S4b) | 31 ranges (6 of them a whole chapter printed in full) · 7 cross-chapter · 5 verses · 1 run of two whole chapters (S4b; measured 30 · 7 · 6 · 1 whole chapter); each where it stands |
 | Book introductions | 66 (11 section types, 3 sometimes absent; timeline; What's the Point; one image each) | whole book |
 | Banner images | 102: one image, on the Men, Women, and God index page and above each of its 101 articles; its only words are the feature's name (S3a) | — |
+| Other images | 274 callout icons (one beside each of the 269 callout lines; 5 callouts split by a page print theirs twice), 2 testament title pages, 3 cover and title images — 491 image placements in all with the charts, banners and the 66 reading-time figures (S4b) | — |
 | Front matter | copyright, EMB intro, Contributors, NLT intro, NLT team | — |
 | Verse Finder | 191 pages, topic → references | topics |
 | One Year Reading Plan | 365 days × 4 readings (1,460 references) | — |
@@ -100,10 +101,19 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
   - **Order at the spot:** S3b's notes follow every earlier note at their verse in the file, so no existing `ordinal` moves; a topic the book prints above an S3a article at one verse end takes an explicit `ordinal` one below the article's and shows first (HOS 3:5, MAL 2:16, ROM 1:32).
   - **Text fixes:** a sentence run into the next in roman text (a justified line's text layer dropped the space) splits (1); checks accept initials and small-capital ordinals. S3a's italic "k" rule now applies to the notes too (tn 2SA 23:8 and tn 1CH 25:24 change).
 
+- **As S4b settled** (charts, `chart`; label "Chart"):
+  - **The Charts Index** (an outline section in the features region) lists the 44 in book order: a title linking to the chart's page (41) or the page before it (3), then the passage in parentheses linking to its page. Each entry claims the one chart-sized image on that page or the next; every chart-sized image in the chapters is claimed. **Title** is the index's (the text layer has no other: a chart's heading is inside its picture).
+  - **Images** are the PDF's own JPEG streams, written byte for byte to `data/private/assets/EMB/chart-01.jpg` … `chart-44.jpg` (the index's order): baseline, 64–136 KB, 4,796,684 bytes in all. pdftohtml now runs with images on, into a temporary directory; its text items are the same as with `-i`.
+  - **Text** is the index's printed reference as one `ref:` link (`text_format` markdown): a chart's words are inside its picture, so the note's text gives a client the jump to its passage. **Passages** are the reference (S3a's rule: none for a single verse the chart stands at — 4 of the 44).
+  - **Anchor:** S3a's rule, where the image stands — the end of the verse it follows (all 44): 39 close their passage, 3 stand inside it (PSA 9:1, PRO 2:19, AMO 2:16), 2 just after it (JER 1:3 for Jer 1:1, ACT 28:10 for Acts 28:7-8). None stands inside a verse or in an introduction.
+  - **Order at the spot:** charts follow every earlier note at their verse in the file, with no explicit `ordinal`, so they show last and no existing note's number moves. At JON 1:3 and 1TI 3:13 the book prints an article's callout, then the chart: the same order.
+  - **The EPUB** re-encoded its images at 566 px, so it can't witness bytes. Its Charts Index agrees with the PDF's on 41 entries; 3 carry visible markup damage. Its images stand at the same verse as 39 charts; it lacks #5, #24, #25, #29 and #40.
+
 **4.3 Documents — `data/private/documents/EMB.json` (ADR-0012, S5).** New table `translation_documents`: `slug`, `kind` (`book-introduction`, `front-matter`, `reading-plan`, `about`), `title`, `book` (book introductions only), `ordinal`, Markdown `text`, and the image names it uses. References inside the text are `ref:` links.
 
 **4.4 Images — `data/private/assets/EMB/` (ADR-0012, S4).** New table `translation_assets`: `name`, `media_type`, `width`, `height`, `bytes` — baked into `bible.db` like everything else (no runtime mount). The slice reports the `bible.db` size change. The 102 banner images above feature articles are decorative unless S3 finds one carrying words that aren't in the text layer; decorative ones aren't copied (the note's `label` replaces them). S3a looked: all 102 are one image whose only words are the feature's name, which the `label` carries — none is copied.
 - **As S4a settled** (ADR-0012): the loader reads `data/private/assets/<CODE>/<name>` (one folder per loaded translation, files only); a name is lower-case letters, digits, `-` and `_`, then `.jpg`, `.jpeg` or `.png`; the bytes must be a complete JPEG or PNG (sniffed, the extension agreeing), non-empty, at most 2 MiB and 8,192 px a side, width and height read from the header with `struct` (no new dependency). Bytes are stored exactly as supplied. Assets load before notes. Any violation fails the build, naming the file.
+- **As S4b settled:** EMB's 44 charts are copied; nothing else in the book is — the callout icons and the banner carry only a feature's name (the `label`), the two testament title pages only the testament's name, the cover and title images nothing the data lacks; the 66 reading-time figures come with the introductions (S5). The 44 add 4.6 MiB to `bible.db` (299,307,008 → 304,152,576 bytes).
 
 **4.5 Verse Finder — `data/private/topics/` (ADR-0013, S6).** The topics loader scans `[data/topics, data/private/topics]` (ADR-0004's pattern). Same topics contract; `source` = "Tyndale Verse Finder"; ids prefixed `vf-`; ranges expand to their verses.
 
