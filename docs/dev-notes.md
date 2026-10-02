@@ -2451,3 +2451,26 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - NET John 3's 71 equal.
 - **`make check` green** (921 passed, 48 deselected; ruff and pyright strict clean, openapi.json
   unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  - **Build:** `make docker-build-private` took 1 min 7 s, with the embed `CACHED`; the temporary
+    `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (8332b4ac9e4f) checked on :8077:**
+    - 20 translations, the same ids as the server; only EMB's `note_count` changed (7,579 → 7,623);
+    - GEN 13's chart with its label, title, passages and image;
+    - all 44 images served byte-identical as `image/jpeg`, with a stable ETag, 304, and a 404 for
+      an unknown name;
+    - every chapter's existing EMB notes equal to the server's; NET John 3's 71 equal; semantic
+      search on.
+  - **Ship:** `docker save | gzip` 11 s (509 MB, about 5 MB more than S3b's); `scp` 38 s;
+    `docker load` 34 s + `compose up -d` 10 s; healthy after ~15 s; both tarballs removed.
+  - **Rollback:** `concord:pre-emb-charts` (the V8-S3b image, 506e1ab14375) —
+    `docker tag concord:pre-emb-charts concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now:** `latest`, `pre-emb-charts`, `pre-emb-topics`, `pre-emb-articles`,
+    `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.62–1.65 GB each, layers shared; 20 GB free).
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`:
+    - NET John 3's 71 notes are identical to a capture taken before the swap, in every field
+      Songbird reads;
+    - EMB Genesis 13 keeps its 3 notes and gains its chart: label, title, Markdown text, passage
+      Genesis 13:1-4. Songbird's model ignores `image` until its charts slice;
+    - 20 translations, the same ids; only EMB's `note_count` changed.
