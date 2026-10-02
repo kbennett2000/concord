@@ -373,7 +373,7 @@ def build_database(
     cross_ref_dirs: list[Path] | None = None,
     geo_dir: Path | None = None,
     notes_dirs: list[Path] | None = None,
-    topics_dir: Path | None = None,
+    topics_dirs: list[Path] | None = None,
     lexicon_dir: Path | None = None,
     tokens_dir: Path | None = None,
     journeys_dir: Path | None = None,
@@ -382,7 +382,7 @@ def build_database(
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
     ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), ``notes_dirs``
-    (translator's-notes JSON), and ``topics_dir`` (topical-Bible JSON). Idempotent — same
+    (translator's-notes JSON), and ``topics_dirs`` (topical-Bible JSON). Idempotent — same
     inputs, byte-identical db.
 
     ``notes_dirs`` is normally ``[data/notes, data/private/notes]`` (ADR-0004): the first is the
@@ -398,7 +398,11 @@ def build_database(
 
     ``documents_dirs`` is normally ``[data/private/documents]`` (ADR-0012): a translation's
     documents (book introductions, front matter, …), loaded after the assets their text places;
-    a clean build bakes zero documents."""
+    a clean build bakes zero documents.
+
+    ``topics_dirs`` is normally ``[data/topics, data/private/topics]`` (ADR-0013, ADR-0004's
+    pattern): the committed Nave's that ships, then an operator's own topical sources (v8: the
+    Verse Finder), dual-ignored, so a clean build bakes only the committed topics."""
     start = time.perf_counter()
     cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
@@ -491,8 +495,8 @@ def build_database(
             from .topics import TopicsStats, load_topics
 
             topics_stats = (
-                load_topics(conn, topics_dir, alias_to_book)
-                if topics_dir is not None
+                load_topics(conn, topics_dirs, alias_to_book)
+                if topics_dirs is not None
                 else TopicsStats(0, 0, 0, 0)
             )
 
@@ -573,6 +577,12 @@ def _default_assets_dirs(base: Path) -> list[Path]:
     return [base / "private" / "assets"]
 
 
+def _default_topics_dirs(base: Path) -> list[Path]:
+    """`<base>/topics` then `<base>/private/topics` (ADR-0013): the committed Nave's ships; the
+    private path is absent from a clean checkout, so zero private topics."""
+    return [base / "topics", base / "private" / "topics"]
+
+
 def _default_documents_dirs(base: Path) -> list[Path]:
     """`<base>/private/documents` (ADR-0012): absent from a clean checkout, so zero documents."""
     return [base / "private" / "documents"]
@@ -603,8 +613,10 @@ def main(argv: list[str] | None = None) -> int:
     # The latter is dual-ignored, so the public build has no `private/` and bakes zero private
     # notes — only the committed public ones.
     notes_dirs = [base / "notes", base / "private" / "notes"]
-    # Committed topical-Bible dataset (Nave's, CC BY 4.0) — ships in the image like geography.
-    topics_dir = base / "topics"
+    # Topical-Bible sources (ADR-0013): the committed Nave's (CC BY 4.0) ships in the image like
+    # geography; an operator's own sources (v8: the Verse Finder) sit in dual-ignored
+    # `data/private/topics/`, so the public build bakes none.
+    topics_dirs = _default_topics_dirs(base)
     # Committed Strong's lexicon + tagged word tokens (STEPBible, CC BY 4.0), both under
     # data/strongs/; the lexicon loader reads lexicon*.json, the token loader reads tokens-*.json.
     lexicon_dir = base / "strongs"
@@ -622,7 +634,7 @@ def main(argv: list[str] | None = None) -> int:
             cross_ref_dirs,
             geo_dir,
             notes_dirs,
-            topics_dir,
+            topics_dirs,
             lexicon_dir,
             tokens_dir,
             journeys_dir,

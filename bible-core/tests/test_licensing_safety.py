@@ -39,6 +39,7 @@ from bible_core.loader import (
     _default_assets_dirs,
     _default_data_dirs,
     _default_documents_dirs,
+    _default_topics_dirs,
     build_database,
 )
 from imagekit import png
@@ -96,6 +97,18 @@ def test_public_notes_dir_is_not_ignored(ignore_file: str) -> None:
     assert not offenders, (
         f"data/notes/ must NOT be in {ignore_file} — it is the committed public-domain notes "
         f"path that ships in the image (ADR-0004). Found: {offenders}."
+    )
+
+
+@pytest.mark.parametrize("ignore_file", [".gitignore", ".dockerignore"])
+def test_public_topics_dir_is_not_ignored(ignore_file: str) -> None:
+    """The mirror guard for topics (ADR-0013): the committed Nave's must SHIP; only
+    ``data/private/topics/`` (under the ignored ``data/private/``) stays out."""
+    lines = _ignore_lines(ignore_file)
+    offenders = {entry for entry in lines if entry.rstrip("/") == "data/topics"}
+    assert not offenders, (
+        f"data/topics/ must NOT be in {ignore_file} — it is the committed topical Bible that "
+        f"ships in the image (ADR-0013). Found: {offenders}."
     )
 
 
@@ -188,3 +201,30 @@ def test_no_image_is_committed_under_data() -> None:
     ).stdout.split("\n")
     images = [name for name in tracked if name.lower().endswith((".jpg", ".jpeg", ".png"))]
     assert tracked and not images, f"images committed under data/: {images}"
+
+
+def _topic_sources(base: Path) -> dict[str, int]:
+    """Build from the directories the loader's CLI picks under ``base``; count topics by source."""
+    db = base / "bible.db"
+    build_database(db, _default_data_dirs(base), topics_dirs=_default_topics_dirs(base))
+    with sqlite3.connect(db) as conn:
+        return dict(conn.execute("SELECT source, COUNT(*) FROM topics GROUP BY source"))
+
+
+def _topics_file(directory: Path, source: str, topic_id: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    made_up: dict[str, object] = {"id": topic_id, "name": "Made up", "section": "M", "verses": []}
+    (directory / f"{topic_id}.json").write_text(
+        json.dumps({"source": source, "topics": [made_up]}), encoding="utf-8"
+    )
+
+
+def test_clean_checkout_bakes_zero_private_topics(tmp_path: Path) -> None:
+    """No data/private/ → only the committed topical sources are baked (ADR-0013); a private
+    one (v8: the Verse Finder) never reaches a build made from the repository alone. The second
+    half proves the build would have picked it up had it been there, so the zero isn't vacuous."""
+    write_translation(tmp_path / "translations", _one_verse("PUB"))
+    _topics_file(tmp_path / "topics", "Made-up Public Topics", "made-up")
+    assert _topic_sources(tmp_path) == {"Made-up Public Topics": 1}
+    _topics_file(tmp_path / "private" / "topics", "Made-up Private Topics", "vf-1")
+    assert _topic_sources(tmp_path) == {"Made-up Public Topics": 1, "Made-up Private Topics": 1}

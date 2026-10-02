@@ -1116,12 +1116,14 @@ def distinct_place_types(conn: sqlite3.Connection) -> list[str]:
 
 @dataclass(frozen=True)
 class TopicRow:
-    """One topic. ``see_also`` is the id of another topic for a 'See X' redirect, else None."""
+    """One topic. ``see_also`` is the id of another topic for a 'See X' redirect, else None;
+    ``source`` is the topical source it comes from (ADR-0013), e.g. "Nave's Topical Bible"."""
 
     id: str
     name: str
     section: str
     see_also: str | None
+    source: str
 
 
 @dataclass(frozen=True)
@@ -1129,6 +1131,14 @@ class TopicPage:
     """A page of topics plus the total match count."""
 
     rows: tuple[TopicRow, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class TopicSourceTotal:
+    """One loaded topical source and how many of its topics match a filter."""
+
+    source: str
     total: int
 
 
@@ -1142,26 +1152,17 @@ class TopicVerseRef:
     verse: int
 
 
-_TOPIC_COLS = ("id", "name", "section", "see_also")
+_TOPIC_COLS = ("id", "name", "section", "see_also", "source")
 _TOPIC_SELECT = ", ".join(_TOPIC_COLS)
 
 
 def _row_to_topic(r: sqlite3.Row) -> TopicRow:
-    return TopicRow(r[0], r[1], r[2], r[3])
+    return TopicRow(r[0], r[1], r[2], r[3], r[4])
 
 
-def list_topics(
-    conn: sqlite3.Connection,
-    q: str | None,
-    section: str | None,
-    limit: int,
-    offset: int,
-) -> TopicPage:
-    """Browse topics, optionally filtered by name substring (``q``) and ``section`` letter.
-
-    Ordered ``name, id`` (a stable tiebreak so same-named topics paginate deterministically);
-    ``total`` is a separate count over the same filter.
-    """
+def _topic_filter(q: str | None, section: str | None) -> tuple[list[str], list[str]]:
+    """The browse's name-substring and section predicates, shared by the page, its count and the
+    per-source totals so they can never drift apart."""
     clauses: list[str] = []
     params: list[str] = []
     if q is not None and q.strip():
@@ -1170,6 +1171,28 @@ def list_topics(
     if section is not None and section.strip():
         clauses.append("section = ?")
         params.append(section.strip())
+    return clauses, params
+
+
+def list_topics(
+    conn: sqlite3.Connection,
+    q: str | None,
+    section: str | None,
+    limit: int,
+    offset: int,
+    *,
+    source: str | None = None,
+) -> TopicPage:
+    """Browse topics, optionally filtered by name substring (``q``), ``section`` letter and
+    ``source`` (exact, ADR-0013).
+
+    Ordered ``name, id`` (a stable tiebreak so same-named topics paginate deterministically);
+    ``total`` is a separate count over the same filter.
+    """
+    clauses, params = _topic_filter(q, section)
+    if source is not None:
+        clauses.append("source = ?")
+        params.append(source)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
 
     rows = tuple(
@@ -1181,6 +1204,23 @@ def list_topics(
     )
     total = conn.execute(f"SELECT COUNT(*) FROM topics{where}", params).fetchone()[0]
     return TopicPage(rows=rows, total=total)
+
+
+def topic_source_totals(
+    conn: sqlite3.Connection, q: str | None, section: str | None
+) -> tuple[TopicSourceTotal, ...]:
+    """Every loaded topical source with how many of its topics match ``q`` and ``section`` (0
+    included), ordered by source — the browse's facet, and the set ``?source=`` accepts."""
+    clauses, params = _topic_filter(q, section)
+    matches = " AND ".join(clauses) if clauses else "1"
+    return tuple(
+        TopicSourceTotal(r[0], r[1])
+        for r in conn.execute(
+            f"SELECT source, SUM(CASE WHEN {matches} THEN 1 ELSE 0 END) FROM topics "
+            "GROUP BY source ORDER BY source",
+            params,
+        )
+    )
 
 
 def get_topic(conn: sqlite3.Connection, topic_id: str) -> TopicRow | None:

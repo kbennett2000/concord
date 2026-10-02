@@ -63,6 +63,7 @@ from bible_core.queries import (
     search_notes,
     search_verses,
     search_verses_multi,
+    topic_source_totals,
 )
 from bible_core.resolver import SqliteBookResolver
 from bible_semantic.model import embed_query
@@ -133,6 +134,7 @@ from .schemas import (
     StrongsVerse,
     StrongsVersesResponse,
     TopicDetail,
+    TopicSourceTotal,
     TopicsResponse,
     TopicSummary,
     TopicVerse,
@@ -1043,11 +1045,15 @@ def journey_detail_endpoint(journey_id: str, request: Request, conn: Conn) -> Re
 
 def _topic_summary(topic: TopicRow) -> TopicSummary:
     return TopicSummary(
-        id=topic.id, name=topic.name, section=topic.section, see_also=topic.see_also
+        id=topic.id,
+        name=topic.name,
+        section=topic.section,
+        see_also=topic.see_also,
+        source=topic.source,
     )
 
 
-@router.get("/topics")
+@router.get("/topics", responses={200: {"model": TopicsResponse}})
 def topics_endpoint(
     request: Request,
     conn: Conn,
@@ -1055,10 +1061,25 @@ def topics_endpoint(
     section: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    source: Annotated[
+        str | None,
+        Query(description="Only this topical source, by its exact name (one of `sources`)."),
+    ] = None,
 ) -> Response:
+    # ADR-0013: an unknown ?source= is 400 unknown_source (a closed filter, as /v1/places'
+    # ?type=); `sources` lists each loaded source's count under q/section, so it doubles as the
+    # set the filter accepts.
     q_filter = q.strip() if q and q.strip() else None
     section_filter = section.strip() if section and section.strip() else None
-    page = list_topics(conn, q_filter, section_filter, limit, offset)
+    source_filter = source.strip() if source and source.strip() else None
+    totals = topic_source_totals(conn, q_filter, section_filter)
+    if source_filter is not None and source_filter not in (t.source for t in totals):
+        raise FilterError(
+            "unknown_source",
+            f"unknown topic source {source_filter!r}",
+            {"source": source_filter, "available": [t.source for t in totals]},
+        )
+    page = list_topics(conn, q_filter, section_filter, limit, offset, source=source_filter)
     response = TopicsResponse(
         q=q_filter,
         section=section_filter,
@@ -1066,11 +1087,13 @@ def topics_endpoint(
         offset=offset,
         total=page.total,
         topics=[_topic_summary(t) for t in page.rows],
+        source=source_filter,
+        sources=[TopicSourceTotal(source=t.source, total=t.total) for t in totals],
     )
     return cached_json_response(response, request)
 
 
-@router.get("/topics/{topic_id}")
+@router.get("/topics/{topic_id}", responses={200: {"model": TopicDetail}})
 def topic_detail_endpoint(topic_id: str, request: Request, conn: Conn) -> Response:
     topic = get_topic(conn, topic_id)
     if topic is None:
@@ -1081,11 +1104,12 @@ def topic_detail_endpoint(topic_id: str, request: Request, conn: Conn) -> Respon
         section=topic.section,
         see_also=topic.see_also,
         verse_count=count_topic_verses(conn, topic.id),
+        source=topic.source,
     )
     return cached_json_response(response, request)
 
 
-@router.get("/topics/{topic_id}/verses")
+@router.get("/topics/{topic_id}/verses", responses={200: {"model": TopicVersesResponse}})
 def topic_verses_endpoint(
     topic_id: str,
     request: Request,
@@ -1095,7 +1119,8 @@ def topic_verses_endpoint(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Response:
-    if get_topic(conn, topic_id) is None:
+    topic = get_topic(conn, topic_id)
+    if topic is None:
         raise UnknownTopicError(topic_id)
 
     translation_id = resolve_translation(request, translation) if include_text else None
@@ -1122,11 +1147,12 @@ def topic_verses_endpoint(
         offset=offset,
         total=total,
         verses=verses,
+        source=topic.source,
     )
     return cached_json_response(response, request)
 
 
-@router.get("/verses/{ref}/topics")
+@router.get("/verses/{ref}/topics", responses={200: {"model": VerseTopicsResponse}})
 def verse_topics_endpoint(
     ref: Annotated[str, Path(max_length=MAX_REF_LENGTH)], request: Request, conn: Conn
 ) -> Response:

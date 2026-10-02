@@ -95,6 +95,7 @@ Every error uses one envelope:
 | `unknown_document` | 404 | A loaded translation has no document by that slug (`/translations/EMB/documents/nope`). `detail` echoes `translation` and `slug`. |
 | `unknown_type` | 400 | A `/places?type=` filter value isn't a known place type; `detail.available` lists the valid types. |
 | `unknown_kind` | 400 | A `/translations/{translation}/documents?kind=` value isn't one of front-matter / reading-plan / book-introduction / about; `detail.available` lists them. |
+| `unknown_source` | 400 | A `/topics?source=` value isn't a loaded topical source; `detail.available` lists them (as `/topics`'s `sources` does). |
 | `unknown_status` | 400 | A `/places?status=` filter value isn't one of identified / disputed / unknown / symbolic / multiple. |
 | `invalid_search_query` | 400 | Malformed FTS5 syntax; the SQLite message is in `detail.fts5_error`. |
 | `invalid_parameter` | 422 | A query/path parameter fails validation (bad `format`, `limit` out of range, `min_votes` < 0, non-integer chapter). |
@@ -910,14 +911,18 @@ the valid types) · `400 unknown_book` (filter) · `400 invalid_search_query` (m
 
 ## `GET /v1/topics`
 
-Browse topical-Bible subjects from [Nave's Topical Bible](https://github.com/BradyStephenson/bible-data)
-(public domain, 1897). Optionally filter by name substring (`q`, case-insensitive) and `section`
-(the A–Z index letter). Ordered by `name`, then `id`.
+Browse topical-Bible subjects from every loaded topical source: [Nave's Topical
+Bible](https://github.com/BradyStephenson/bible-data) (public domain, 1897), which ships, plus any
+source an operator loads privately ([ADR-0013](adr/ADR-0013-private-topics-and-sources.md); user
+flow: [`docs/v8/topics-ingest.md`](v8/topics-ingest.md)). Optionally filter by name substring
+(`q`, case-insensitive), `section` (the A–Z index letter) and `source`. Ordered by `name`, then
+`id` (binary: within a letter, all-capitals names sort before mixed-case ones).
 
 | Param | In | Type | Default | Notes |
 |---|---|---|---|---|
 | `q` | query | string | — | Case-insensitive name substring. |
 | `section` | query | string | — | The A–Z index letter (e.g. `F`). |
+| `source` | query | string | — | Only this source, by its exact name as `sources` lists it (e.g. `Nave's Topical Bible`). Unknown → `400 unknown_source`. |
 | `limit` | query | int | `50` | 1–200. |
 | `offset` | query | int | `0` | ≥ 0. |
 
@@ -928,14 +933,25 @@ $ curl -s 'localhost:8000/v1/topics?q=faith&limit=2'
 {
   "q": "faith", "section": null, "limit": 2, "offset": 0, "total": 4,
   "topics": [
-    { "id": "faith", "name": "FAITH", "section": "F", "see_also": null },
-    { "id": "faithfulness", "name": "FAITHFULNESS", "section": "F", "see_also": null }
-  ]
+    { "id": "faith", "name": "FAITH", "section": "F", "see_also": null,
+      "source": "Nave's Topical Bible" },
+    { "id": "faithfulness", "name": "FAITHFULNESS", "section": "F", "see_also": null,
+      "source": "Nave's Topical Bible" }
+  ],
+  "source": null,
+  "sources": [ { "source": "Nave's Topical Bible", "total": 4 } ]
 }
 ```
 
 `see_also` is the id of another topic when this one is a "See X" redirect (Nave's points
-`ANXIETY` at `CARE`); such topics carry no verses of their own. **Caching:** immutable.
+`ANXIETY` at `CARE`); such topics carry no verses of their own. `source` (each topic's, appended)
+names its topical source. The page echoes the `source` filter and appends `sources`: every loaded
+source with how many of its topics match `q` and `section` (ignoring `source`; 0 included),
+ordered by name — the names `?source=` accepts. `total` counts the page's own filters. Take names
+from `sources` rather than hardcoding them (the match is exact). **Errors:** `400 unknown_source`
+(`detail.source`, `detail.available`). **Caching:** immutable — note that unfiltered pages and
+`sources` change when an operator rebuilds with a private source, and a client may hold a body
+cached before `source` existed: treat `source`/`sources` as optional.
 
 ## `GET /v1/topics/{id}`
 
@@ -949,7 +965,8 @@ One topic's detail, including its `verse_count` (0 for a redirect).
 $ curl -s 'localhost:8000/v1/topics/care'
 ```
 ```json
-{ "id": "care", "name": "CARE", "section": "C", "see_also": null, "verse_count": 53 }
+{ "id": "care", "name": "CARE", "section": "C", "see_also": null, "verse_count": 53,
+  "source": "Nave's Topical Bible" }
 ```
 
 **Errors:** `404 unknown_topic` (`detail.topic_id`). **Caching:** immutable.
@@ -976,12 +993,13 @@ $ curl -s 'localhost:8000/v1/topics/care/verses?translation=KJV&limit=2'
     { "book": "PSA", "chapter": 37, "verse": 5, "reference": "Psalms 37:5",
       "text": "Commit thy way unto the LORD; trust also in him; and he shall bring it to pass." },
     { "book": "PSA", "chapter": 39, "verse": 6, "reference": "Psalms 39:6", "text": "…" }
-  ]
+  ],
+  "source": "Nave's Topical Bible"
 }
 ```
 
 A verse absent in the chosen translation hydrates as `text: null` (not an error). A redirect or
-empty topic returns `"total": 0`, `"verses": []`. **Errors:** `404 unknown_topic`.
+empty topic returns `"total": 0`, `"verses": []`. `source` is the topic's source. **Errors:** `404 unknown_topic`.
 **Caching:** immutable.
 
 ## `GET /v1/verses/{ref}/topics`
@@ -999,14 +1017,18 @@ $ curl -s 'localhost:8000/v1/verses/Philippians%204:6/topics'
 {
   "reference": "Philippians 4:6", "total": 5,
   "topics": [
-    { "id": "care", "name": "CARE", "section": "C", "see_also": null },
-    { "id": "commandments", "name": "COMMANDMENTS", "section": "C", "see_also": null },
-    { "id": "prayer", "name": "PRAYER", "section": "P", "see_also": null }
+    { "id": "care", "name": "CARE", "section": "C", "see_also": null,
+      "source": "Nave's Topical Bible" },
+    { "id": "commandments", "name": "COMMANDMENTS", "section": "C", "see_also": null,
+      "source": "Nave's Topical Bible" },
+    { "id": "prayer", "name": "PRAYER", "section": "P", "see_also": null,
+      "source": "Nave's Topical Bible" }
   ]
 }
 ```
 
-The **deduped union** across the reference's range, ordered by `name` then `id`. A reference citing
+The **deduped union** across the reference's range and across every loaded source (each topic
+with its `source`), ordered by `name` then `id`. A reference citing
 no topic returns `200` with `"total": 0`, `"topics": []`. **Errors:** `400 unparseable_reference` ·
 `404 unknown_book`. **Caching:** immutable.
 
