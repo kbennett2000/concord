@@ -43,6 +43,26 @@ see [Original-language texts](#original-language-texts-datatranslationssblgntjso
 > The `attribution` column in the `translations` table is populated from this record
 > (or the translation JSON metadata) during the loader slice.
 
+### Cleanups applied to the committed text
+
+The committed English JSON is the source editions' text with two extraction artifacts
+repaired. No wording was changed:
+
+- **Fused section headings** (issue #67). The extractor had glued each section heading onto
+  the end of the verse before it. The headings were moved back into their chapter's `headings`
+  ([scripts/fix_fused_headings.py](../scripts/fix_fused_headings.py)).
+- **Broken and glued words** (2026-10-02):
+  - Words split by a stray space were closed up ("in t he ark", "sin- offering", "father’ s").
+  - Words or sentences run together got their space back ("himboth", "Damascus.Behold").
+  - That made 28,365 repairs in 12 translations
+    ([scripts/fix_broken_words.py](../scripts/fix_broken_words.py)). Each removes or inserts
+    one space and nothing else. Each is backed by the translation's own word counts and the
+    same verse in the other English translations.
+  - Every change is listed in
+    [scripts/broken_words_manifest.md](../scripts/broken_words_manifest.md) and its `.csv`,
+    and so is every case left alone for want of evidence.
+  - BSB, SBLGNT and OSHB needed none.
+
 ## Cross-references (`data/cross-references/`)
 
 | Field | Value |

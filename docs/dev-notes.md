@@ -2989,3 +2989,118 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `publish-image.yml`, which publishes `ghcr.io/kbennett2000/concord:v1.3.0`, `:latest` and
   `:sha-…`. The published image is then pulled and checked the same way, and the GitHub release
   is published from `docs/releases/v1.3.0.md`. The LAN server keeps its private image.
+
+### Fix — broken and glued words in the committed translations
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`fix/broken-words`).
+- **Why:** the committed English translations carried their source text layer's word breaks.
+  It is the quirk the EMB converter repairs (V8-S1): KJV Gen 6:14 read "in t he ark". The breaks
+  spoil reading, keyword search (FTS) and the WEB embeddings, which all read verse text. Kris's
+  rough test put it at about 390–510 verses per translation, and 2 in BSB. The test counted a
+  split whose joined form is a common word while one half is not a word.
+- **Measured** (read-only, before any change):
+  - **About four times Kris's estimate:** roughly 1,650–1,850 letter splits per English
+    translation. A raw count calls the commonest fragments words. KJV prints a lone "t" 231
+    times, and every one is inside a break; "t he" alone occurs 77 times.
+  - **Kinds, KJV** (the others are similar):
+    - a split inside a word: 756;
+    - the first letter split off: 641 ("t he", "w ith");
+    - the last letter split off: 444 ("an d", "hi s");
+    - about 10% capitalised: names, LORD, God.
+  - **Two more kinds:**
+    - a stray space beside a hyphen ("sin- offering", "Ben -hadad"): about 1,000–1,300 each
+      in ASV, DBT, JPS, WBT and YLT, almost none in KJV and AKJV;
+    - a split possessive ("father’ s"): up to 5 per translation.
+  - **BSB:** none. Its 11 candidates are its real wording ("a lone witness", "to ward off",
+    "the earth quakes", "a blaze").
+  - **OSHB and SBLGNT:** none. Their only hits ("ὅ τι") are real words.
+  - **The opposite fault, glued words:**
+    - about 400 candidates, nearly all real compounds, spellings or names;
+    - about a dozen real glues, plus ASV's 66 sentences run into the next ("Damascus.Behold");
+    - Kris chose to fix these too, in their own commit.
+  - **Out of scope:** about 515–618 verses per translation have a double space between two
+    whole words. No word is broken, so they were not touched.
+- **What landed:**
+  - **The script:** `scripts/fix_broken_words.py` (stdlib, pyright strict, one-shot), with
+    its manifest `scripts/broken_words_manifest.{csv,md}`.
+  - **The evidence** for each repair is the translation's own word counts plus the same verse
+    in the 12 other English translations. The rules are the EMB converter's
+    (`emb_convert.clean`), restated for whole translations:
+    - **Words.** A piece is a word when it stands alone at least twice. A lone letter is a
+      word only if it is a/A/I/O. A piece also counts as a word when a sibling verse prints
+      it without the same partner, which keeps rare names ("Sephar a mount").
+    - **Joining a run.** A run is joined when all of these hold:
+      - the joined form stands alone at least twice;
+      - a piece is no word;
+      - the translation doesn't prefer the phrase ("fallow deer");
+      - a sibling verse prints the word, or the translation prints it at least three times
+        and the fragment is a word nowhere.
+    - **A one-letter word as a piece** needs the joined word attested beside its neighbours.
+      That keeps BSB's "a lone witness" and CPDV's "a lone eagle".
+    - **Rival readings** ("tha t he", "word s hall"): the reading that leaves no fragment wins,
+      then the one whose word pairs the sibling verse prints.
+    - **Hyphen spaces** close up only when the compound is printed whole. Line-break hyphens
+      ("thou- sand", DRB) are listed instead, because the hyphen would have to go too.
+    - **A glued token** is split only when all of these hold:
+      - nothing else prints it;
+      - it splits exactly one way into two common words;
+      - a sibling verse prints that pair.
+
+      Hyphenated siblings ("mercy-seat") and a- words ("awork") make it a compound. So do
+      repeats without an inner capital ("goodwill" ×2 in BSB), as opposed to "Iwill".
+  - **Changes:** 28,365 in 12 translations.
+
+    | Kind | Changes |
+    |---|---|
+    | split | 21,020 |
+    | hyphen | 7,240 |
+    | apostrophe | 23 |
+    | glued | 15 |
+    | punctuation | 67 |
+
+    By translation: AKJV 1,744, ASV 2,781, CPDV 2,297, DBT 2,908, DRB 1,869, ERV 2,207,
+    JPS 2,913, KJV 1,845, SLT 2,097, WBT 2,847, WEB 1,892, YLT 2,965. BSB, OSHB and SBLGNT
+    are unchanged.
+  - **Left alone and listed in the `.md`:** 1,421 cases.
+
+    | Reason | Cases |
+    |---|---|
+    | both halves are words ("he art", "in to") | 621 |
+    | the compound is printed nowhere else | 394 |
+    | thin evidence | 172 |
+    | line-break hyphens | 133 |
+    | one-letter words not attested beside their neighbours | 51 |
+    | glued, but no sibling prints the pair | 22 |
+    | a one-letter word beside a word printed elsewhere | 19 |
+    | compounds and a translation's own spellings | 9 |
+  - **Commits:** the glued kinds went first (81 changes), then the broken ones, then one
+    glued word the joins uncovered (ASV Esth 1:10 "wasmerry").
+- **Checked:**
+  - Every changed verse equals the old one with only spaces removed or inserted (asserted
+    per verse by the script, and again file by file against the previous commit).
+  - Verse numbers, headings and metadata are identical, and the files round-trip
+    byte-identically.
+  - A dry run of every kind afterwards proposes nothing.
+  - Hand review before applying:
+    - every glued and punctuation change;
+    - every BSB candidate;
+    - 60 rival resolutions;
+    - 50 joins resting on own counts alone;
+    - 25 hyphen joins.
+
+    Two rules came from that review: the one-letter one and the compound ones.
+  - Translations with character-anchored notes are refused by the script.
+- **Guard:** `bible-core/tests/test_no_broken_words.py`.
+  - `quick_check` (lone letters and hyphen spaces, the commonest kinds) runs in the default
+    suite, in about 3 s. On the pre-fix KJV it flags 964. The default run went from 11.4 s to
+    about 15 s.
+  - The full detector, about 40 s, runs as an integration test.
+  - Spot checks: KJV Gen 6:14, WEB Exod 26:18, ASV Lev 4:34, DRB Jer 3:25, ASV Isa 17:1.
+- **Tests:** 43 in `scripts/tests/test_fix_broken_words.py`, made-up text only.
+  - They were written before the script and failed until it existed.
+  - Each rule added after review had its tests fail with the rule switched off.
+- **Found in passing:** the committed #67 manifest (`scripts/fused_headings_manifest.{md,csv}`)
+  is empty, header only, in its own commit f379080. Its script rewrote it on a second,
+  idempotent run before that commit. The new script writes its manifest only when it applies
+  changes, and appends.
+- **Docs:** `data/SOURCES.md` has a new "Cleanups applied to the committed text" section
+  covering #67 and this fix.
