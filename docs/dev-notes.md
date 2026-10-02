@@ -2230,3 +2230,15 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   with label, title, passages and Markdown, both two-book articles with their cross-references, a
   notes search finding an article, Genesis 1's 7 existing notes and NET John 3's 71 equal to the
   server's.
+- **Deployed 2026-10-01** to the LAN Concord (192.168.1.62:8000) from this branch.
+  `make docker-build-private` 1 min 22 s, the embed `CACHED`, the temporary
+  `Dockerfile.dockerignore` gone afterwards. The image checked on :8077 (20 translations, EMB
+  7,503 notes, 219 articles, every chapter's existing EMB notes equal to the server's, NET John
+  3's 71 equal, semantic search on). `docker save | gzip` 10 s (505 MB), `scp` 38 s,
+  `docker load` + `compose up -d` 51 s, healthy. Rollback: `concord:pre-emb-articles` (the
+  note-spacing fix's image) — `docker tag concord:pre-emb-articles concord:latest && docker
+  compose up -d` in `~/applications/concord`. Server tags now: `latest`, `pre-emb-articles`,
+  `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.6 GB each, layers shared; 23 GB free). Read
+  through Songbird's own `ConcordClient` inside `songbird-songbird-1`: NET John 3's 71 notes
+  identical to a capture taken before the swap; EMB Genesis 3 and 41 keep their notes and gain
+  their articles; 20 translations, the same ids, only EMB's `note_count` changed (7,284 → 7,503).
