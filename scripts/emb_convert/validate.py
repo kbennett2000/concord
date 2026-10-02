@@ -7,6 +7,10 @@
   words (ordinals like "430th" aside), stray small caps, box reference strings or fused
   headings in any verse. (Callout labels are not scanned for: many are names that verses
   rightly contain, "Herod Antipas"; a leaked label surfaces in the cross-check instead.)
+- Punctuation spacing (``PUNCTUATION``, verses and headings; the notes run it too): no word
+  run into an opening mark, no space after one, no space before closing punctuation, no
+  closing mark run into a word, no number spread digit by digit, no mark run into the " / " of a
+  quoted line break.
 
 Any failure here blocks writing ``EMB.json``.
 """
@@ -31,6 +35,20 @@ _HYGIENE: dict[str, re.Pattern[str]] = {
     "small-caps-fragment": re.compile(r"\bORD\b"),
     "box-reference": re.compile(r"\b[A-Z]{3,} \d+:\d+"),
 }
+
+# How a broken-word fix that misjudges a mark, or a gap the text layer kept, shows (the
+# 2 Cor 12:1 study note's "word(", docs/dev-notes.md). Each exception is the book's own printing:
+# an editorial completion inside a word ("x[s]"), a spaced ellipsis (". . ." and ". . . ,"), a
+# word-initial apostrophe ("’tis") and single-letter abbreviations ("B.C.", "i.e.").
+PUNCTUATION: dict[str, re.Pattern[str]] = {
+    "word-into-opening-mark": re.compile(r"[A-Za-z0-9](?:[(“‘]|\[(?![a-z]+\]))"),
+    "space-after-opening-mark": re.compile(r"[(\[“‘] "),
+    "space-before-closing-mark": re.compile(r"(?<![.…]) (?:[,;:!?)\]”]|’(?![A-Za-z])|\.(?! \.))"),
+    "closing-mark-into-word": re.compile(r"[,;:!?)\]”][A-Za-z]|[A-Za-z]{2}\.[A-Za-z]"),
+    "spaced-digits": re.compile(r"(?<![\d,.])\d(?: \d)+(?![\d,])"),
+    "mark-into-line-slash": re.compile(r"[,;:.!?—]/ "),  # a quoted line break is " / "
+}
+_HYGIENE.update(PUNCTUATION)
 
 FUSED_HEADINGS_SCRIPT = REPO_ROOT / "scripts" / "fix_fused_headings.py"
 
@@ -83,6 +101,11 @@ def validate(
         for chapter in book.chapters:
             _check_sequence(check, code, chapter.number, chapter.verses, skeleton)
             headings = [h.text for h in chapter.headings if len(h.text.split()) >= 2]
+            for heading in chapter.headings:
+                for name, pattern in PUNCTUATION.items():
+                    if pattern.search(heading.text):
+                        where = f"{code} {chapter.number} heading before {heading.before_verse}"
+                        check.hygiene.setdefault(name, []).append(where)
             for verse in chapter.verses:
                 ref = f"{code} {chapter.number}:{verse.number}"
                 for name, pattern in _HYGIENE.items():

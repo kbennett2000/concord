@@ -84,7 +84,12 @@ Notes on the notes:
   put back).
 - **Checks** — the verse sequence against the public-domain KJV skeleton (with exactly the NLT's
   known omissions and extras), chapters against each book's own navigation list, and hygiene
-  (no markup scraps, `*`, double spaces, broken words or fused headings). Any ✗ blocks the write.
+  (no markup scraps, `*`, double spaces, broken words or fused headings). Verses and headings
+  also get the punctuation-spacing checks: no word run into an opening bracket or quote, no
+  space after one, no space before closing punctuation, no closing mark run into a word, no
+  number spread digit by digit, no mark run into a quoted line break's " / ". The book's own
+  forms pass: a spaced ellipsis, an editorial completion inside a word ("x[s]"), "B.C.". Any ✗
+  blocks the write.
 - **Cross-check** (with `--epub`) — every verse where the PDF parse and the EPUB differ gets one
   class. The two that must be **0**: *fix regressions* (a fix broke a verse the raw parse had
   right) and *open, EPUB text without damage*. Open items in visibly damaged EPUB verses are
@@ -94,12 +99,15 @@ Notes on the notes:
   `*` matched to a note (*markers without a note* and *notes without a marker* must be **0**); the
   study notes' reference shapes and callouts (*callouts without a note* must be **0**); each
   `ref:` link by how the book's own link target compares (*unexplained* must be **0**); and the
-  note checks — hygiene, Markdown flanking and the Markdown-to-text round trip. Any ✗ blocks the
-  write.
+  note checks — hygiene (the punctuation-spacing checks included), Markdown flanking and the
+  Markdown-to-text round trip. Any ✗ blocks the write.
 - **Notes cross-check** (with `--epub`) — the same classes and evidence rules, note by note. The
   EPUB's markup adds spaces the book doesn't print ("word ." , "2: 5"); both sides close them up
-  alike before comparing. Again *fix regressions* and *open, EPUB text without damage* must be
-  **0**.
+  alike before comparing. A difference that is only in where the spaces fall is judged space by
+  space, with the raw parse as the witness: a space the EPUB moved is EPUB damage, a space a fix
+  took out that the raw parse and the EPUB both print is a fix regression — even in a note the
+  EPUB damaged elsewhere — and a broken word the PDF kept is open. Again *fix regressions* and
+  *open, EPUB text without damage* must be **0**.
 
 ## Getting your private data into your own Docker image
 

@@ -171,3 +171,50 @@ def test_an_opening_bracket_glues_to_the_broken_word_it_opens() -> None:
 def test_a_hyphenated_name_joins_by_its_parts() -> None:
     words = vocabulary("they camped at Ben-kazar")
     assert letter_spacing("at Ben-kaz ar.", words, whole_item=True) == "at Ben-kazar."
+
+
+# -- marks beside a broken word, numbers, the italic font's breaks after "k" ------------------
+
+
+def test_only_a_closing_mark_joins_along_a_broken_word() -> None:
+    words = vocabulary("near the glimmering lamp")
+    for mark in ("(", "“", "‘", "["):
+        spread = f"near the glim mering {mark} and"
+        assert letter_spacing(spread, words, whole_item=True) == f"near the glimmering {mark} and"
+    assert letter_spacing("near the glim mering . and", words, whole_item=True) == (
+        "near the glimmering. and"
+    )
+    assert letter_spacing("glim mering ] and", words, whole_item=False) == "glimmering] and"
+    assert letter_spacing("glim mering , / and", words, whole_item=True) == ("glimmering, / and")
+
+
+def test_an_opening_mark_spaced_off_a_broken_word_mid_item_opens_it() -> None:
+    words = vocabulary("near the glimmering lamp")
+    assert letter_spacing("near the ( glim mering lamp", words, whole_item=True) == (
+        "near the (glimmering lamp"
+    )
+    assert letter_spacing("near the ( lamp", words, whole_item=True) is None
+
+
+def test_a_number_spread_digit_by_digit_joins() -> None:
+    words = vocabulary("it came in the year")
+    assert letter_spacing("5 4 3 B.C. came", words, whole_item=False) == "543 B.C. came"
+    assert letter_spacing("in 1 9 0 7, it came", words, whole_item=True) == "in 1907, it came"
+
+
+def test_the_italic_font_breaks_right_after_k() -> None:
+    words = vocabulary("they barked and sang", "a kite of the hand", "bark on", "ed by")
+    joined = letter_spacing("they bark ed and", words, whole_item=True, k_breaks=True)
+    assert joined == "they barked and"
+    assert letter_spacing("a k ite of", words, whole_item=True, k_breaks=True) == "a kite of"
+    # a lone "k" opens the next piece, even a name the vocabulary lacks
+    assert letter_spacing("a k elmor of", words, whole_item=True, k_breaks=True) == "a kelmor of"
+    assert letter_spacing("80 [k elmor]", words, whole_item=True, k_breaks=True) == "80 [kelmor]"
+    # roman text, and a phrase the PDF prints, stay as printed
+    assert letter_spacing("they bark ed and", words, whole_item=True) is None
+    assert letter_spacing("bark on", words, whole_item=True, k_breaks=True) is None
+
+
+def test_a_hyphenated_run_of_words_is_a_phrase() -> None:
+    words = vocabulary("it is self-giving itself")
+    assert letter_spacing("is it self-giving now", words, whole_item=True) is None

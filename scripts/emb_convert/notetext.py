@@ -112,6 +112,7 @@ def _line_pieces(
                 glued=nxt is not None and _is_small_caps(nxt),
                 anywhere=justified,
                 apostrophe_splits=False,
+                k_breaks=item.italic,
             )
             if fixed is not None:
                 counts["letter-spaced"] += 1

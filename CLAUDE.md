@@ -145,7 +145,11 @@ meaningful and atomic.
 When the slice is complete, open a PR with `gh pr create`. PR title is the slice name
 (e.g. `Slice 3: Reference parser`); body summarizes what landed, links the slice in
 `docs/SPEC.md §10`, and lists anything appended to `docs/dev-notes.md`.
-**PRs are merged by Kris after review — do not self-merge.**
+**Claude Code merges its own PRs (since 1 Oct 2026):** once the work is verified (for a
+deployed slice, once its deploy checks pass), open the PR, assign it to kbennett2000 and
+confirm the assignee shows, then merge it when the PR's checks are green — a merge commit,
+like the earlier ones. If assigning or merging fails, stop and tell Kris. Never push to
+`main` directly, and no `--force`.
 
 If `git push` or `gh pr create` fails (auth, conflict, network), surface the full
 error to the user immediately. Do not retry silently or attempt destructive

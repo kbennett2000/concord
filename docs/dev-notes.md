@@ -2077,3 +2077,72 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   notes load; 20 translations, the same ids. Today's Songbird doesn't read `note_count` yet.
 - **`make check` green** (830 passed, 48 deselected; ruff and pyright strict clean, openapi.json
   unchanged).
+
+### Fix — EMB note spacing: marks beside broken words, the italic "k" break, a cross-check gap
+
+- **Date:** 2026-10-01. **PR:** _(this PR)_ (`fix/emb-note-spacing`). Found in Songbird: the
+  study note at 2 Cor 12:1 ran a word into an opening bracket.
+- **What the PDF prints (p. 8229):** a word broken by a glyph gap, then a real space and "(" before
+  the linked "11:30". **Cause:** `clean._join_chunk` joined *any* punctuation-only piece along
+  after a broken word — right for a closing mark, wrong for an opening one. Second shape: an
+  opening mark spaced off a broken word mid-item kept its space.
+- **Why nothing caught it:** the note checks had no punctuation pattern, and the notes
+  cross-check classed the note `epub-damage-visible`: the EPUB prints the same broken word, and
+  one EPUB non-word in a difference excused the whole difference, the lost space included.
+  (`tidy()` also closes up spaces before closing punctuation on both sides, so a PDF " ]" never
+  showed there; the new checks cover that.)
+- **Counts before the fix** (31,064 verses, 2,256 headings, 7,284 notes as plain text):
+  - letter or digit directly before `(` `[` `“` `‘`: 4 — the defect (sn 2CO 12:1); 3 are the
+    book's editorial completions inside a word (sn NUM 8:9, sn JOB 21:1, tn 2SA 3:3);
+  - space after an opening mark: 0;
+  - space before closing punctuation: verses 7, tn 87, sn 15 — 3 defects (tn EZK 45:1, HOS 3:2,
+    LUK 11:11: a justification gap before "]", the rendered page prints none); the rest are the
+    book's spaced ellipses (". . .", and AMO 6:10's ". . . ,");
+  - closing punctuation directly before a letter: tn 121, sn 13 — none: "B.C.", "i.e.", "m.p.h.".
+  - Also found: a year spread digit by digit at the start of a justified line (sn 2KI 13:20),
+    and a slash glued to the punctuation before it (tn ISA 10:27, ",/" — the book prints ", /"
+    27 times).
+- **Fixes:** only closing marks (now with `]`) join along; an opening mark spaced off a broken
+  word opens it; single digits spread glyph by glyph join; in the notes' italics a piece ending
+  in "k" joins the next when together they make a known word the PDF never prints as a phrase
+  ("bark ed"), and a lone "k" always opens the next piece ("a k" + a name the vocabulary lacks);
+  a hyphenated run whose pieces are all words by their parts is a phrase, not a broken word.
+- **Checks that block the write** (verses, headings and notes): word run into an opening mark
+  (but "x[s]"), space after one, space before closing punctuation (but a spaced ellipsis and the
+  mark after one), closing mark run into a word (but single-letter abbreviations), number spread
+  digit by digit, mark run into a quoted line break's " / ".
+- **The cross-check gap, closed:** in the notes, a difference that is only in where the spaces
+  fall is judged space by space with the raw parse as witness (a space the EPUB moved: EPUB
+  damage; a space a fix took out that the raw parse and the EPUB both print: fix regression; a
+  broken word the PDF kept: open). With the old joiner it now classes 2 Cor 12:1 `fix-regression`
+  ("space removed") and reports 2 fix regressions and 7 open notes with undamaged EPUB text.
+  Closing it surfaced 18 more defects, all fixed here (below).
+- **Changed: 24 notes, `text` only** — sn 2CO 12:1 (the bracket), tn EZK 45:1, HOS 3:2,
+  LUK 11:11 ("]"), tn ISA 10:27 (" / "), sn 2KI 13:20 (a year); the italic "k" break left broken
+  where both halves are words — tn EXO 32:25, 1SA 9:25, 2KI 20:9, 2KI 23:16, JER 12:9, DAN 10:16,
+  HOS 5:10; joined the wrong way ("a k…" → "ak …") — tn NUM 12:10, JOB 42:11, ACT 25:13, JAS 1:18,
+  1PE 5:14; a lone "k" before a transliterated word — tn GEN 33:19, JOS 24:32, MAT 5:26,
+  MRK 12:42, LUK 16:7; two words joined across a hyphenated word — sn 1TI 4:1 (S2b listed its note
+  as open). `EMB.json`, `markers.json` and the verse cross-check are byte-identical; the other
+  7,260 notes are identical (checked over HTTP, local build vs the server, all 1,189 chapters).
+- **Notes cross-check after:** 2,382 agree · 156 fixed PDF quirks (was 147) · **0 fix
+  regressions** · 4,639 visible EPUB damage · 74 splices (was 109 — 35 were the EPUB splitting a
+  word, now `epub-space`) · 11 loss · 5 hyphenation · 6 verified · **0 open where the EPUB note is
+  undamaged** · 13 open in damaged EPUB notes (S2b's 14 less 1 Tim 4:1-5). The punctuation checks
+  find 0 hits in the fixed output and exactly the 6 first-found defects in S2b's.
+- **Tests:** 9 new (made-up text): the marks beside a broken word, the mid-item bracket, spread
+  digits, the "k" break, the hyphenated phrase, the punctuation checks on verses, headings and
+  notes, and the space-by-space cross-check classes.
+- **`make check` green** (839 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged). `make build-db` loads 65,537 notes; a local API on :8077 served the fixed 2 Cor 12:1
+  note and NET John 3's 71 notes equal to the server's.
+- **Deployed 2026-10-01** to the LAN Concord (192.168.1.62:8000) from this branch.
+  `make docker-build-private` 43 s, the embed `CACHED`, the temporary `Dockerfile.dockerignore`
+  gone afterwards. The image checked on :8077 (20 translations, EMB 7,284 notes of which exactly
+  these 24 differ from the server's, NET John 3's 71 equal, semantic search on). `docker save |
+  gzip` 10 s (504 MB), `scp` 38 s, `docker load` + `compose up -d` 52 s, healthy. Rollback:
+  `concord:pre-note-spacing` (the V8-S2b image) — `docker tag concord:pre-note-spacing
+  concord:latest && docker compose up -d` in `~/applications/concord`. Read through Songbird's own
+  `ConcordClient` inside `songbird-songbird-1`: the 2 Cor 12:1 study note reads correctly (the only
+  change in 2 Cor 12); NET John 3's 71 notes identical to a capture taken before the swap; 20
+  translations, the same ids.

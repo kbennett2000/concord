@@ -8,7 +8,7 @@ from pathlib import Path
 from bible_core.seed import load_canonical_books_text, parse_canonical_books
 from emb_convert.crosscheck import Verdict, cross_check
 from emb_convert.epub import BREAK, EpubBible, parse_epub
-from emb_convert.validate import validate
+from emb_convert.validate import PUNCTUATION, validate
 from pdfxmlkit import body, header, heading, parse, start, vnum
 
 GEN = start("GEN") + 1
@@ -52,6 +52,43 @@ def test_hygiene_flags_a_heading_fused_into_a_verse() -> None:
     )
     check = validate(result, {("GEN", 1): 1}, no_fused)
     assert check.hygiene["fused-heading"] == ["GEN 1:1"]
+
+
+def flagged(text: str) -> list[str]:
+    return [name for name, pattern in PUNCTUATION.items() if pattern.search(text)]
+
+
+def test_punctuation_spacing_is_checked_with_the_books_own_forms_allowed() -> None:
+    assert flagged("the glimmering(here") == ["word-into-opening-mark"]
+    assert flagged("near the ( lamp") == ["space-after-opening-mark"]
+    assert flagged("five meters ] long") == ["space-before-closing-mark"]
+    assert flagged("they came,then went") == ["closing-mark-into-word"]
+    assert flagged("in 5 4 3 B.C.") == ["spaced-digits"]
+    assert flagged("was broken,/ for you") == ["mark-into-line-slash"]
+    for fine in (
+        "an offering[s] made",  # an editorial completion inside a word
+        "by . . . ,” he said . . .",  # a spaced ellipsis, and the comma after one
+        "’tis the year 543 B.C., i.e., then",  # an apostrophe, single-letter abbreviations
+        "was broken, / for you (see 2:3).",
+    ):
+        assert flagged(fine) == []
+
+
+def test_validation_checks_punctuation_in_verses_and_headings() -> None:
+    result = parse(
+        {
+            GEN: [
+                *header("GEN", 1),
+                heading("A Made-up ( Heading", 90),
+                vnum("1", 110),
+                body("Words came near(the gate.", 110, 50),
+            ]
+        }
+    )
+    check = validate(result, {("GEN", 1): 1}, no_fused)
+    assert check.hygiene["word-into-opening-mark"] == ["GEN 1:1"]
+    assert check.hygiene["space-after-opening-mark"] == ["GEN 1 heading before 1"]
+    assert not check.ok
 
 
 # -- the EPUB witness -----------------------------------------------------------------------

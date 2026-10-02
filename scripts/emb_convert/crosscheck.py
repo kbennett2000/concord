@@ -23,6 +23,13 @@ difference:
 - VERIFIED — would be OPEN, but the rendered PDF page was checked by eye and prints the
   words in the verse's own text flow; the EPUB lost them without a trace. References only,
   in ``VERIFIED_ON_PAGE`` (docs/dev-notes.md, V8-S1).
+
+The notes add one rule (``Context.spacing``): a difference in which the two sides print the
+same characters and differ only in where the spaces fall is judged space by space, never
+excused whole by an EPUB non-word beside it. A space the EPUB puts inside a word the PDF joins
+is the EPUB's own broken word; a space the fix took out that the raw parse and the EPUB both
+print is a FIX_REGRESSION, even in a note the EPUB damaged elsewhere (the 2 Cor 12:1 study
+note's "word(", docs/dev-notes.md); any other space the two disagree on is OPEN.
 """
 
 from __future__ import annotations
@@ -78,6 +85,7 @@ VERIFIED_ON_PAGE: frozenset[Key] = frozenset(
 
 # Severity order for a verse with several differences: the worst one names the verse.
 _SEVERITY = [
+    Verdict.FIX_REGRESSION,
     Verdict.OPEN,
     Verdict.EPUB_VISIBLE,
     Verdict.EPUB_SPLICE,
@@ -147,6 +155,7 @@ class Context:
     labels: dict[tuple[str, int], frozenset[str]]  # callout labels the PDF parse set aside
     pages: dict[int, str]  # every PDF page's raw text, loose-normalized
     spans: dict[Key, tuple[int, int]]  # each verse's PDF pages
+    spacing: bool = False  # judge spacing-only differences space by space (the notes)
 
     @classmethod
     def build(
@@ -156,6 +165,8 @@ class Context:
         labels: list[tuple[str, int, str]],
         pages: dict[int, str],
         spans: dict[Key, tuple[int, int]],
+        *,
+        spacing: bool = False,
     ) -> Context:
         texts = [normalize(t) for t in fixed.values()]
         vocabulary = frozenset(_word(t) for text in texts for t in text.split(" ") if _word(t))
@@ -169,6 +180,7 @@ class Context:
             },
             pages={page: f" {_loose(normalize(text))} " for page, text in pages.items()},
             spans=spans,
+            spacing=spacing,
         )
 
     def on_pdf_pages(self, key: Key, words: list[str]) -> bool:
@@ -218,9 +230,10 @@ def _epub_tokens(epub: str) -> tuple[list[str], set[int]]:
 
 
 def explain(
-    key: Key, pdf: str, epub: str, nlt_text: str | None, ctx: Context
+    key: Key, pdf: str, epub: str, nlt_text: str | None, ctx: Context, raw: str = ""
 ) -> tuple[Verdict, str]:
-    """Classify one verse where the fixed PDF and the EPUB differ (both present)."""
+    """Classify one verse where the fixed PDF and the EPUB differ (both present). ``raw``:
+    the raw parse, which the notes' spacing rule asks about (``Context.spacing``)."""
     a = normalize(pdf).split(" ")
     b, breaks = _epub_tokens(epub)
     headings = ctx.headings.get(key[:2], frozenset()) | ctx.labels.get(key[:2], frozenset())
@@ -230,6 +243,11 @@ def explain(
         if op == "equal":
             continue
         pdf_words, epub_words = a[i1:i2], b[j1:j2]
+        spaced = _spacing(pdf_words, epub_words, normalize(raw), ctx) if ctx.spacing else None
+        if spaced is not None:
+            verdicts.append(spaced[0])
+            reasons.append(f"{spaced[1]}@{i1}")
+            continue
         verdict, reason = _explain_op(
             key, op, pdf_words, epub_words, b[max(j1 - 1, 0) : j2 + 1],
             a[max(i1 - 1, 0) : i1], a[i2 : i2 + 1], breaks, j1, j2, nlt_text, headings, ctx,
@@ -238,6 +256,83 @@ def explain(
         reasons.append(f"{reason}@{i1}")
     worst = min(verdicts, key=_SEVERITY.index) if verdicts else Verdict.EPUB_LOSS
     return worst, " ".join(reasons)
+
+
+def _spacing(
+    pdf_words: list[str], epub_words: list[str], raw: str, ctx: Context
+) -> tuple[Verdict, str] | None:
+    """A difference that is only in where the spaces fall (EPUB scraps set aside), judged
+    space by space; None for any other difference.
+
+    The raw parse is the witness: where it prints the PDF's form, the EPUB moved the space
+    (EPUB damage). Otherwise a space the EPUB puts inside a word, splitting off a non-word,
+    is a broken word the EPUB prints (EPUB damage); any other space a fix took out that the
+    raw parse prints too is a FIX_REGRESSION, and one neither prints is OPEN. A space the PDF
+    keeps and the EPUB lacks is the EPUB's fused words when its token is a non-word, else a
+    broken word the PDF kept (OPEN).
+    """
+    epub_core = [t for t in epub_words if not is_scrap(t)]
+    if not pdf_words or not epub_core or "".join(pdf_words) != "".join(epub_core):
+        return None
+    pdf_gaps, epub_gaps = _gaps(pdf_words), _gaps(epub_core)
+    if pdf_gaps == epub_gaps:
+        return Verdict.EPUB_VISIBLE, "scrap"  # the scraps were the whole difference
+    joined = "".join(pdf_words)
+    padded = f" {raw} "
+    raw_pdf = f" {' '.join(pdf_words)} " in padded
+    raw_epub = f" {' '.join(epub_core)} " in padded
+    found: list[tuple[Verdict, str]] = []
+    for at in sorted(pdf_gaps ^ epub_gaps):
+        if at in epub_gaps:  # the EPUB has a space here, the PDF none
+            in_word = joined[at - 1].isalpha() and joined[at].isalpha()
+            pieces = (_token_at(epub_core, at), _token_after(epub_core, at))
+            epub_broken = in_word and any(_non_word(piece, ctx.vocabulary) for piece in pieces)
+            if raw_pdf:
+                found.append((Verdict.EPUB_VISIBLE, "epub-space"))
+            elif epub_broken:  # the EPUB prints a broken word ("glim mering")
+                found.append(
+                    (Verdict.EPUB_VISIBLE, "shared-broken-word" if raw_epub else "epub-broken-word")
+                )
+            elif not raw_epub:
+                found.append((Verdict.OPEN, "joined" if in_word else "space-missing"))
+            else:
+                found.append((Verdict.FIX_REGRESSION, "joined" if in_word else "space-removed"))
+        elif _non_word(_token_at(epub_core, at), ctx.vocabulary):
+            found.append((Verdict.EPUB_VISIBLE, "epub-fused"))  # the EPUB lost a space
+        else:
+            found.append((Verdict.OPEN, "space-kept"))
+    return min(found, key=lambda f: _SEVERITY.index(f[0]))
+
+
+def _gaps(tokens: list[str]) -> set[int]:
+    """Where the spaces between ``tokens`` fall, as offsets into their joined characters."""
+    gaps: set[int] = set()
+    at = 0
+    for token in tokens[:-1]:
+        at += len(token)
+        gaps.add(at)
+    return gaps
+
+
+def _token_at(tokens: list[str], at: int) -> str:
+    """The token whose characters (joined) span offset ``at`` — the one ending there, at a
+    boundary."""
+    end = 0
+    for token in tokens:
+        end += len(token)
+        if at <= end:
+            return token
+    return tokens[-1] if tokens else ""
+
+
+def _token_after(tokens: list[str], at: int) -> str:
+    """The token that starts at offset ``at`` of the joined characters ("" if none)."""
+    end = 0
+    for token in tokens:
+        if end == at:
+            return token
+        end += len(token)
+    return ""
 
 
 def _explain_op(
@@ -369,7 +464,7 @@ def _compare(
         return Finding(key, verdict, "", damaged, changed_by)
     if r == e:
         return Finding(key, Verdict.FIX_REGRESSION, "raw parse agreed", damaged, changed_by)
-    verdict, detail = explain(key, pdf, epub, nlt_text, ctx)
+    verdict, detail = explain(key, pdf, epub, nlt_text, ctx, pdf_raw)
     if verdict is Verdict.OPEN and key in verified:
         verdict = Verdict.VERIFIED
     return Finding(key, verdict, detail, damaged, changed_by)
@@ -411,7 +506,7 @@ def cross_check_notes(
     """
     fixed, raw, epub = _tidy_all(fixed), _tidy_all(raw), _tidy_all(epub)
     solo = {name: _tidy_all(texts) for name, texts in solo.items()}
-    ctx = Context.build(context_texts, {}, [], pages, spans)
+    ctx = Context.build(context_texts, {}, [], pages, spans, spacing=True)
     result = CrossCheck()
     for key in sorted(fixed.keys() | epub.keys()):
         damaged = key in epub_damaged
