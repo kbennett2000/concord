@@ -2914,3 +2914,78 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     now in the one A–Z order; before, the binary one); EXO 21:22, PHP 4:6 and 1KI 19:7 (both
     ANGEL topics) load the same topics in the new order; `vf-1`'s detail and its 12 verses in
     EMB, and `angel-a-spirit`'s detail, unchanged.
+
+### Release v1.3.0
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`chore/release-v1.3.0`). This is V8-S7b, the second
+  half of V8-S7 (S7a was the topics order, PR #89).
+- **What ships:** the first minor since v1.2.0.
+  - **v8, private study Bibles:** the note fields, `article` and `chart`, `note_count`
+    (ADR-0011); images and documents (ADR-0012); private topics and `source`/`?source=`/
+    `sources` (ADR-0013); the EMB converter for an operator's own copy.
+  - **The one A–Z topics order** (V8-S7a).
+  - **Three fixes:** #67 fused headings, #69 verse labels on word tokens (ADR-0009), and #73
+    chapter-to-chapter:verse ranges (ADR-0010).
+  - **Faster private rebuilds** (V8-S1b).
+
+  Every `/v1` change appends keys, adds endpoints or params, or accepts a reference that used
+  to be refused. One sort order changes, Nave's ANGEL pair, so this is a **semver minor**:
+  nothing is removed, renamed or retyped.
+- **Mechanics:**
+  - `bible_api.__version__`, `bible-api/pyproject.toml` and `uv.lock` go `1.2.0 → 1.3.0`, one
+    line each; `bible-core` and `bible-semantic` stay `0.0.0`. `make openapi` moved only
+    `info.version`.
+  - **README:**
+    - a "Your own study Bible" section (what v8 adds; none of it in the published image);
+    - thirty endpoints (the two documents endpoints and assets added to the table);
+    - the topics paragraph and the "doesn't do (yet)" notes bullet;
+    - pull examples moved to `:v1.3.0`.
+  - **`docs/API.md`:**
+    - a v8 orientation bullet;
+    - the three 404 codes its errors table never listed (`unknown_journey`, `unknown_topic`,
+      `unknown_strongs`);
+    - the notes caveat names study Bibles;
+    - the `/healthz` example refreshed from the gate build (15 translations, 435,951 verses;
+      it read 14 / 412,806).
+  - **SPEC §7:** the V8-S7a and V8-S7b rows.
+  - **`CLAUDE.md`:** "v2 through v8 are all shipped". Its two stale out-of-scope bullets
+    (multi-translation search shipped in v5; journeys shipped in v7) now name what stays out.
+  - **Release notes:** `docs/releases/v1.3.0.md`, the GitHub release's body, with links pinned
+    to the tag. They name the one changed Nave's order.
+- **Pre-release gate:**
+  - **Tests:** `make check` green (1,069 passed, 48 deselected; ruff and pyright strict clean;
+    `docs/openapi.json` up to date); `pytest -m integration` 48 passed (31 min 53 s, the real
+    embedding builds included).
+  - **The build:** `git archive 0afb77e | docker build -t concord-gate:v1.3.0 -`. The context is
+    the commit's tracked files only: 0 archive entries under `data/private`, and
+    `git ls-files data/private` is empty. It used the repo's `Dockerfile` and `.dockerignore`,
+    as `publish-image.yml` builds it. A worktree under the session's `/tmp` scratch could not be
+    the context, because snap docker has a private `/tmp`. The build took 1 min 47 s, embed
+    `CACHED` (the WEB verse list is the same as the private build's).
+  - **Its `bible.db`:**
+    - exactly the 15 committed translations; none of the five private codes (EMB, ESV, NET,
+      NKJV, NLT), and 0 of their verses;
+    - 0 notes, note cross-references and note passages; 0 assets; 0 documents and document
+      images;
+    - topics are Nave's 5,319 only, no `vf-` id, 138,138 links;
+    - a byte scan of the file finds none of the private translations' names, nor the Verse
+      Finder's source name;
+    - `/app` holds `bible.db`, `embeddings.db` and `model` only.
+  - **Live on :8078, 29 checks, all passing:**
+    - healthz (15 translations, semantic on) and `/docs` offline;
+    - `/v1/translations`: every `note_count` and `document_count` 0;
+    - notes and notes search `200` empty;
+    - documents lists `200 total 0` with and without `?kind`/`?book`, ETag `304`;
+      `400 unknown_kind` / `unknown_book`; `404 unknown_document`;
+    - an asset `404 unknown_asset`;
+    - EMB, NLT, NET, ESV and NKJV documents, assets, notes and verses all
+      `404 unknown_translation`;
+    - `/v1/topics` total 5,319 with `sources` Nave's only, its full order equal to V8-S7a's
+      proven list (the ANGEL pair at 298/299 swapped);
+    - `?source=Tyndale Verse Finder` `400` with `available` = [Nave's]; `vf-1` `404`;
+    - EXO 21:22, PHP 4:6 and 1KI 19:7's topics Nave's only.
+
+    The gate container, image and scratch worktrees were removed afterwards.
+- **After merge:** the `v1.3.0` tag is pushed only on Kris's go. It triggers
+  `publish-image.yml`, which publishes `ghcr.io/kbennett2000/concord:v1.3.0`, `:latest` and
+  `:sha-…`. The published image is then pulled and checked the same way, and the GitHub release
+  is published from `docs/releases/v1.3.0.md`. The LAN server keeps its private image.

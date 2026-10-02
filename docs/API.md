@@ -1265,7 +1265,7 @@ $ curl -s 'localhost:8000/healthz'
 ```json
 {
   "status": "ok",
-  "translation_count": 14, "verse_count": 412806, "cross_ref_count": 344799, "book_count": 66,
+  "translation_count": 15, "verse_count": 435951, "cross_ref_count": 344799, "book_count": 66,
   "place_count": 1340,
   "semantic": {
     "enabled": true, "translation": "WEB", "embedding_count": 31054,
