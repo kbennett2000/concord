@@ -12,9 +12,10 @@ your **local** `bible.db`. The published image ships **zero** EMB content.
 > your responsibility to keep clean, and Concord's pipeline is built to make it automatic.
 
 This page covers the **text** (verses and section headings, V8-S1), the **textual and study
-notes** (V8-S2b) and three of the five **features** — the articles the text calls out at a
-passage: Men, Women, and God; Someone You Should Know; Personal Gold (V8-S3a). The other two
-features, images, documents and the Verse Finder follow in later slices (SPEC §7).
+notes** (V8-S2b) and all five **features**: the articles the text calls out at a passage — Men,
+Women, and God; Someone You Should Know; Personal Gold (V8-S3a) — and What the Bible Says About
+and Perspectives (V8-S3b). Images, documents and the Verse Finder follow in later slices
+(SPEC §7).
 
 ## The user flow
 
@@ -48,11 +49,12 @@ The same PDF always gives byte-identical output, so re-running is safe.
 | File | What |
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
-| `data/private/notes/EMB.json` | Its textual and study notes and feature articles: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
+| `data/private/notes/EMB.json` | Its textual and study notes and its five features: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
 | `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors |
 | `data/private/work/EMB/crosscheck.tsv` | Every verse cross-check finding by reference and class (local only) |
 | `data/private/work/EMB/notes-crosscheck.tsv` | Every note cross-check finding by note and class (local only) |
 | `data/private/work/EMB/articles-crosscheck.tsv` | Every article cross-check finding by feature, passage and class (local only) |
+| `data/private/work/EMB/topics-crosscheck.tsv` | Every topic and box cross-check finding by feature, topic number or box passage, and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 
 No loader scans `data/private/work/`. Notes on the text:
@@ -91,6 +93,21 @@ Notes on the feature articles (`article`, labelled with the feature's name; SPEC
   The banners above Men, Women, and God articles are one decorative image (its only words are
   the feature's name, the label) and are not copied.
 
+Notes on What the Bible Says About and Perspectives (`article`, labelled with the feature's name;
+SPEC §4.2):
+
+- **A topic** is a page of quoted verses under subheads. Its title is what the book's index calls
+  it; its text keeps each subhead (a heading, shown bold), each quotation as printed (poetic
+  lines on lines of their own) and the quotation's reference as a link under it. It attaches at
+  the end of the verse where the book calls it out, and lists no passages: every verse it quotes
+  is a link in its text.
+- **A Perspectives box** stands inside the Bible text. Its note holds the passage it quotes, that
+  passage's reference as a link, the saying and the attribution, as printed (no title: the box
+  prints none). It attaches at the end of the verse the box follows, and its passages are the
+  reference the box prints.
+- Where a topic or box shares a verse end with a Men, Women, and God article, it shows in the
+  book's order, and the verse's earlier notes keep their numbers.
+
 ## Reading the summary
 
 - **Text** — counts against the S1 targets (✓ or ≠ target): 1,189 chapters, 31,064 verses,
@@ -125,9 +142,9 @@ Notes on the feature articles (`article`, labelled with the feature's name; SPEC
   took out that the raw parse and the EPUB both print is a fix regression — even in a note the
   EPUB damaged elsewhere — and a broken word the PDF kept is open. Again *fix regressions* and
   *open, EPUB text without damage* must be **0**.
-- **Feature articles** — the callout lines (269: 101 + 94 + 24 for this slice's features, 50 for
-  What the Bible Says About, 3 of them in book introductions; *callouts without an article* must
-  be **0**); per feature the articles against their targets (101, 94, 24), their index entries,
+- **Feature articles** — the callout lines (269: 101 + 94 + 24 for the three article features,
+  50 for What the Bible Says About, 3 of them in book introductions; *callouts without an
+  article* must be **0**); per feature the articles against their targets (101, 94, 24), their index entries,
   how often each is called out, where the notes attach, the passages' shapes, what the text
   prints (paragraphs, quotations, lists, …) and its length in words; the anchors outside their
   passage and the callout lines inside a verse, listed; the two-book passages and their
@@ -137,6 +154,20 @@ Notes on the feature articles (`article`, labelled with the feature's name; SPEC
 - **Articles cross-check** (with `--epub`) — the same classes and evidence rules, article by
   article: the printed body against the EPUB's, keyed by feature and printed passage. Again
   *fix regressions* and *open, EPUB text without damage* must be **0**.
+- **Topics and Perspectives** — the topics' index, topics, quotations, quoted references and
+  subheads, and the boxes and their index, against their targets (50, 502, 503, 240; 26); each
+  topic's callouts (*callouts without a topic* must be **0**) and where the notes attach; every
+  quotation against EMB's own verse text by class — identical, the same words, a part of the
+  verse text, parts joined by an ellipsis or a bracketed word, or other (each *other* must be one
+  the converter lists as the book's own edit); the boxes whose index prints another passage, the
+  anchors outside a passage, the box inside a verse, and the notes shown before an earlier
+  article, all listed; words, links and fixes as above; and the checks (every callout matched,
+  every topic and box indexed and placed, index passages and quotations explained, links,
+  hygiene and Markdown). Any ✗ blocks the write.
+- **Topics and boxes cross-check** (with `--epub`) — the same classes and evidence rules: a topic
+  keyed by its number in the book's index (found by its head, or by its first subhead where the
+  EPUB lost the head, then marked damaged), a box by the passage it prints. Again *fix
+  regressions* and *open, EPUB text without damage* must be **0**.
 
 ## Getting your private data into your own Docker image
 
