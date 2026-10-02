@@ -140,8 +140,8 @@ PRIVATE = "Made-up Finder"
 
 
 def _private_payload() -> dict[str, object]:
-    """A made-up private source: ids carry their own prefix; mixed-case names (binary order puts
-    them after the all-capitals public names that share their first letter)."""
+    """A made-up private source: ids carry their own prefix; mixed-case names (they interleave with
+    the all-capitals public names: the order ignores case)."""
     return {
         "source": PRIVATE,
         "topics": [
@@ -180,9 +180,14 @@ def _build_two(tmp_path: Path, private: dict[str, object]) -> Path:
 def test_two_dirs_load_both_sources(tmp_path: Path) -> None:
     conn = sqlite3.connect(_build_two(tmp_path, _private_payload()))
     page = list_topics(conn, None, None, 50, 0)
-    # name, id — binary order: "CARE" < "CREATION" < "Care made up" (R < a).
-    assert [t.id for t in page.rows] == ["anxiety", "care", "creation", "vf-1", "vf-2"]
-    assert [t.source for t in page.rows] == [*["Nave's Topical Bible"] * 3, PRIVATE, PRIVATE]
+    # name ignoring case, then id: "CARE" < "Care made up" < "CREATION" (a < r).
+    assert [t.id for t in page.rows] == ["anxiety", "care", "vf-1", "creation", "vf-2"]
+    assert [t.source for t in page.rows] == [
+        *["Nave's Topical Bible"] * 2,
+        PRIVATE,
+        "Nave's Topical Bible",
+        PRIVATE,
+    ]
     vf2 = get_topic(conn, "vf-2")
     assert vf2 is not None and (vf2.see_also, vf2.source) == ("vf-1", PRIVATE)
 
@@ -219,9 +224,53 @@ def test_reverse_lookup_unions_sources(tmp_path: Path) -> None:
     page = get_topics_for_reference(conn, parse_reference("Gen 1:1", SqliteBookResolver(conn)))
     assert [(t.id, t.source) for t in page.rows] == [
         ("care", "Nave's Topical Bible"),
-        ("creation", "Nave's Topical Bible"),
         ("vf-1", PRIVATE),
+        ("creation", "Nave's Topical Bible"),
     ]
+
+
+def test_order_ignores_case_across_sources(tmp_path: Path) -> None:
+    """One A-Z list (V8-S7a): names compare ignoring case, so two sources interleave, a pair
+    differing only in case keeps its alphabetical order, and names equal but for case fall back
+    to id, whichever source it belongs to. The browse pages it the same way at any limit, and the
+    reverse lookup uses the same order."""
+    gen = [{"book": "GEN", "chapter": 1, "verse": 1}]
+
+    def topic(tid: str, name: str) -> dict[str, object]:
+        return {"id": tid, "name": name, "section": name[0].upper(), "verses": gen}
+
+    public: dict[str, object] = {
+        "source": "Made-up Index",
+        "topics": [
+            topic("beta-zed", "BETA (Zed)"),
+            topic("beta-a-thing", "BETA (a thing)"),
+            topic("cedar", "CEDAR"),
+            topic("willow", "WILLOW"),
+        ],
+    }
+    private: dict[str, object] = {
+        "source": PRIVATE,
+        "topics": [topic("vf-3", "cedar"), topic("vf-4", "Willow"), topic("vf-5", "Birch made up")],
+    }
+    _write(tmp_path / "topics", "index.json", public)
+    _write(tmp_path / "private" / "topics", "made-up.json", private)
+    db = tmp_path / "bible.db"
+    build_database(
+        db, [_corpus(tmp_path)], topics_dirs=[tmp_path / "topics", tmp_path / "private" / "topics"]
+    )
+    conn = sqlite3.connect(db)
+
+    expected = ["beta-a-thing", "beta-zed", "vf-5", "cedar", "vf-3", "vf-4", "willow"]
+    assert [t.id for t in list_topics(conn, None, None, 50, 0).rows] == expected
+    for limit in (1, 2, 3):
+        walked = [
+            t.id
+            for offset in range(0, len(expected), limit)
+            for t in list_topics(conn, None, None, limit, offset).rows
+        ]
+        assert walked == expected, limit
+    reverse = get_topics_for_reference(conn, parse_reference("Gen 1:1", SqliteBookResolver(conn)))
+    assert [t.id for t in reverse.rows] == expected
 
 
 def test_duplicate_id_across_dirs_names_both_files(tmp_path: Path) -> None:
