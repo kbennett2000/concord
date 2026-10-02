@@ -71,7 +71,7 @@ COMMON = 20  # stands alone this often: a word beyond doubt
 TIE = 0.7  # two readings whose bigram scores differ by less than this are a tie
 BROKEN = ("split", "hyphen", "apostrophe")
 GLUED = ("glued", "punctuation")
-KINDS = {"broken": BROKEN, "glued": GLUED, "all": BROKEN + GLUED}
+KINDS = {"broken": BROKEN, "glued": GLUED, "hyphen": ("hyphen",), "all": BROKEN + GLUED}
 
 BOTH_WORDS = "both halves are words"
 THIN = "thin evidence: the word stands alone fewer than three times and no sibling prints it"
@@ -561,9 +561,10 @@ def detect(corpus: Corpus, targets: Iterable[str] | None = None, kinds: str = "a
                 verse.glued()
             if "split" in wanted:
                 verse.split()
+            if "hyphen" in wanted or "apostrophe" in wanted:
                 verse.hyphens_and_apostrophes()
-            found.changes.extend(verse.changes)
-            found.left.extend(verse.left)
+            found.changes.extend(c for c in verse.changes if c.kind in wanted)
+            found.left.extend(item for item in verse.left if item.kind in wanted)
     return found
 
 
@@ -850,6 +851,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     evidence = [f for folder in args.evidence_dir for f in _load(folder)]
     english = [f for f in [*files, *evidence] if f.english]
+    seen = Counter(f.code for f in english)
+    if any(n > 1 for n in seen.values()):
+        twice = ", ".join(sorted(c for c, n in seen.items() if n > 1))
+        print(f"The same translation code appears twice: {twice}", file=sys.stderr)
+        return 1
     texts = {f.code: dict(f.verses) for f in english}
     labels = {f.code: f.labels for f in english}
     only = {c.strip() for c in args.only.split(",") if c.strip()}

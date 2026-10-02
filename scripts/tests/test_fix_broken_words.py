@@ -367,6 +367,13 @@ def test_apply_changes_matches_the_repair() -> None:
     assert apply_changes(old, changes).replace(" ", "") == old.replace(" ", "")
 
 
+def test_kinds_limits_the_repairs_to_one_kind() -> None:
+    texts = many_faults()
+    found = repair(texts, kinds="hyphen")
+    assert [c.kind for c in found.changes] == ["hyphen"]
+    assert texts["AAA"][TEST].startswith("in t he field an d the sin-offering,")
+
+
 def test_a_second_repair_finds_nothing() -> None:
     texts = many_faults()
     assert repair(texts).changes
@@ -542,3 +549,13 @@ def test_evidence_dir_supplies_siblings_without_being_changed(tmp_path: Path) ->
     assert main([*args, "--manifest-dir", str(tmp_path / "m")]) == 0
     assert evidence["BBB"].read_bytes() == before
     assert "in the field" in paths["AAA"].read_text(encoding="utf-8")
+
+
+def test_a_code_in_both_data_and_evidence_is_refused(tmp_path: Path) -> None:
+    texts = corpus({"AAA": "they went in t he field"})
+    paths = write_files(tmp_path / "data", texts)
+    write_files(tmp_path / "evidence", texts)
+    before = paths["AAA"].read_bytes()
+    args = ["--data-dir", str(tmp_path / "data"), "--evidence-dir", str(tmp_path / "evidence")]
+    assert main([*args, "--manifest-dir", str(tmp_path / "m")]) == 1
+    assert paths["AAA"].read_bytes() == before
