@@ -187,9 +187,10 @@ def test_topics_take_index_names_and_anchor_at_their_callout() -> None:
     assert "passages" not in first and "cross_references" not in first
     # never called out: the start of its first quoted verse, shown first there
     assert (second["chapter"], second["verse"], second["char_offset"]) == (2, 1, 0)
-    assert second["title"] == "Rest, The" and second["ordinal"] == 0
+    # the index puts "The" last, for sorting; the title reads in normal order (V8-S5b)
+    assert second["title"] == "The Rest" and second["ordinal"] == 0
     region = notes.features.topics
-    assert [t.number for t in region.renamed] == [2]  # the index puts "The" last
+    assert [t.number for t in region.renamed] == [2]
     assert [len(t.callouts) for t in region.topics] == [1, 0]
     assert notes.features.anchors["WBSA", "end of a verse it quotes"] == 1
     assert notes.features.anchors["WBSA", "never called out"] == 1

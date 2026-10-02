@@ -2509,3 +2509,110 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   and 0 documents; `bible.db` 304,152,576 → 304,177,152 bytes (the empty tables).
 - **`make check` green** (988 passed, 48 deselected; ruff and pyright strict clean; openapi.json
   regenerated and up to date).
+
+### Feature V8-S5b — EMB's book introductions (private)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s5b-emb-introductions`). The converter
+  emits the book's 66 introductions as documents (ADR-0012, landed in V8-S5a), each with its
+  reading-time figure (moved here from V8-S4b), and gives three topic titles normal word order
+  (Kris's call).
+- **What landed:**
+  - `scripts/emb_convert/introductions.py`: an introduction's lines → blocks → Markdown, read by
+    print style only; its figure's bytes; the checks; the EPUB witness. The text pass now hands
+    over each book's introduction lines (`Diagnostics.intros`); its output is unchanged. The EPUB
+    reader keeps each book's blocks before chapter 1 (`EpubBible.intros`); its verses, images and
+    other witnesses are unchanged.
+  - The converter writes `data/private/documents/EMB.json`, the figures into
+    `data/private/assets/EMB/` beside the charts (the stale-file check covers both), and
+    `work/EMB/introductions-crosscheck.tsv`; the summary gains an Introductions section.
+  - `notes.py`'s `Context`, `context`, `link_spans`, `broken_words`, `spaced` and `HYGIENE` lose
+    their underscore (shared, renamed only). `study.resolve_run` reads "Chapter(s) N–N" in any
+    case (a capitalised form errored before, so no earlier output changes).
+  - 19 synthetic tests (made-up heads, words and JPEGs); `test_emb_topics.py`'s title assertion.
+  - A run takes ~2 min 10 s and is byte-identical on re-run: all 122 files compared by sha256.
+- **Unchanged:** `EMB.json`, `markers.json` and the five earlier cross-check TSVs are
+  byte-identical, and so are the 44 chart images. The 7,623 notes are identical and in the same
+  order but three titles: WBSA 6, 19, 20 (`MAT 24:36`, `ROM 1:32`, `GAL 6:10`), "X, The" → "The
+  X" where the topic's head reads so.
+- **The introductions** (what each prints is in SPEC §4.3, "as S5b settled"):
+  - 66, one per book; slug `introduction-<code>`, ordinal the book's order, title the book's
+    name as the What's the Point line prints it (the 23-point title line prints it in lower
+    case; the two agree in all 66).
+  - **Spec correction (section types):** 639 heads of 10 types — 7 in every introduction, one
+    printed once in the singular (RUT), one absent in RUT and PHM, one absent in 19 books. The
+    measuring session's "11 types, 3 sometimes absent" counted the singular as a type of its own.
+    Every introduction prints its heads in one order.
+  - 66 What's the Point boxes; 36 timelines (none in RUT, JOB, PSA–SNG, LAM, OBA or ROM–REV) with
+    354 entries: 24 events on two lines, 3 of them two lines under one date (DEU twice, 2KI), kept
+    as printed; 3 events with no date and 1 lone label (GEN, NUM).
+  - 164 lists (731 items), 357 paragraphs, 256 labels (180 over a quotation, 74 sub-heads, 2 part
+    labels in ISA), 180 quotations (148 prose paragraphs, 199 lines of poetry).
+  - Set aside: 3 callout lines (NEH, JOB, JHN; S3a anchors them at 1:1) and 5 bold-italic lines,
+    each chapter 1's heading as S1 keeps it (PSA, PHM, 2JN, 3JN, JUD — a check).
+  - 595 links, all `ref:` links whose book's own target page agrees.
+  - Words: 162 / 347 / 571 (2JN, JHN).
+  - **Fixes:** a bold label breaks a word at a glyph gap anywhere (2: ISA, 2TH), joined by the
+    notes' rule with the raw parse kept apart for the cross-check; a queried timeline date
+    ("NNN(?)", 2SA, 1CH, NEH) passes the punctuation check as printed.
+  - **Known limits:** PSA's closing paragraph of further passages sits inside its last
+    quotation's block quote (set at the quotations' indent after a gap); a list of one entry
+    reads as a paragraph.
+- **The figures:** 66, one per introduction (the image census's "introduction figure", all
+  claimed): a bar giving the book's reading time in hours; the value is only in the picture.
+  Baseline JPEGs, 1,024 px wide, 161–198 px high, 16,978 / 19,062 / 22,267 bytes, 1,272,154 in
+  all, written byte for byte as `reading-time-<code>.jpg`. OBA's caption closes its page and its
+  figure opens the next.
+- **Cross-check (with `--epub`)**, keyed by book and section (705):
+  - 459 agree; 2 fixed PDF quirks (the two label words); 0 fix regressions; 236 visible EPUB
+    damage (markup scraps); 5 splices; 1 loss with evidence; 0 open where the EPUB is undamaged;
+    2 open in damaged EPUB text (COL §10, REV §8: marks the EPUB added; the PDF's REV §8 matches
+    EMB's own Rev 2:4).
+  - The EPUB lost one head (DAN §6), merged into the section before.
+  - Its re-encoded figures: one under 55 captions, image markup left as text under 10, none
+    under DEU's.
+- **Plan deviations:**
+  - **Set aside:** the plan said 1 heading (PSA); there are 5 — the four one-chapter books'
+    first headings too.
+  - **Cross-check keys:** the plan keyed an introduction by its book; a whole introduction is
+    too coarse (62 of 66 carry a scrap somewhere), so each section is keyed (book + section).
+  - **Timeline:** the plan said 355 entries, 23 wrapped, 4 with no date; the converter's rules
+    give 354, 24 and 3 (the measurement grouped lines by gap alone).
+  - **Words:** the plan's 132 / 317 / 541 counted the measuring script's lines; the converter
+    counts the document's text, labels and heads included: 162 / 347 / 571.
+- **Proof:**
+  - `make build-db` loads 65,876 notes, 110 assets and 66 documents with no error; `bible.db`
+    304,177,152 → 305,733,632 bytes (+1.5 MiB).
+  - A local API on :8077 served:
+    - EMB `document_count` 66, the other 19 entries equal to the server's;
+    - the list (66, GEN first), `?book=gen` (one), `?kind=book-introduction` (66);
+    - ISA's introduction with its title, text and image;
+    - its figure byte-identical to the file;
+    - a `ref:` link resolving through `/v1/verses`;
+    - `404 unknown_document` for an unknown slug;
+    - every chapter's EMB notes equal to the server's but the three titles, in normal order;
+    - NET John 3's 71 equal.
+- **`make check` green** (1,007 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  - **Build:** `make docker-build-private` took 52 s, with the embed `CACHED`; the temporary
+    `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (39e72e76ddbd) checked on :8077:** the local API's checks above, all passing; all
+    66 figures served byte-identical as `image/jpeg`, with a stable ETag and 304; semantic search
+    on.
+  - **Ship:** `docker save | gzip` 12 s (487 MB); `scp` 38 s; `docker load` 32 s + `compose up -d`
+    15 s; healthy after ~8 s; both tarballs removed.
+  - **Rollback:** `concord:pre-emb-introductions` (the V8-S4b image, 8332b4ac9e4f) —
+    `docker tag concord:pre-emb-introductions concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now:** `latest`, `pre-emb-introductions`, `pre-emb-charts`, `pre-emb-topics`,
+    `pre-emb-articles`, `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.62–1.65 GB each, layers
+    shared; 19 GB free).
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`, against a
+    capture taken before the swap:
+    - NET John 3's 71 notes are identical in every field Songbird reads;
+    - EMB Genesis 13's 4 notes (its chart included) and Genesis 1's text load unchanged;
+    - 20 translations, the same ids, identical as Songbird reads them (its model ignores
+      `document_count`);
+    - Matthew 24's notes differ only in one topic's title, now in normal word order. Songbird
+      can't show documents until its slice C.
+

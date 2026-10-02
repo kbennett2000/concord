@@ -14,9 +14,9 @@ your **local** `bible.db`. The published image ships **zero** EMB content.
 This page covers the **text** (verses and section headings, V8-S1), the **textual and study
 notes** (V8-S2b), all five **features**: the articles the text calls out at a passage — Men,
 Women, and God; Someone You Should Know; Personal Gold (V8-S3a) — and What the Bible Says About
-and Perspectives (V8-S3b), and the **charts** with their images (V8-S4b). The book introductions
-(with their reading-time figures), the other documents and the Verse Finder follow in later
-slices (SPEC §7).
+and Perspectives (V8-S3b), the **charts** with their images (V8-S4b), and the 66 **book
+introductions** with their reading-time figures, as documents (V8-S5b). The front matter, the
+Personal Gold author notes, the reading plan and the Verse Finder follow in later slices (SPEC §7).
 
 ## The user flow
 
@@ -37,12 +37,14 @@ slices (SPEC §7).
 4. **Read the summary** it prints (below). If any check fails, nothing is written and the exit
    code is non-zero.
 5. **Rebuild** Concord: `make build-db` for a local run, or `make docker-build-private` for your
-   own Docker image (below). The build summary then counts one more translation, EMB's notes and
-   its 44 chart images (assets).
+   own Docker image (below). The build summary then counts one more translation, EMB's notes,
+   its 110 images (assets: 44 charts and 66 reading-time figures) and its 66 documents.
 6. **Served.** `EMB` appears in `GET /v1/translations` as "Every Man's Bible (NLT)", with its
    `note_count`, and reads through every existing endpoint; its notes through
    `/v1/translations/EMB/notes/{book}/{chapter}` and `/v1/notes/search`; a chart's image through
-   `/v1/translations/EMB/assets/{name}`, the name its note gives in `image`.
+   `/v1/translations/EMB/assets/{name}`, the name its note gives in `image`; the book
+   introductions through `/v1/translations/EMB/documents` (`?book=`, `?kind=`) and
+   `/v1/translations/EMB/documents/{slug}` ([documents-ingest](documents-ingest.md)).
 
 The same PDF always gives byte-identical output, so re-running is safe.
 
@@ -52,13 +54,16 @@ The same PDF always gives byte-identical output, so re-running is safe.
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
 | `data/private/notes/EMB.json` | Its textual and study notes, its five features and its charts: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
+| `data/private/documents/EMB.json` | The 66 book introductions: the documents contract (`docs/v8/documents-ingest.md`, ADR-0012) |
 | `data/private/assets/EMB/chart-01.jpg` … `chart-44.jpg` | Each chart's image, exactly as the PDF stores it, numbered in the book's order (ADR-0012) |
+| `data/private/assets/EMB/reading-time-gen.jpg` … | Each introduction's reading-time figure, exactly as the PDF stores it, named by its book |
 | `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors |
 | `data/private/work/EMB/crosscheck.tsv` | Every verse cross-check finding by reference and class (local only) |
 | `data/private/work/EMB/notes-crosscheck.tsv` | Every note cross-check finding by note and class (local only) |
 | `data/private/work/EMB/articles-crosscheck.tsv` | Every article cross-check finding by feature, passage and class (local only) |
 | `data/private/work/EMB/topics-crosscheck.tsv` | Every topic and box cross-check finding by feature, topic number or box passage, and class (local only) |
 | `data/private/work/EMB/charts-crosscheck.tsv` | Each chart's index entry and image against the EPUB's (local only) |
+| `data/private/work/EMB/introductions-crosscheck.tsv` | Every introduction finding by book, section and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 
 No loader scans `data/private/work/`. Notes on the text:
@@ -128,8 +133,27 @@ Notes on the charts (`chart`, labelled "Chart"; SPEC §4.2, §4.4):
   it or just after it, and the summary lists them.
 - **The book's other images aren't copied**: the callout icons and the Men, Women, and God
   banner (their only words are the feature's name, which the label carries), the testament title
-  pages and the cover. The reading-time figures in the book introductions come with the
-  introductions (V8-S5).
+  pages and the cover. The reading-time figures come with the introductions (below).
+
+Notes on the book introductions (documents, `kind` `book-introduction`; SPEC §4.3, §4.4):
+
+- **One document per book**, slug `introduction-<book>` (`introduction-gen`), ordered by the
+  book's place, titled with the book's name. Its text is what the book prints between the book's
+  navigation page and its first chapter, as Markdown: each section head (`##`, capitals as
+  printed), the sections' paragraphs and one-entry-per-line lists, the bold labels over a
+  quotation (a block quote; poetry line by line) or over a few paragraphs, the What's the Point
+  heading and line, and the timeline (a list: each date, then its event in bold).
+- **Every reference the book links** is a `ref:` link (the chapter ranges a book outlines, the
+  passages to memorize, references in the text), checked against the book's own link targets.
+- **The reading-time figure** is a picture: the reading time is inside it, not in the text. It
+  is copied byte for byte into `data/private/assets/EMB/reading-time-<book>.jpg` and placed in
+  the text where the book prints it, `![caption](asset:reading-time-<book>.jpg)`, the caption
+  printed above it as its alt text. A client that can't show images shows the caption.
+- **Not part of an introduction:** the navigation page, the three Someone You Should Know callout
+  lines that stand at an introduction's end (their articles attach at verse 1:1), and the heading
+  printed above the first verse (it belongs to the text).
+- **Topic titles:** three What the Bible Says About titles the index sorts with "The" last read in
+  normal word order since V8-S5b.
 
 ## Reading the summary
 
@@ -200,6 +224,19 @@ Notes on the charts (`chart`, labelled "Chart"; SPEC §4.2, §4.4):
   claimed, every image is named by exactly one note, the index links into the chart's book, no
   chart stands inside a verse, `assets/EMB` holds only this run's images, title hygiene. Any ✗
   blocks the write.
+- **Book introductions** — the introductions (66), their section heads by printed form (in one
+  order in every introduction), the What's the Point boxes, the timelines and their entries, the
+  paragraphs, lists, labels and quotations, what was set aside (callout lines, chapter 1's
+  heading), the links by evidence, the words (shortest, median, longest) and the figures (66,
+  each claimed by its introduction; type and sizes). The checks: every book has its introduction,
+  every figure is claimed once, every link is explained, hygiene and Markdown, and every line is
+  placed (the heads in one order, the titles agreeing). Any ✗ blocks the write.
+- **Introductions cross-check** (with `--epub`) — keyed by book and section (each head, and the
+  What's the Point box): the EPUB's text from the book's first head to its first chapter, cut at
+  each section's opening line. A head the EPUB lost merges its section into the one before, both
+  marked damaged (listed). The same classes and evidence rules; again *fix regressions* and
+  *open, EPUB text without damage* must be **0**. The EPUB's re-encoded figures witness only
+  whether a figure stands under its caption.
 - **Charts cross-check** (with `--epub`) — the EPUB's images are re-encoded smaller, so it can't
   witness bytes. Its Charts Index witnesses each title and reference (*agree*, *visible EPUB
   damage*, or *open*, which must be **0**), and its images witness where each chart stands: a
@@ -255,6 +292,8 @@ under it. The converter itself holds no EMB text, and its tests use small synthe
 - `test_licensing_safety.test_clean_checkout_bakes_zero_assets` and
   `test_no_image_is_committed_under_data` — a clean checkout bakes no images, and no image is
   ever committed under `data/` (ADR-0012).
+- `test_licensing_safety.test_clean_checkout_bakes_zero_documents` — a clean checkout bakes no
+  documents (ADR-0012).
 
 See [../../THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES) and
 [../../data/SOURCES.md](../../data/SOURCES.md) for the licensing record.

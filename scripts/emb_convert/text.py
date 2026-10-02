@@ -195,6 +195,9 @@ class Diagnostics:
     feature_callouts: list[FeatureCallout] = field(default_factory=list[FeatureCallout])
     boxes: list[PerspectivesBox] = field(default_factory=list[PerspectivesBox])
     charts: list[ChartImage] = field(default_factory=list[ChartImage])
+    # each book's introduction as printed: the lines read before its first chapter, after its
+    # navigation page, callout lines aside (V8-S5b)
+    intros: dict[str, list[Line]] = field(default_factory=dict[str, list[Line]])
 
     def note(self, kind: str, ref: str) -> None:
         self.counts[kind] += 1
@@ -450,6 +453,9 @@ class _Parser:
             self.diag.counts["callout-lines-in-intros"] += 1
             return
         if self.mode is _Mode.INTRO and not self.intro_line(line, content):
+            assert self.book_range is not None
+            if line.page > self.book_range.start_page:  # past the navigation page
+                self.diag.intros.setdefault(self.book_range.code, []).append(line)
             return
         if any(
             i.size == BOX_LABEL_SIZE and i.blue and self.link_kind(i) is LinkKind.FEATURE

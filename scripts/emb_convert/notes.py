@@ -140,7 +140,7 @@ VERIFIED_NOTES: frozenset[Key] = frozenset(
     }
 )
 
-_HYGIENE: dict[str, re.Pattern[str]] = {
+HYGIENE: dict[str, re.Pattern[str]] = {
     "markup": re.compile(r"[<>]|&\w+;|href|calibre|filepos"),
     "asterisk": re.compile(r"\*"),
     "double-space": re.compile(r"  "),
@@ -292,7 +292,7 @@ def sn_key(note: StudyNote, occurrence: int) -> Key:
 
 
 @dataclass(slots=True)
-class _Context:
+class Context:
     """What every note's text is built from."""
 
     vocabulary: Vocabulary
@@ -313,13 +313,13 @@ class _Context:
         return found.code if found is not None else None
 
 
-def _context(
+def context(
     doc: PdfDocument,
     layout: Layout,
     result: ParseResult,
     public: PublicWords,
     skeleton: dict[tuple[str, int], int],
-) -> _Context:
+) -> Context:
     seeds = canonical_books()
     bible = group_lines([i for i in doc.items if layout.bible_start <= i.page < layout.notes_start])
     note_lines = group_lines([i for i in doc.items if i.page >= layout.notes_start])
@@ -339,7 +339,7 @@ def _context(
                     combined[key] = verse.last
                 for n in range(verse.number, verse.last + 1):
                     stored[(book.code, chapter.number, n)] = verse.number
-    return _Context(
+    return Context(
         vocabulary=Vocabulary(
             public,
             [*verse_text.values(), *(t for line in note_lines for t in trusted_text(line))],
@@ -361,7 +361,7 @@ def _texts(
     result: NotesResult,
     key: Key,
     lines: list[Line],
-    ctx: _Context,
+    ctx: Context,
     *,
     skip: frozenset[int] = frozenset(),
 ) -> None:
@@ -384,7 +384,7 @@ def _texts(
 
 
 def _check_text(result: NotesResult, where: str, text: NoteText) -> None:
-    for name, pattern in _HYGIENE.items():
+    for name, pattern in HYGIENE.items():
         if pattern.search(text.plain):
             result.hygiene.setdefault(name, []).append(where)
     if text.markdown is not None:
@@ -398,7 +398,7 @@ _GAPS = re.compile(r"( +)")
 _INITIAL = re.compile(r"[A-Z]\.")
 
 
-def _broken_words(pieces: list[Piece], vocabulary: Vocabulary) -> bool:
+def broken_words(pieces: list[Piece], vocabulary: Vocabulary) -> bool:
     """Two tokens the PDF prints a single space apart that join into a word one of them isn't
     ("mak e", "k now"). ``pieces``: the note's text with the PDF's spacing kept — a double
     space is a real word gap ("Abba  ru")."""
@@ -415,7 +415,7 @@ def _broken_words(pieces: list[Piece], vocabulary: Vocabulary) -> bool:
     )
 
 
-def _spaced(lines: list[Line], ctx: _Context, skip: frozenset[int] = frozenset()) -> list[Piece]:
+def spaced(lines: list[Line], ctx: Context, skip: frozenset[int] = frozenset()) -> list[Piece]:
     scratch: Counter[str] = Counter()
     return assemble(
         lines, ctx.vocabulary, Fixes(), scratch, repair=ctx.repair, skip=skip, keep_spaces=True
@@ -451,7 +451,7 @@ def _note(
 
 
 def _textual(
-    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: _Context
+    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: Context
 ) -> None:
     result.textual = parse_textual(doc, layout, ctx.by_alias)
     result.errors += result.textual.errors
@@ -479,7 +479,7 @@ def _textual(
             )
         )
         _check_text(result, where, text)
-        if _broken_words(_spaced(lines, ctx, note.label_ids), ctx.vocabulary):
+        if broken_words(spaced(lines, ctx, note.label_ids), ctx.vocabulary):
             result.hygiene.setdefault("broken-word", []).append(where)
         result.formats[("tn", MARKDOWN if text.markdown else "plain")] += 1
         result.escapes += _escapes(text)
@@ -517,15 +517,15 @@ def _resolve_links(
     pieces: list[Piece],
     runs: list[LinkRun],
     anchor_verse: tuple[int, int],
-    ctx: _Context,
+    ctx: Context,
 ) -> tuple[list[Piece], list[str]]:
     """Each link run → its ``ref:`` targets (``study.resolve_run``), with the book's own
     target page as evidence. ``book``/``heading``: the note's book and its name in findings."""
-    spans = _link_spans(result.links, result.errors, book, heading, pieces, runs, anchor_verse, ctx)
+    spans = link_spans(result.links, result.errors, book, heading, pieces, runs, anchor_verse, ctx)
     return relink(pieces, spans)
 
 
-def _link_spans(
+def link_spans(
     links: list[LinkFinding],
     errors: list[str],
     book: str,
@@ -533,7 +533,7 @@ def _link_spans(
     pieces: list[Piece],
     runs: list[LinkRun],
     anchor_verse: tuple[int, int],
-    ctx: _Context,
+    ctx: Context,
     note_chapter: int | None = None,
     *,
     reviewed: frozenset[tuple[str, str]] = REVIEWED_LINKS,
@@ -602,7 +602,7 @@ def _evidence(
     page: int | None,
     own_pages: set[int],
     earlier: set[int],
-    ctx: _Context,
+    ctx: Context,
     reviewed: frozenset[tuple[str, str]] = REVIEWED_LINKS,
 ) -> str:
     if page is None:
@@ -625,7 +625,7 @@ def _evidence(
 
 
 def _study(
-    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: _Context
+    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: Context
 ) -> None:
     result.study = parse_study(doc, layout, ctx.by_alias)
     result.errors += result.study.errors
@@ -657,7 +657,7 @@ def _study(
         pieces, targets = _resolve_links(result, note.book, note.heading, pieces, runs, at, ctx)
         text = render(pieces, targets)
         _check_text(result, note.heading, text)
-        if _broken_words(_spaced(note.lines, ctx), ctx.vocabulary):
+        if broken_words(spaced(note.lines, ctx), ctx.vocabulary):
             result.hygiene.setdefault("broken-word", []).append(note.heading)
         result.formats[("sn", MARKDOWN if text.markdown else "plain")] += 1
         result.escapes += _escapes(text)
@@ -693,7 +693,7 @@ FIRST_ORDINAL = 0
 
 
 def _articles(
-    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: _Context
+    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: Context
 ) -> None:
     found = result.articles
     region = parse_articles(doc, layout, ctx.by_alias, ctx.last_verse)
@@ -760,7 +760,7 @@ def _articles(
         chapters = {
             c for p in article.parts_in(first.book) for c in (p.start_chapter, p.end_chapter)
         }
-        spans = _link_spans(
+        spans = link_spans(
             found.links,
             found.errors,
             first.book,
@@ -784,10 +784,10 @@ def _articles(
         found.gaps_closed += text.gaps_closed
         for problem in text.problems:
             found.hygiene.setdefault(problem, []).append(name)
-        for pattern_name, pattern in _HYGIENE.items():
+        for pattern_name, pattern in HYGIENE.items():
             if pattern.search(text.plain) and (name, pattern_name) not in ARTICLES_AS_PRINTED:
                 found.hygiene.setdefault(pattern_name, []).append(name)
-        if _broken_words(_spaced(lines, ctx), ctx.vocabulary):
+        if broken_words(spaced(lines, ctx), ctx.vocabulary):
             found.hygiene.setdefault("broken-word", []).append(name)
         if _WS_ALL.sub("", plain_text(flat)) != text.printed:
             found.errors.append(f"{name}: its blocks don't hold exactly the text it prints")
@@ -939,7 +939,7 @@ class FeatureFindings:
 Cited = tuple[str, int, int, int, int]  # book, first chapter and verse, last chapter and verse
 
 
-def _target_range(target: str, ctx: _Context) -> Cited:
+def _target_range(target: str, ctx: Context) -> Cited:
     """A ``ref:`` target as the verses it spans (a chapter target: the whole chapters)."""
     (book, c1, v1), (_, c2, v2) = target_verses(target)
     if "." not in target.partition(".")[2]:
@@ -947,7 +947,7 @@ def _target_range(target: str, ctx: _Context) -> Cited:
     return book, c1, v1, c2, v2
 
 
-def _cited_text(cited: Sequence[Cited], ctx: _Context) -> str:
+def _cited_text(cited: Sequence[Cited], ctx: Context) -> str:
     """The verse text a quotation cites, its verses in order, a combined verse once."""
     texts: list[str] = []
     seen: set[Key] = set()
@@ -972,7 +972,7 @@ def _covers(cited: Sequence[Cited], book: str, chapter: int, verse: int) -> bool
 
 
 def _features(
-    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: _Context
+    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: Context
 ) -> None:
     found = result.features
     sections_ = sections(doc, layout)
@@ -1002,10 +1002,10 @@ def _features(
     def check(name: str, lines: list[Line], flat: list[Piece], written: topics.Written) -> None:
         for problem in written.problems:
             found.hygiene.setdefault(problem, []).append(name)
-        for pattern_name, pattern in _HYGIENE.items():
+        for pattern_name, pattern in HYGIENE.items():
             if pattern.search(written.plain):
                 found.hygiene.setdefault(pattern_name, []).append(name)
-        if _broken_words(_spaced(lines, ctx), ctx.vocabulary):
+        if broken_words(spaced(lines, ctx), ctx.vocabulary):
             found.hygiene.setdefault("broken-word", []).append(name)
         if _WS_ALL.sub("", plain_text(flat)) != written.printed:
             found.errors.append(f"{name}: its blocks don't hold exactly the text it prints")
@@ -1047,7 +1047,7 @@ def _features(
             stored = ctx.stored.get((book, chapter, verse), verse)
             places.append((book, chapter, stored, at_end, 2 * reading[id(callout)] + 1))
         first = places[0] if places else None
-        spans = _link_spans(
+        spans = link_spans(
             found.links,
             found.errors,
             first[0] if first is not None else "",
@@ -1160,7 +1160,7 @@ def _features(
             dataclasses.replace(p, text=perspectives.title_case(p.text)) if p.run is not None else p
             for p in flat
         ]
-        spans = _link_spans(
+        spans = link_spans(
             found.links,
             found.errors,
             box.book,
@@ -1214,7 +1214,7 @@ def _features(
 
 
 def _charts(
-    result: NotesResult, parse: ParseResult, ctx: _Context, region: charts.ChartRegion
+    result: NotesResult, parse: ParseResult, ctx: Context, region: charts.ChartRegion
 ) -> None:
     """Each chart's note, where its image stands, after every earlier note at that verse."""
     found = result.charts
@@ -1238,7 +1238,7 @@ def _charts(
         if verse_text is None:
             found.errors.append(f"{where}: no verse text to anchor at")
             continue
-        for name, pattern in _HYGIENE.items():
+        for name, pattern in HYGIENE.items():
             if pattern.search(chart.title):
                 found.hygiene.setdefault(name, []).append(chart.key)
         note: dict[str, Any] = {
@@ -1305,7 +1305,7 @@ def _article_texts(
     spans: dict[Key, tuple[int, int]],
     key: Key,
     lines: list[Line],
-    ctx: _Context,
+    ctx: Context,
 ) -> None:
     """An article's plain text with no fixes and with each fix alone (the cross-check)."""
     none = Fixes.none()
@@ -1335,7 +1335,7 @@ def build_notes(
     skeleton: dict[tuple[str, int], int],
     chart_region: charts.ChartRegion | None = None,
 ) -> NotesResult:
-    ctx = _context(doc, layout, parse, public, skeleton)
+    ctx = context(doc, layout, parse, public, skeleton)
     result = NotesResult()
     _textual(result, doc, layout, parse, ctx)
     _study(result, doc, layout, parse, ctx)

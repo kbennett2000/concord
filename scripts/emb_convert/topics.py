@@ -77,7 +77,10 @@ class Topic:
 
     @property
     def title(self) -> str:
-        return self.entry.name if self.entry is not None else self.printed
+        """The index's name for the topic, in normal word order (V8-S5b)."""
+        return (
+            normal_order(self.entry.name, self.printed) if self.entry is not None else self.printed
+        )
 
     @property
     def number(self) -> int:
@@ -97,6 +100,19 @@ class TopicRegion:
     renamed: list[Topic] = field(default_factory=list[Topic])  # the index words it otherwise
     unmatched_callouts: list[FeatureCallout] = field(default_factory=list[FeatureCallout])
     errors: list[str] = field(default_factory=list[str])
+
+
+_THE_LAST = re.compile(r"^(.+), (The)$")
+
+
+def normal_order(name: str, printed: str) -> str:
+    """An index sorts a name with "The" last ("Rest, The"); the title turns it back ("The
+    Rest") when the topic's own head reads so, the evidence (Kris's call, 2 Oct 2026)."""
+    match = _THE_LAST.match(name)
+    if match is None:
+        return name
+    turned = f"{match.group(2)} {match.group(1)}"
+    return turned if _key(turned) == _key(printed) else name
 
 
 def _key(name: str) -> str:
