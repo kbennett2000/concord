@@ -4,7 +4,8 @@ Writes, only when every structural check passes:
 
 - ``<out>/EMB.json`` — the translation (Concord's translation contract, code ``EMB``);
 - ``<out>/notes/EMB.json`` — its textual and study notes, feature articles and charts (ADR-0011);
-- ``<out>/documents/EMB.json`` — its 66 book introductions (ADR-0012, V8-S5b);
+- ``<out>/documents/EMB.json`` — its 66 book introductions (ADR-0012, V8-S5b), then its front
+  matter, reading plan and Personal Gold authors (V8-S5c);
 - ``<out>/assets/EMB/chart-NN.jpg`` — each chart's image as the PDF stores it (ADR-0012, V8-S4b);
 - ``<out>/assets/EMB/reading-time-<book>.jpg`` — each introduction's figure, likewise (V8-S5b);
 - ``<out>/work/EMB/markers.json`` — where each removed ``*`` sat (the textual notes' anchors);
@@ -14,6 +15,7 @@ Writes, only when every structural check passes:
 - ``<out>/work/EMB/topics-crosscheck.tsv`` — every topic and box cross-check finding (V8-S3b);
 - ``<out>/work/EMB/charts-crosscheck.tsv`` — each chart against the EPUB (V8-S4b);
 - ``<out>/work/EMB/introductions-crosscheck.tsv`` — every introduction finding (V8-S5b);
+- ``<out>/work/EMB/documents-crosscheck.tsv`` — every other document's finding (V8-S5c);
 - ``<out>/work/EMB/summary.txt`` — the printed summary.
 
 ``work/`` is never scanned by a loader. The same PDF gives byte-identical files. The run
@@ -24,7 +26,6 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import re
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -33,8 +34,12 @@ from typing import Any
 from emb_convert.charts import find_charts
 from emb_convert.clean import Fixes, PublicWords, collapse
 from emb_convert.crosscheck import CrossCheck, cross_check
+from emb_convert.documents import RESERVED, Witnessed, copyright_page, epub_cut, find_front
+from emb_convert.documents import cross_check as cross_check_documents
 from emb_convert.epub import parse_epub
 from emb_convert.epub_charts import charts_tsv, cross_check_epub_charts
+from emb_convert.epub_notes import read_runs
+from emb_convert.frontmatter import build_front
 from emb_convert.introductions import (
     build_introductions,
     cross_check_epub_introductions,
@@ -52,9 +57,12 @@ from emb_convert.notes import (
     notes_payload,
 )
 from emb_convert.pdfxml import PdfDocument, parse_pdf_xml, run_pdftohtml
+from emb_convert.pgauthors import build_authors
+from emb_convert.readingplan import PlanFindings, build_plan
 from emb_convert.report import (
     articles_summary,
     charts_summary,
+    documents_summary,
     features_summary,
     introductions_summary,
     notes_summary,
@@ -69,8 +77,6 @@ NAME = "Every Man's Bible (NLT)"
 LANGUAGE = "en"
 PARAGRAPH_GAP = 13  # points between two lines of one paragraph on the copyright page
 
-_RESERVED = re.compile(r"copyright ©", re.IGNORECASE)
-
 
 class ConvertError(Exception):
     """The run could not produce trustworthy output."""
@@ -84,7 +90,7 @@ def copyright_lines(doc: PdfDocument, layout: Layout) -> str:
     templates ("Used by permission").
     """
     front = [i for i in doc.items if i.page < layout.bible_start]
-    page = next((i.page for i in front if _RESERVED.search(i.text)), None)
+    page = copyright_page(doc, layout)
     if page is None:
         raise ConvertError("no copyright page found before the Bible text")
     paragraphs: list[list[str]] = []
@@ -97,7 +103,7 @@ def copyright_lines(doc: PdfDocument, layout: Layout) -> str:
     kept = [
         text
         for text in (collapse(" ".join(p)).strip() for p in paragraphs)
-        if _RESERVED.search(text)
+        if RESERVED.search(text)
         and text.endswith("All rights reserved.")
         and "hotograph" not in text
         and "Used by permission" not in text
@@ -270,9 +276,8 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     charts_cross = (
         cross_check_epub_charts(charts.charts, notes.charts.spots, epub, skeleton) if epub else None
     )
-    intros = build_introductions(
-        doc, layout, result, context(doc, layout, result, public, skeleton), figures
-    )
+    ctx = context(doc, layout, result, public, skeleton)
+    intros = build_introductions(doc, layout, result, ctx, figures)
     intros.errors += figure_errors
     intros_cross, intros_witness = (
         cross_check_epub_introductions(
@@ -281,6 +286,27 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         if epub
         else (None, None)
     )
+    front = find_front(doc, layout)
+    front_matter = build_front(front, layout, ctx)
+    plan = build_plan(front.plan, ctx) if front.plan is not None else PlanFindings()
+    authors = build_authors(doc, layout, notes.articles.region, ctx)
+    witnessed = Witnessed()
+    for part in (front_matter.witnessed, plan.witnessed, authors.witnessed):
+        witnessed.extend(part)
+    epub_documents = (
+        epub_cut("".join(text for text, _ in read_runs(epub)), witnessed) if epub else None
+    )
+    documents_cross = (
+        cross_check_documents(witnessed, epub_documents, doc, _texts(result))
+        if epub_documents is not None
+        else None
+    )
+    documents = documents_payload(intros, CODE)
+    documents["documents"] = [
+        *intros.documents,
+        *front_matter.documents,
+        *(d for d in (plan.document, authors.document) if d is not None),
+    ]
     assets = {**notes.charts.assets, **intros.assets}
     assets_dir = out_dir / "assets" / CODE
     stale = stale_assets(assets_dir, assets)
@@ -294,12 +320,16 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     lines += ["", *features_summary(notes, features_cross)]
     lines += ["", *charts_summary(notes, charts_cross, stale)]
     lines += ["", *introductions_summary(intros, intros_cross, intros_witness)]
+    lines += ["", *documents_summary(front_matter, plan, authors, documents_cross, epub_documents)]
     ok = (
         validation.ok
         and not result.diagnostics.unclassified
         and not result.diagnostics.errors
         and notes.ok
         and intros.ok
+        and front_matter.ok
+        and plan.ok
+        and authors.ok
         and not stale
     )
     work = out_dir / "work" / CODE
@@ -311,7 +341,7 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         documents_file.parent.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{CODE}.json").write_text(_dump(translation_payload(result, rights)), "utf-8")
         notes_file.write_text(_dump(notes_payload(notes, CODE)), "utf-8")
-        documents_file.write_text(_dump(documents_payload(intros, CODE)), "utf-8")
+        documents_file.write_text(_dump(documents), "utf-8")
         (work / "markers.json").write_text(_dump(marker_payload(result.markers)), "utf-8")
         if cross is not None:
             (work / "crosscheck.tsv").write_text(crosscheck_tsv(cross), "utf-8")
@@ -332,6 +362,10 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         if intros_cross is not None:
             (work / "introductions-crosscheck.tsv").write_text(
                 crosscheck_tsv(intros_cross, "introduction\tchapter\toccurrence"), "utf-8"
+            )
+        if documents_cross is not None:
+            (work / "documents-crosscheck.tsv").write_text(
+                crosscheck_tsv(documents_cross, "document\tchapter\toccurrence"), "utf-8"
             )
         write_assets(assets_dir, assets)
         lines += [

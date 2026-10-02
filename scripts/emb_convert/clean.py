@@ -249,6 +249,8 @@ def _join_chunk(
                 words.pop()  # trailing punctuation pieces (" .") join along
             if any(not all(c in _CLOSING for c in p) for p in run[len(words) :]):
                 continue  # only closing marks join along; an opening one ("(") starts what follows
+            if all(_INITIAL.fullmatch(p) for p in run):
+                continue  # initials ("Q. Z."), printed apart: not a broken word (V8-S5c)
             joined = "".join(run)
             hyphenated = joined if _HYPHEN in joined else None
             if hyphenated is not None and all(
@@ -329,6 +331,7 @@ def _digits(run: list[str]) -> bool:
 
 
 _ELLIPSIS = re.compile(r"\.\s+\.")  # ". . ." is a real ellipsis, spaced on purpose
+_INITIAL = re.compile(r"[A-Z]\.")
 
 
 def unspace(
