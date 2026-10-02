@@ -2317,3 +2317,17 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   first-subhead fallback for a lost head.
 - **`make check` green** (859 passed, 48 deselected; ruff and pyright strict clean, openapi.json
   unchanged).
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  `make docker-build-private` 45 s, the embed `CACHED`, the temporary `Dockerfile.dockerignore`
+  gone afterwards. The image (506e1ab14375) checked on :8077: 20 translations, the same ids as
+  the server; EMB 7,579 notes; every chapter's existing EMB notes equal to the server's apart
+  from the two item-5 notes, 76 added; NET John 3's 71 equal; semantic search on. `docker save |
+  gzip` 10 s (482 MB), `scp` 40 s, `docker load` 29 s + `compose up -d` 11 s, healthy after
+  ~15 s; both tarballs removed. Rollback: `concord:pre-emb-topics` (the V8-S3a image,
+  d0dc6b6b8d01) — `docker tag concord:pre-emb-topics concord:latest && docker compose up -d` in
+  `~/applications/concord`. Server tags now: `latest`, `pre-emb-topics`, `pre-emb-articles`,
+  `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.6 GB each, layers shared; 22 GB free). Read
+  through Songbird's own `ConcordClient` inside `songbird-songbird-1`: NET John 3's 71 notes
+  identical to a capture taken before the swap in every field Songbird reads; EMB Genesis 1 and
+  Exodus 24 keep their notes and gain a topic (two in Genesis 1) and a box; 20 translations, the
+  same ids, only EMB's `note_count` changed (7,503 → 7,579).
