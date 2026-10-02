@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from emb_convert.articles import FEATURES
 from emb_convert.crosscheck import CrossCheck, Verdict
 from emb_convert.notes import NotesResult
 from emb_convert.text import ParseResult
@@ -28,6 +29,15 @@ EXPECTED: dict[str, int] = {
     "textual-notes": 4817,
     "note-blocks": 1072,
     "study-notes": 2467,
+    # V8-S3a (docs/v8/SPEC.md §3, as corrected by the S3a parse: 101 Men, Women, and God)
+    "MWG-articles": 101,
+    "SYSK-articles": 94,
+    "PG-articles": 24,
+    "callouts": 269,
+    "MWG-callouts": 101,
+    "SYSK-callouts": 94,
+    "PG-callouts": 24,
+    "What the Bible Says About Index-callouts": 50,
 }
 
 
@@ -165,6 +175,8 @@ def _where(key: tuple[str, int, int]) -> str:
     first, chapter, number = key
     if first.startswith(("tn ", "sn ")):
         return first[3:] + (f" #{number}" if number > 1 else "")
+    if chapter == 0:  # an article: its feature and printed passage
+        return first + (f" #{number}" if number > 1 else "")
     return f"{first} {chapter}:{number}"
 
 
@@ -263,6 +275,130 @@ def notes_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
             "",
             *cross_summary(
                 cross, "Cross-check: note text, PDF vs EPUB, note by note", headings=False
+            ),
+        ]
+    return lines
+
+
+_FEATURE_NAMES = {feature.key: feature.label for feature in FEATURES}
+_ARTICLE_SHAPES = [
+    "range",
+    "whole chapter",
+    "whole chapters",
+    "cross-chapter",
+    "verse",
+    "multi-part",
+    "two books",
+    "whole book",
+]
+_STRUCTURES = [
+    "lead-in capitals",
+    "headline",
+    "paragraph",
+    "subhead",
+    "quote",
+    "quoted paragraphs",
+    "poetry",
+    "quoted lines",
+    "list",
+    "list items",
+    "numbered list",
+    "numbered items",
+    "numbered items with paragraphs",
+    "source note",
+    "closing line",
+    "byline",
+]
+_ANCHORS = ["end of a verse", "start of a verse", "book introduction", "never called out"]
+
+
+def articles_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
+    """The V8-S3a section: the feature articles, their callouts, anchors, text and checks."""
+    found = notes.articles
+    region = found.region
+    callouts = [c for a in region.articles for c in a.callouts]
+    by_feature = Counter(a.feature.key for a in region.articles for _ in a.callouts)
+    in_intros = sum(1 for c in callouts if c.in_intro)
+    total = len(callouts) + len(region.unmatched_callouts) + sum(region.other_callouts.values())
+    evidence = Counter(f.evidence for f in found.links)
+    targets = sum(len(f.targets) for f in found.links)
+    lines = [
+        "Feature articles (notes/EMB.json, type article)",
+        _row("callout lines, all features", total, "callouts"),
+        _row("  in book introductions", in_intros + sum(
+            1 for c in region.unmatched_callouts if c.in_intro
+        )),
+        *(_row(f"  {_FEATURE_NAMES[k]}", by_feature[k], f"{k}-callouts") for k in _FEATURE_NAMES),
+        *(_row(f"  {name.removesuffix(' Index')} (later)", n, f"{name}-callouts")
+          for name, n in sorted(region.other_callouts.items())),
+        f"  {'callouts without an article':<34}{len(region.unmatched_callouts):>8,}  (target 0)",
+    ]  # fmt: skip
+    for key, name in _FEATURE_NAMES.items():
+        mine = [a for a in region.articles if a.feature.key == key]
+        words = sorted(found.words.get(key, [0]))
+        shapes = found.shapes.get(key, Counter())
+        built = found.structures.get(key, Counter())
+        lines += [
+            _row(f"{name} articles", len(mine), f"{key}-articles"),
+            _row("  index entries", len(region.entries.get(key, []))),
+            _row("  called out once", sum(1 for a in mine if len(a.callouts) == 1)),
+            _row("  called out more than once", sum(1 for a in mine if len(a.callouts) > 1)),
+            _row("  never called out", sum(1 for a in mine if not a.callouts)),
+            _row("  notes", found.notes[key]),
+            *(_row(f"  anchor: {where}", found.anchors[key, where]) for where in _ANCHORS
+              if found.anchors[key, where]),
+            *(_row(f"  passage: {shape}", shapes[shape]) for shape in _ARTICLE_SHAPES
+              if shapes[shape]),
+            *(_row(f"  {what}", built[what]) for what in _STRUCTURES if built[what]),
+            f"  {'words: shortest / median / longest':<34}{words[0]:>8,} / "
+            f"{words[len(words) // 2]:,} / {words[-1]:,}",
+        ]  # fmt: skip
+    renamed = [f"{a.feature.key} {a.reference}" for a in region.renamed]
+    lines += [
+        _row("anchors outside the passage", len(found.outside)),
+        *(f"      {where}" for where in found.outside),
+        _row("callout lines inside a verse", len(found.mid_verse)),
+        *(f"      {where}" for where in found.mid_verse),
+        _row("passages in two books", len(found.two_books)),
+        *(f"      {where}" for where in found.two_books),
+        _row("index names its article otherwise", len(renamed)),
+        *(f"      {where} (title from the index)" for where in renamed),
+        _row("Personal Gold author notes (V8-S5)", region.authors),
+        _row("Personal Gold credits (V8-S5)", sum(
+            1 for e in region.entries.get("PG", []) if e.credit
+        )),
+        f"  {'ref: links':<34}{len(found.links):>8,}  → {targets:,} targets",
+        *(_row(f"  {label}", evidence[key]) for key, label in _EVIDENCE if key != "unexplained"),
+        f"  {'  unexplained':<34}{evidence['unexplained']:>8,}  (target 0)",
+        _row("broken words joined (items)", found.fixes["letter-spaced"]),
+        _row("words the italic font ran together", found.fixes["fused-words"]),
+        _row("passage font's breaks after m", region.m_breaks),
+        _row("opening-mark gaps closed", found.gaps_closed),
+        _row("source-note numbers (superscript)", found.footnotes),
+        "",
+        "Articles checks (any failure blocks writing)",
+        f"  every callout matched             {_ok(not region.unmatched_callouts)}",
+        f"  every article indexed and placed  {_ok(not region.unindexed)}",
+        f"  ref: links explained              {_ok(not evidence['unexplained'])}",
+        f"  hygiene, flanking, round trip     {_ok(not any(found.hygiene.values()))}",
+        f"  parse errors                      {_ok(not found.errors)}",
+    ]  # fmt: skip
+    problems = [
+        *(f"callout without an article: {c.book} p{c.page}" for c in region.unmatched_callouts),
+        *(f"article without its index entry: {a.feature.key} {a.reference}"
+          for a in region.unindexed),
+        *(f"unexplained link: {f.note} {f.link!r} → {', '.join(f.targets)}"
+          for f in found.links if f.evidence == "unexplained"),
+        *found.errors,
+    ]  # fmt: skip
+    lines += [f"    ✗ {problem}" for problem in problems[:40]]
+    for name, where in found.hygiene.items():
+        lines.append(f"    ✗ {name}: {len(where)} — {', '.join(where[:8])}")
+    if cross is not None:
+        lines += [
+            "",
+            *cross_summary(
+                cross, "Cross-check: article text, PDF vs EPUB, article by article", headings=False
             ),
         ]
     return lines

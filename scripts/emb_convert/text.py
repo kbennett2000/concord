@@ -129,6 +129,24 @@ class Callout:
 
 
 @dataclass(slots=True)
+class FeatureCallout:
+    """A callout line: the book points to a feature article here (V8-S3a).
+
+    ``after`` is the verse open when the line comes — (chapter, verse), None in a book's
+    introduction — and ``before`` the next verse to start; ``mid_verse`` says the open verse's
+    text went on after the line."""
+
+    book: str
+    label: str
+    target_page: int
+    page: int
+    after: tuple[int, int] | None
+    before: tuple[str, int, int] | None = None  # (book, chapter, verse)
+    in_intro: bool = False
+    mid_verse: bool = False
+
+
+@dataclass(slots=True)
 class Diagnostics:
     counts: Counter[str] = field(default_factory=Counter[str])
     combined: list[str] = field(default_factory=list[str])
@@ -141,6 +159,7 @@ class Diagnostics:
     callout_labels: list[tuple[str, int, str]] = field(default_factory=list[tuple[str, int, str]])
     italic_verse_text: set[str] = field(default_factory=set[str])  # Interlude and kin
     callouts: list[Callout] = field(default_factory=list[Callout])  # study-note verse numbers
+    feature_callouts: list[FeatureCallout] = field(default_factory=list[FeatureCallout])
 
     def note(self, kind: str, ref: str) -> None:
         self.counts[kind] += 1
@@ -301,6 +320,7 @@ class _Parser:
         self.wrapped = False  # did the last body line run to the right margin?
         self.box = _Box()
         self.seq = 0
+        self.pending_callouts: list[FeatureCallout] = []
         self.raw_marks: list[tuple[str, int, int, Where, int, _Mark]] = []
         self.heading_marks: list[tuple[str, int, ParsedHeading, int, _Mark]] = []
         scan = find_tables(self.lines)
@@ -377,6 +397,10 @@ class _Parser:
             self.header_marks(content)
             self.after_header = (line.page, self.chapter_index())
             return
+        if self.mode is _Mode.INTRO and self.is_callout_line(content):
+            self.feature_callout(line, content, in_intro=True)  # one in a book's introduction
+            self.diag.counts["callout-lines-in-intros"] += 1
+            return
         if self.mode is _Mode.INTRO and not self.intro_line(line, content):
             return
         if any(
@@ -387,11 +411,12 @@ class _Parser:
             self.box = _Box(where=self.where(line))
             self.diag.counts["perspectives-boxes"] += 1
             return
-        if all(i.blue and i.bold and self.link_kind(i) is LinkKind.FEATURE for i in content):
+        if self.is_callout_line(content):
             self.diag.counts["callout-lines"] += 1
             if self.book is not None and self.chapter is not None:
                 label = collapse(line.text).strip()
                 self.diag.callout_labels.append((self.book.code, self.chapter.number, label))
+            self.feature_callout(line, content, in_intro=False)
             return
         words = [i for i in content if not self.is_marker(i)]
         if words and all(i.bold and i.italic for i in words):
@@ -400,6 +425,26 @@ class _Parser:
             self.italic_line(line)
         else:
             self.text_line(line)
+
+    def is_callout_line(self, content: list[TextItem]) -> bool:
+        return all(i.blue and i.bold and self.link_kind(i) is LinkKind.FEATURE for i in content)
+
+    def feature_callout(self, line: Line, content: list[TextItem], *, in_intro: bool) -> None:
+        """Record where a callout line stands; ``start_verse`` fills in the verse after it."""
+        assert self.book_range is not None
+        after = None
+        if not in_intro and self.chapter is not None and self.verse is not None:
+            after = (self.chapter.number, self.verse[0])
+        callout = FeatureCallout(
+            book=self.book_range.code,
+            label=collapse(line.text).strip(),
+            target_page=content[0].link_page or 0,
+            page=line.page,
+            after=after,
+            in_intro=in_intro,
+        )
+        self.diag.feature_callouts.append(callout)
+        self.pending_callouts.append(callout)
 
     def chapter_index(self) -> int:
         return self.chapter.number if self.chapter else 0
@@ -517,6 +562,9 @@ class _Parser:
 
     def start_verse(self, first: int, last: int) -> None:
         assert self.chapter is not None and self.book is not None
+        for callout in self.pending_callouts:
+            callout.before = (self.book.code, self.chapter.number, first)
+        self.pending_callouts = []
         self.flush_verse()
         self.verse = (first, last)
         self.verse_pages = (0, 0)
@@ -785,6 +833,8 @@ class _Parser:
             self.diag.unclassified.append(f"text outside a verse at {self.where(line)}")
             return
         self.attach_mid_verse()
+        for callout in self.pending_callouts:
+            callout.mid_verse = True  # the verse the line interrupts goes on
         self.verse_buffer.add(text)
         start = self.verse_pages[0] or line.page
         self.verse_pages = (start, line.page)

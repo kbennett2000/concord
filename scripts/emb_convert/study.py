@@ -21,6 +21,7 @@ named, and pointed a few named ones elsewhere — so each disagreement is classi
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from bible_core.normalize import normalize
@@ -197,15 +198,18 @@ class LinkRun:
     items: list[TextItem] = field(default_factory=list[TextItem])
 
 
-def link_runs(lines: list[Line]) -> tuple[dict[int, int], list[LinkRun]]:
+def link_runs(
+    lines: list[Line], is_link: Callable[[TextItem], bool] | None = None
+) -> tuple[dict[int, int], list[LinkRun]]:
     """Consecutive blue items form one link (it may wrap over lines or split into items); a
-    blue item with no target continues the link before it."""
+    blue item with no target continues the link before it. ``is_link``: which blue items are
+    links into the Bible (articles: not a footnote's marker)."""
     run_of: dict[int, int] = {}
     runs: list[LinkRun] = []
     current: LinkRun | None = None
     for line in lines:
         for item in line.items:
-            if item.blue:
+            if item.blue and (is_link is None or is_link(item)):
                 if current is None or (
                     item.link_page is not None and item.link_page != current.page
                 ):
@@ -236,9 +240,10 @@ class RunRefs:
     named: bool
 
 
-_NAMED = re.compile(r"^((?:[1-3] )?[A-Z][a-z]+(?: of [A-Z][a-z]+)?) (?=\d)")
-_CHAPTER_WORD = re.compile(r"^chapters? ")
-_REF = re.compile(r"(\d+)(?::(\d+))?(?:\s*[-–]\s*(\d+)(?::(\d+))?)?")
+_NAMED = re.compile(r"((?:[1-3] )?[A-Z][a-z]+(?: of [A-Z][a-z]+)?) (?=\d)")
+_CHAPTER_WORD = re.compile(r"^(?:chapters?|chs?\.) ")
+_VERSE_WORD = re.compile(r"^vv?\. ")  # "v. 25", "vv. 3-5": verses of the note's chapter
+_REF = re.compile(r"(\d+)(?::(\d+))?(?:\s*[-–]\s*(\d+)(?::(\d+))?)?(?:ff)?")
 _SEPARATOR = re.compile(r"\s*([,;])\s*")
 
 
@@ -260,18 +265,27 @@ def resolve_run(
     page_book: str | None,
     by_alias: dict[str, str],
     names: dict[str, str],
+    note_chapter: int | None = None,
 ) -> RunRefs | str:
     """A link's text → its references, or an error message.
 
     ``continues``: (book, chapter, separator) when only ``;``/``,`` stands between this link
     and the one before. ``page_book``: the book of the link's target page, used only to
-    complete a name cut by the link's edge ("1 " + "Corinthians 6:19").
+    complete a name cut by the link's edge ("1 " + "Corinthians 6:19"). ``note_chapter``:
+    the chapter "v. 25" means (an article on one chapter); without it such a link is an
+    error. A later book named after a ``,``/``;`` inside the link starts its own reference,
+    and a verse's "ff" ("and following") keeps the verse.
     """
     named = _NAMED.match(text)
     word = _CHAPTER_WORD.match(text)  # "chapter 9", "chapters 17–21": the note's own book
+    verses = _VERSE_WORD.match(text)
     at = 0
     chapter: int | None = None
-    if word is not None:
+    if verses is not None:
+        if note_chapter is None:
+            return f"link {text!r}: a verse of no known chapter"
+        book, at, chapter = note_book, verses.end(), note_chapter
+    elif word is not None:
         book, at = note_book, word.end()
     elif named is not None:
         name = named.group(1)
@@ -287,8 +301,12 @@ def resolve_run(
     else:
         book = note_book
     parts: list[RefPart] = []
-    separator = ""
+    separator = "," if verses is not None else ""
     while at < len(text):
+        later = _NAMED.match(text, at) if parts else None
+        named_at: int | None = None
+        if later is not None and (found := by_alias.get(normalize(later.group(1)))):
+            book, named_at, at, chapter, separator = found, later.start(), later.end(), None, ""
         match = _REF.match(text, at)
         if match is None:
             return f"link {text!r}: cannot read {text[at:]!r}"
@@ -306,7 +324,7 @@ def resolve_run(
         if (c2 or c1, v2 or v1 or 0) < (c1, v1 or 0):
             return f"link {text!r}: {match.group(0)!r} ends before it starts"
         # the first reference's link text keeps the book or "chapter" printed before it
-        begin = 0 if not parts else match.start()
+        begin = 0 if not parts else named_at if named_at is not None else match.start()
         parts.append(RefPart(begin, match.end(), _target(book, c1, v1, c2, v2), book, c1, v1 or 1))
         chapter = (c2 or c1) if v1 is not None else None
         at = match.end()
