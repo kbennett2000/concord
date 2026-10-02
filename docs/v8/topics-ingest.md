@@ -73,7 +73,8 @@ One file per source. The loader (`bible_core.topics`) reads every `*.json` direc
   is kept once.
 - **`see_also` is a redirect** — clients show "See X" and the target's verses, not the topic's
   own. Don't use it for a "see also" between topics that both carry verses.
-- **Order:** topics list by name, then id (binary collation); a topic's verses in canonical order.
+- **Order:** topics list in one A–Z order across every source, by name ignoring case, then id;
+  a topic's verses in canonical order.
 - Unknown keys are ignored.
 
 The build **fails loudly**, naming the file, on: invalid JSON; a missing or malformed field; an

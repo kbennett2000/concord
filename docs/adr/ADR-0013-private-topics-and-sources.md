@@ -67,9 +67,14 @@ What had to be settled:
     `source` (the echoed filter, else null) and `sources`: every loaded source with its count
     under the same `q`/`section` (ignoring `source`), 0 included, ordered by name.
   - The four endpoints declare their bodies, so `docs/openapi.json` carries them.
-- **Order and paging:** `ORDER BY name, id` everywhere, unchanged. Binary collation puts Nave's
-  all-capitals names before a mixed-case source's names that share their first letter. `total`
-  counts every source; `?source=` pages one source — Nave's pages exactly as before.
+- **Order and paging** (amended by V8-S7a, 2 Oct 2026, Kris's call): **one A–Z list.** The
+  browse and the reverse lookup order by `name COLLATE NOCASE, id`: names compare ignoring ASCII
+  case, so every source's topics interleave in one alphabet, and `id` breaks a tie between names
+  equal but for case, so paging stays stable. `total` counts every source; `?source=` pages one
+  source. Nave's own order moves in exactly one place: "ANGEL (a spirit)" now comes before
+  "ANGEL (Holy Trinity)" (0-based positions 298 and 299 of 5,319). As S6a shipped it, the order
+  was `name, id` in binary collation, which put Nave's all-capitals names before every
+  mixed-case name of the same letter.
 - **The reverse lookup** (`/v1/verses/{ref}/topics`) returns the union of every source's topics
   that cite the reference, each with its `source`; no `?source=` there.
 - **No schema change.** The `source` column exists already.
@@ -84,6 +89,12 @@ What had to be settled:
   `immutable`, so a client may hold a pre-ADR body without `source`: treat `source`/`sources` as
   optional. Unfiltered pages, reverse lookups and `sources` change whenever the private data is
   rebuilt.
+- **The one A–Z list (V8-S7a)** changed 61 of 42,813 responses on a public build (every list,
+  section and `?source=` page, detail, verse page, and the reverse lookup of every cited verse and
+  chapter, compared with `main` through `TestClient`): the five pages holding the ANGEL pair and
+  the 35 verse and 21 chapter lookups that cite both, each by that one adjacent swap; the rest
+  are byte-identical. Bodies are cached `immutable`, so a client holding one of those bodies from
+  before keeps the old order until it fetches again (ADR-0009).
 - **Licensing:** a clean checkout bakes zero private topics, proven by a test; `data/topics/`
   stays out of every ignore file, proven by another. User flow: `docs/v8/topics-ingest.md`.
 - **Still deferred:** sub-topics, per-verse annotations, "see also" between topics with verses of

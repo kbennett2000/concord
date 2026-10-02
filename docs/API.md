@@ -915,8 +915,11 @@ Browse topical-Bible subjects from every loaded topical source: [Nave's Topical
 Bible](https://github.com/BradyStephenson/bible-data) (public domain, 1897), which ships, plus any
 source an operator loads privately ([ADR-0013](adr/ADR-0013-private-topics-and-sources.md); user
 flow: [`docs/v8/topics-ingest.md`](v8/topics-ingest.md)). Optionally filter by name substring
-(`q`, case-insensitive), `section` (the A–Z index letter) and `source`. Ordered by `name`, then
-`id` (binary: within a letter, all-capitals names sort before mixed-case ones).
+(`q`, case-insensitive), `section` (the A–Z index letter) and `source`. **One A–Z list** across
+every source: ordered by `name` ignoring case, then `id`, so the sources interleave, names equal
+but for case keep a stable order, and paging is stable. (Until v1.3.0 the order was binary, which
+put all-capitals names before mixed-case ones within a letter. Nave's own order moved in one place:
+`ANGEL (a spirit)` now comes before `ANGEL (Holy Trinity)`.)
 
 | Param | In | Type | Default | Notes |
 |---|---|---|---|---|
@@ -1028,7 +1031,7 @@ $ curl -s 'localhost:8000/v1/verses/Philippians%204:6/topics'
 ```
 
 The **deduped union** across the reference's range and across every loaded source (each topic
-with its `source`), ordered by `name` then `id`. A reference citing
+with its `source`), in the browse's order: `name` ignoring case, then `id`. A reference citing
 no topic returns `200` with `"total": 0`, `"topics": []`. **Errors:** `400 unparseable_reference` ·
 `404 unknown_book`. **Caching:** immutable.
 
