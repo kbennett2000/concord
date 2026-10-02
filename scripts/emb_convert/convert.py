@@ -8,6 +8,7 @@ Writes, only when every structural check passes:
 - ``<out>/work/EMB/crosscheck.tsv`` — every verse cross-check finding by reference;
 - ``<out>/work/EMB/notes-crosscheck.tsv`` — every note cross-check finding by note;
 - ``<out>/work/EMB/articles-crosscheck.tsv`` — every article cross-check finding (V8-S3a);
+- ``<out>/work/EMB/topics-crosscheck.tsv`` — every topic and box cross-check finding (V8-S3b);
 - ``<out>/work/EMB/summary.txt`` — the printed summary.
 
 ``work/`` is never scanned by a loader. The same PDF gives byte-identical files.
@@ -29,11 +30,12 @@ from emb_convert.lines import group_lines
 from emb_convert.notes import (
     build_notes,
     cross_check_epub_articles,
+    cross_check_epub_features,
     cross_check_epub_notes,
     notes_payload,
 )
 from emb_convert.pdfxml import PdfDocument, parse_pdf_xml, run_pdftohtml
-from emb_convert.report import articles_summary, notes_summary, summary
+from emb_convert.report import articles_summary, features_summary, notes_summary, summary
 from emb_convert.skeleton import load_public_texts, load_skeleton, load_verses
 from emb_convert.text import Marker, ParseResult, parse_bible
 from emb_convert.validate import validate
@@ -221,6 +223,9 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     articles_cross = (
         cross_check_epub_articles(notes, epub, doc, layout, _texts(result)) if epub else None
     )
+    features_cross = (
+        cross_check_epub_features(notes, epub, doc, layout, _texts(result)) if epub else None
+    )
     rights = copyright_lines(doc, layout)
     lines = summary(
         result, validation, cross, source=pdf.name, pages=doc.page_count,
@@ -228,6 +233,7 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     )  # fmt: skip
     lines += ["", *notes_summary(notes, notes_cross)]
     lines += ["", *articles_summary(notes, articles_cross)]
+    lines += ["", *features_summary(notes, features_cross)]
     ok = (
         validation.ok
         and not result.diagnostics.unclassified
@@ -251,6 +257,10 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         if articles_cross is not None:
             (work / "articles-crosscheck.tsv").write_text(
                 crosscheck_tsv(articles_cross, "article\tchapter\toccurrence"), "utf-8"
+            )
+        if features_cross is not None:
+            (work / "topics-crosscheck.tsv").write_text(
+                crosscheck_tsv(features_cross, "item\tchapter\toccurrence"), "utf-8"
             )
         lines += ["", f"Wrote {out_dir / f'{CODE}.json'}, {notes_file} and {work}/"]
     else:

@@ -2242,3 +2242,92 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   through Songbird's own `ConcordClient` inside `songbird-songbird-1`: NET John 3's 71 notes
   identical to a capture taken before the swap; EMB Genesis 3 and 41 keep their notes and gain
   their articles; 20 translations, the same ids, only EMB's `note_count` changed (7,284 → 7,503).
+
+### Feature V8-S3b — EMB's topics and Perspectives boxes (private)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s3b-emb-topics-perspectives`). Finishes the
+  spec's V8-S3: What the Bible Says About and Perspectives, plus S3a's leftover (the italic "k"
+  rule for the notes).
+- **What landed:** `scripts/emb_convert/` gains `topics.py` (the topics' section, index, heads,
+  subheads, quotations, references, callouts, Markdown), `perspectives.py` (a box's parts,
+  reference, index entry, anchor, Markdown) and `quotes.py` (each quotation against EMB's verse
+  text); the text pass records each Perspectives box with where it stands
+  (`text.PerspectivesBox`), its output unchanged; the EPUB witnesses read the topics and the
+  boxes (a box is the text between its two rules); the summary gains a Topics and Perspectives
+  section and a cross-check (`work/EMB/topics-crosscheck.tsv`). 10 synthetic tests (made-up
+  text), 1 of them for item 5. A run takes ~1 min 55 s and is byte-identical on re-run.
+- **Unchanged:** `EMB.json`, `markers.json` and the verse and article cross-checks are
+  byte-identical; of the 7,503 existing notes only tn 2SA 23:8 and tn 1CH 25:24 change (`text`),
+  and none moves in its verse or `ordinal` (the payload compared, and every chapter over HTTP
+  against the server).
+- **Spec corrections:** **50 topics, not 51** — 50 index entries, 50 heads (6 names wrap), 50
+  callouts each naming a different topic, and the book's own introduction to the feature says
+  50; the measuring session's 51 was most likely its index page's lines, header included. The
+  **503 quoted verses** are 503 references quoted in **502 quotations** (one quotes Josh 22:5;
+  24:14-15); one more reference (Ps 112:5-9, after Ps 41:1-3) is linked on to, not quoted — 504
+  links. **240 subheads** over 242 lines (two wrap; the plan said 242 subheads).
+- **Topics:** titles from the index (three put "The" last for sorting and keep it: WBSA 6, 19,
+  20); text as Markdown — subheads `###`, 612 paragraphs or stanzas, 721 printed lines kept apart
+  by hard breaks, 45 bracketed speaker tags, 33 quotations holding ". . ."; each reference a
+  `ref:` link on a hard-break line under its quotation. Words: 214 / median 422 / 906.
+- **Topic anchors:** each topic is called out once, the line between two verses; it anchors at
+  the end of the verse the line follows — 17 a verse the topic quotes, 9 in a book it quotes
+  elsewhere, 24 in a book it doesn't; 25 at a chapter's end (ECC 12:14 a book's). No passages,
+  no cross-references.
+- **Boxes:** 26, shapes as the spec (12 ranges · 10 verses · 3 multi-part · 1 whole chapter):
+  the passage quoted, its reference, the saying, the attribution (29 lines: 3 wrap; one holds an
+  italic title); no title. The index lists 26 by author and passage, the name linking to the
+  box's page (25 exact, 1 the page before); it prints another passage for one box (Ezek 11:1-4,
+  the index 11:1-3) and the box's own print is used. Anchors: 20 at their passage's last verse,
+  1 at its first part's (Eccl 3:13; 9:7, at 3:13), 5 after it — GEN 39:23 (39:19-21), DEU 11:25
+  (11:22), JHN 15:8 (15:1-2, 5), 1TI 4:10 (4:6), 2CO 9:9 (9:7-8; the box stands inside 9:9).
+  Passages on 18; the 8 single-verse boxes anchored at their verse have none. Words: 35 / 76 /
+  135.
+- **Quotations vs EMB's verse text** (words, the book's bracketed words aside; an ellipsis or a
+  bracketed word may join two parts): topics 316 identical · 76 the same words · 92 a part ·
+  16 joined · 2 other (Luke 12:16-21 and 1 Pet 2:5,9 — words left out without ". . .", listed in
+  `notes.QUOTES_AS_PRINTED`); boxes 6 · 4 · 12 · 4 · 0. The plan's 10 "other" were measured
+  before bracketed words counted as the book's: 8 of them put the book's word in brackets (a
+  name for a pronoun, a phrase of its own), the two it meant to check on the page (Jer
+  30:12-14,17; 1 Cor 16:2) among them. None points at an error in EMB's verse text.
+- **Order at a shared spot:** S3b's notes follow every earlier note at their verse in the file.
+  Shared verse ends: GEN 39:23 (an article, then the box: print order), MRK 9:35 (topic, then
+  box), and HOS 3:5, MAL 2:16, ROM 1:32, where the topic's callout line stands above a Men, Women,
+  and God one: the topic takes `ordinal` 1, 1, 0 (one below the article's) and shows first; at
+  HOS 3:5 and MAL 2:16 it shares 1 with the textual note, which the id tie-break keeps first.
+- **Links:** 531 → 565 targets, every one agreeing with the book's own target (±1 page).
+- **Text fixes, measured:** a sentence run into the next on a roman justified line (1: WBSA 40,
+  its quotation of 1 Kgs 11:1-3); 5 compounds repaired. The checks now accept initials and
+  small-capital ordinals in an attribution (false positives on two boxes).
+- **Item 5:** S3a's no-word rest after the italic "k" now joins in the notes too (`clean.py`'s
+  `k_fragments` folds into `k_breaks`): exactly tn 2SA 23:8 and tn 1CH 25:24 change; in the notes
+  cross-check 2SA 23:8a moves to a fixed PDF quirk and 1CH 25:24 credits the fix.
+- **Topics and boxes cross-check (with `--epub`):** 10 agree · 0 fixed · **0 fix regressions** ·
+  55 visible EPUB damage · 2 splices · 1 verified on the rendered page (WBSA 43: a period the
+  EPUB adds after a reference, p. 7326) · **0 open where the EPUB text is undamaged** · 8 open in
+  damaged EPUB topics (WBSA 2, 10, 20, 28, 29, 35, 36, 40). The EPUB lost one topic's head
+  (WBSA 32); its reader finds the topic by its first subhead and marks it damaged.
+- **Proof:** `make build-db` loads 65,832 notes (7,579 EMB) and 16,169 note cross-references
+  (unchanged) with no error. A local API on :8077 served EMB `note_count` 7,579; a topic (GEN
+  1:18) and a box (EXO 24:3) with label, title, passages and Markdown; `ref:GEN.1.14` resolving
+  through `/v1/verses`; a notes search finding a topic; all 1,189 chapters' existing EMB notes
+  equal to the server's apart from the two item-5 notes; NET John 3's 71 notes equal.
+- **Plan deviations:** 240 subheads, not 242 (lines, not subheads); bracketed words count as the
+  book's gap markers, so 2 quotations are "other", not 10; the EPUB witness needed a
+  first-subhead fallback for a lost head.
+- **`make check` green** (859 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged).
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  `make docker-build-private` 45 s, the embed `CACHED`, the temporary `Dockerfile.dockerignore`
+  gone afterwards. The image (506e1ab14375) checked on :8077: 20 translations, the same ids as
+  the server; EMB 7,579 notes; every chapter's existing EMB notes equal to the server's apart
+  from the two item-5 notes, 76 added; NET John 3's 71 equal; semantic search on. `docker save |
+  gzip` 10 s (482 MB), `scp` 40 s, `docker load` 29 s + `compose up -d` 11 s, healthy after
+  ~15 s; both tarballs removed. Rollback: `concord:pre-emb-topics` (the V8-S3a image,
+  d0dc6b6b8d01) — `docker tag concord:pre-emb-topics concord:latest && docker compose up -d` in
+  `~/applications/concord`. Server tags now: `latest`, `pre-emb-topics`, `pre-emb-articles`,
+  `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.6 GB each, layers shared; 22 GB free). Read
+  through Songbird's own `ConcordClient` inside `songbird-songbird-1`: NET John 3's 71 notes
+  identical to a capture taken before the swap in every field Songbird reads; EMB Genesis 1 and
+  Exodus 24 keep their notes and gain a topic (two in Genesis 1) and a box; 20 translations, the
+  same ids, only EMB's `note_count` changed (7,503 → 7,579).

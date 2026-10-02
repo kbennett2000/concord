@@ -344,13 +344,11 @@ def test_words_the_italic_font_ran_together_split() -> None:
     assert fused_words("restate", words) == ("restate", 0)  # "re" is no word of its own
 
 
-def test_after_a_k_a_no_word_rest_joins_in_articles_only() -> None:
+def test_after_a_k_a_no_word_rest_joins_where_the_italic_k_break_does() -> None:
     words = vocabulary("the work is done")
-    joined = letter_spacing(
-        "a Fork elsom here", words, whole_item=True, k_breaks=True, k_fragments=True
-    )
+    joined = letter_spacing("a Fork elsom here", words, whole_item=True, k_breaks=True)
     assert joined == "a Forkelsom here"
-    assert letter_spacing("a Fork elsom here", words, whole_item=True, k_breaks=True) is None
+    assert letter_spacing("a Fork elsom here", words, whole_item=True) is None
 
 
 def test_link_forms_the_articles_print() -> None:
