@@ -2591,4 +2591,28 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - `404 unknown_document` for an unknown slug;
     - every chapter's EMB notes equal to the server's but the three titles, in normal order;
     - NET John 3's 71 equal.
+- **`make check` green** (1,007 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  - **Build:** `make docker-build-private` took 52 s, with the embed `CACHED`; the temporary
+    `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (39e72e76ddbd) checked on :8077:** the local API's checks above, all passing; all
+    66 figures served byte-identical as `image/jpeg`, with a stable ETag and 304; semantic search
+    on.
+  - **Ship:** `docker save | gzip` 12 s (487 MB); `scp` 38 s; `docker load` 32 s + `compose up -d`
+    15 s; healthy after ~8 s; both tarballs removed.
+  - **Rollback:** `concord:pre-emb-introductions` (the V8-S4b image, 8332b4ac9e4f) —
+    `docker tag concord:pre-emb-introductions concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now:** `latest`, `pre-emb-introductions`, `pre-emb-charts`, `pre-emb-topics`,
+    `pre-emb-articles`, `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.62–1.65 GB each, layers
+    shared; 19 GB free).
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`, against a
+    capture taken before the swap:
+    - NET John 3's 71 notes are identical in every field Songbird reads;
+    - EMB Genesis 13's 4 notes (its chart included) and Genesis 1's text load unchanged;
+    - 20 translations, the same ids, identical as Songbird reads them (its model ignores
+      `document_count`);
+    - Matthew 24's notes differ only in one topic's title, now in normal word order. Songbird
+      can't show documents until its slice C.
 
