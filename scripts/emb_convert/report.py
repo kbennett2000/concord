@@ -7,6 +7,7 @@ from collections import Counter
 from emb_convert.articles import FEATURES
 from emb_convert.crosscheck import CrossCheck, Verdict
 from emb_convert.notes import NotesResult
+from emb_convert.quotes import QuoteClass
 from emb_convert.text import ParseResult
 from emb_convert.textual import LabelKind
 from emb_convert.validate import Validation
@@ -38,6 +39,15 @@ EXPECTED: dict[str, int] = {
     "SYSK-callouts": 94,
     "PG-callouts": 24,
     "What the Bible Says About Index-callouts": 50,
+    # V8-S3b (docs/v8/SPEC.md §3, as corrected by the S3b parse: 50 topics)
+    "WBSA-entries": 50,
+    "WBSA-topics": 50,
+    "WBSA-quotations": 502,
+    "WBSA-quoted": 503,
+    "WBSA-subheads": 240,  # 242 lines: two wrap
+    "WBSA-callouts": 50,
+    "PERSP-boxes": 26,
+    "PERSP-entries": 26,
 }
 
 
@@ -329,7 +339,7 @@ def articles_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
             1 for c in region.unmatched_callouts if c.in_intro
         )),
         *(_row(f"  {_FEATURE_NAMES[k]}", by_feature[k], f"{k}-callouts") for k in _FEATURE_NAMES),
-        *(_row(f"  {name.removesuffix(' Index')} (later)", n, f"{name}-callouts")
+        *(_row(f"  {name.removesuffix(' Index')} (below)", n, f"{name}-callouts")
           for name, n in sorted(region.other_callouts.items())),
         f"  {'callouts without an article':<34}{len(region.unmatched_callouts):>8,}  (target 0)",
     ]  # fmt: skip
@@ -399,6 +409,123 @@ def articles_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
             "",
             *cross_summary(
                 cross, "Cross-check: article text, PDF vs EPUB, article by article", headings=False
+            ),
+        ]
+    return lines
+
+
+_QUOTE_CLASSES = [c.value for c in QuoteClass]
+_TOPIC_ANCHORS = [
+    "end of a verse it quotes",
+    "in a book it quotes elsewhere",
+    "in a book it doesn't quote",
+    "never called out",
+    "at a chapter's end",
+]
+_BOX_SHAPES = ["range", "verse", "multi-part", "whole chapter", "cross-chapter"]
+
+
+def _words(counts: list[int]) -> str:
+    words = sorted(counts or [0])
+    return (
+        f"  {'words: shortest / median / longest':<34}{words[0]:>8,} / "
+        f"{words[len(words) // 2]:,} / {words[-1]:,}"
+    )
+
+
+def features_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
+    """The V8-S3b section: What the Bible Says About and Perspectives."""
+    found = notes.features
+    region, boxes = found.topics, found.boxes
+    evidence = Counter(f.evidence for f in found.links)
+    targets = sum(len(f.targets) for f in found.links)
+    called = Counter(len(t.callouts) for t in region.topics)
+    wbsa_built = found.structures.get("WBSA", Counter[str]())
+    persp_built = found.structures.get("PERSP", Counter[str]())
+    lines = [
+        "Topics and Perspectives (notes/EMB.json, type article)",
+        _row("What the Bible Says About index", len(region.entries), "WBSA-entries"),
+        _row("  topics", len(region.topics), "WBSA-topics"),
+        _row("  quotations", sum(len(t.quotations) for t in region.topics), "WBSA-quotations"),
+        _row("  quoted references", found.quoted, "WBSA-quoted"),
+        _row("  references linked, not quoted", found.pointers),
+        _row("  reference lines with two", found.two_references),
+        _row("  callout lines", found.callouts, "WBSA-callouts"),
+        _row("  called out once", called[1]),
+        _row("  called out more than once", sum(n for k, n in called.items() if k > 1)),
+        _row("  never called out", called[0]),
+        f"  {'  callouts without a topic':<34}{len(region.unmatched_callouts):>8,}  (target 0)",
+        _row("  notes", found.notes["WBSA"]),
+        *(_row(f"  anchor: {where}", found.anchors["WBSA", where]) for where in _TOPIC_ANCHORS
+          if found.anchors["WBSA", where]),
+        _row("  subheads", wbsa_built["subheads"], "WBSA-subheads"),
+        *(_row(f"  {what}", n) for what, n in sorted(wbsa_built.items())
+          if what not in ("subheads", "quotations")),
+        *(_row(f"  quotation: {kind}", found.classes.get("WBSA", Counter())[kind])
+          for kind in _QUOTE_CLASSES),
+        _words(found.words.get("WBSA", [])),
+        _row("  index names its topic otherwise", len(region.renamed)),
+        *(f"      WBSA {t.number} (title from the index)" for t in region.renamed),
+        _row("Perspectives boxes", len(boxes.boxes), "PERSP-boxes"),
+        _row("  index entries", len(boxes.entries), "PERSP-entries"),
+        _row("  notes", found.notes["PERSP"]),
+        *(_row(f"  passage: {shape}", found.shapes[shape]) for shape in _BOX_SHAPES
+          if found.shapes[shape]),
+        *(_row(f"  anchor: {where}", n) for (feature, where), n in sorted(found.anchors.items())
+          if feature == "PERSP"),
+        *(_row(f"  {what}", n) for what, n in sorted(persp_built.items())),
+        *(_row(f"  quotation: {kind}", found.classes.get("PERSP", Counter())[kind])
+          for kind in _QUOTE_CLASSES),
+        _words(found.words.get("PERSP", [])),
+        _row("  index prints another passage", len(boxes.index_differs)),
+        *(f"      {b.name} (index: {b.entry.reference if b.entry else '?'})"
+          for b in boxes.index_differs),
+        _row("anchors outside the passage", len(found.outside)),
+        *(f"      {where}" for where in found.outside),
+        _row("boxes inside a verse", len(found.mid_verse)),
+        *(f"      {where}" for where in found.mid_verse),
+        _row("shown before an earlier article", len(found.shown_first)),
+        *(f"      {where}" for where in found.shown_first),
+        _row("quotations the book edits otherwise", len(found.others)),
+        *(f"      {name}" for name in found.others),
+        f"  {'ref: links':<34}{len(found.links):>8,}  → {targets:,} targets",
+        *(_row(f"  {label}", evidence[key]) for key, label in _EVIDENCE if key != "unexplained"),
+        f"  {'  unexplained':<34}{evidence['unexplained']:>8,}  (target 0)",
+        _row("broken words joined (items)", found.fixes["letter-spaced"]),
+        _row("sentences run together, split", found.fixes["fused-sentences"]),
+        _row("compound hyphens restored", found.fixes["compound-hyphens"]),
+        "",
+        "Topics and Perspectives checks (any failure blocks writing)",
+        f"  every callout matched             {_ok(not region.unmatched_callouts)}",
+        f"  every topic indexed and placed    {_ok(not region.unindexed)}",
+        f"  every box indexed and placed      {_ok(not boxes.unindexed)}",
+        f"  index passages explained          {_ok(not found.unexplained_index)}",
+        f"  quotations explained              {_ok(not found.unreviewed)}",
+        f"  ref: links explained              {_ok(not evidence['unexplained'])}",
+        f"  hygiene, flanking, round trip     {_ok(not any(found.hygiene.values()))}",
+        f"  parse errors                      "
+        f"{_ok(not (found.errors or region.errors or boxes.errors))}",
+    ]  # fmt: skip
+    problems = [
+        *(f"callout without a topic: {c.book} p{c.page}" for c in region.unmatched_callouts),
+        *(f"topic without its index entry: p{t.page}" for t in region.unindexed),
+        *(f"box without its index entry: {b.name}" for b in boxes.unindexed),
+        *(f"index prints another passage: {b.name}" for b in found.unexplained_index),
+        *(f"quotation not reviewed: {name}" for name in found.unreviewed),
+        *(f"unexplained link: {f.note} {f.link!r} → {', '.join(f.targets)}"
+          for f in found.links if f.evidence == "unexplained"),
+        *region.errors,
+        *boxes.errors,
+        *found.errors,
+    ]  # fmt: skip
+    lines += [f"    ✗ {problem}" for problem in problems[:40]]
+    for name, where in found.hygiene.items():
+        lines.append(f"    ✗ {name}: {len(where)} — {', '.join(where[:8])}")
+    if cross is not None:
+        lines += [
+            "",
+            *cross_summary(
+                cross, "Cross-check: topics and boxes, PDF vs EPUB, item by item", headings=False
             ),
         ]
     return lines

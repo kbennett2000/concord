@@ -273,11 +273,17 @@ def _join_chunk(
 _FUSED_SENTENCE = re.compile(r"(?<=[a-z]{2}[.?!,;:])(?=[A-Z“‘])")
 
 
+def fused_sentences(text: str) -> tuple[str, int]:
+    """Split a sentence’s punctuation run into the next one ("x?Y" → "x? Y"): the italic font
+    does it (V8-S3a), and a justified line's text layer can drop the space (V8-S3b)."""
+    return _FUSED_SENTENCE.subn(" ", text)
+
+
 def fused_words(text: str, vocabulary: Vocabulary) -> tuple[str, int]:
     """Split words the italic font ran together: a sentence’s punctuation
-    run into the next one ("x?Y" → "x? Y"), and a token that is no word but splits one way
+    run into the next one (``fused_sentences``), and a token that is no word but splits one way
     into two words the public translations use often ("whatnow" → "what now")."""
-    text, count = _FUSED_SENTENCE.subn(" ", text)
+    text, count = fused_sentences(text)
     tokens = text.split(" ")
     for n, token in enumerate(tokens):
         core = token.strip("".join(_OPENING) + "".join(_CLOSING))

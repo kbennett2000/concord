@@ -18,19 +18,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from emb_convert import perspectives, topics
 from emb_convert.articles import (
     Article,
     ArticleRegion,
     anchors,
     cross_references,
     parse_articles,
+    sections,
 )
 from emb_convert.articles import assign_callouts as assign_article_callouts
 from emb_convert.articles import shape as article_shape
 from emb_convert.articletext import segment, structures, superscript_markers, write
 from emb_convert.clean import CompoundRepair, Fixes, PublicWords, Vocabulary, letters
 from emb_convert.crosscheck import CrossCheck, cross_check_notes
-from emb_convert.epub_articles import parse_epub_articles
+from emb_convert.epub_articles import parse_epub_articles, parse_epub_boxes, parse_epub_topics
 from emb_convert.epub_notes import EpubNotes, parse_epub_notes
 from emb_convert.layout import Layout, canonical_books
 from emb_convert.lines import Line, group_lines
@@ -46,6 +48,8 @@ from emb_convert.notetext import (
     run_texts,
 )
 from emb_convert.pdfxml import PdfDocument, TextItem
+from emb_convert.perspectives import Box, BoxRegion
+from emb_convert.quotes import QuoteClass, classify
 from emb_convert.study import (
     Callouts,
     LinkRun,
@@ -63,6 +67,7 @@ from emb_convert.study import (
     shape,
     target_verses,
 )
+from emb_convert.study import separators as run_separators
 from emb_convert.text import ParseResult, trusted_text
 from emb_convert.textual import (
     LabelKind,
@@ -73,6 +78,7 @@ from emb_convert.textual import (
     match,
     parse_textual,
 )
+from emb_convert.topics import Topic, TopicRegion
 from emb_convert.validate import PUNCTUATION
 
 TN_LABEL = "Textual Note"
@@ -139,11 +145,12 @@ _HYGIENE: dict[str, re.Pattern[str]] = {
     "asterisk": re.compile(r"\*"),
     "double-space": re.compile(r"  "),
     "letter-spacing": re.compile(r"(?:^|\s)(?:[A-Za-z] ){2,}[A-Za-z](?:\s|[.,;:!?]|$)"),
-    # digits glued to letters — but not ordinals ("430th"), Dead Sea Scrolls sigla ("4QSam",
+    # digits glued to letters — but not ordinals ("430th", small capitals "30TH"), Dead Sea
+    # Scrolls sigla ("4QSam",
     # "1QpHab"), a reference to part of a verse ("see 13:2a"), decades ("1960s") or a verse
     # "and following" ("2:15ff")
     "digit-in-word": re.compile(
-        r"(?<!\dQ)[A-Za-z]\d|\d(?!(?:st|nd|rd|th|ff)\b|Q[A-Za-z]|[a-e]\b|(?<=0)s\b)[A-Za-z]"
+        r"(?<!\dQ)[A-Za-z]\d|\d(?!(?:st|nd|rd|th|ST|ND|RD|TH|ff)\b|Q[A-Za-z]|[a-e]\b|(?<=0)s\b)[A-Za-z]"
     ),
     "small-caps-fragment": re.compile(r"\bORD\b"),
     **PUNCTUATION,
@@ -220,8 +227,13 @@ class NotesResult:
     spans: dict[Key, tuple[int, int]] = field(default_factory=dict[Key, tuple[int, int]])
     first_study: tuple[str, str] = ("", "")
     articles: ArticleFindings = field(default_factory=ArticleFindings)
+    features: FeatureFindings = field(default_factory=lambda: FeatureFindings())
     # payload index → (rank, callout order): where an article sorts among notes at its spot
     ranks: dict[int, tuple[int, int]] = field(default_factory=dict[int, tuple[int, int]])
+    # payload index → tier: 0 a verse's notes, 1 S3a's articles, 2 S3b's (each after the last)
+    tiers: dict[int, int] = field(default_factory=dict[int, int])
+    # id(note) → (tier, reading order): for placing S3b's notes among S3a's at one spot
+    reading: dict[int, tuple[int, int]] = field(default_factory=dict[int, tuple[int, int]])
 
     @property
     def ok(self) -> bool:
@@ -232,6 +244,7 @@ class NotesResult:
             and not any(self.hygiene.values())
             and all(f.evidence != "unexplained" for f in self.links)
             and self.articles.ok
+            and self.features.ok
         )
 
 
@@ -347,6 +360,7 @@ def _check_text(result: NotesResult, where: str, text: NoteText) -> None:
 
 
 _GAPS = re.compile(r"( +)")
+_INITIAL = re.compile(r"[A-Z]\.")
 
 
 def _broken_words(pieces: list[Piece], vocabulary: Vocabulary) -> bool:
@@ -357,6 +371,7 @@ def _broken_words(pieces: list[Piece], vocabulary: Vocabulary) -> bool:
     return any(
         parts[n] == " "
         and not parts[n - 1].endswith(("’", "'"))  # "Name’ s": as the book prints it
+        and not _INITIAL.fullmatch(parts[n - 1])  # "A. W. Name": initials, not a broken word
         and not (len(b := parts[n + 1].strip(".,;:!?)”’")) > 1 and b.isupper())  # an acronym
         and (a := letters(parts[n - 1]))
         and (b := letters(parts[n + 1]))
@@ -778,10 +793,10 @@ def _articles(
                     )
                 )
             callout = place.callout
-            result.ranks[len(result.payload)] = (
-                RANK_END if place.at_end else RANK_START,
-                order.get(id(callout), len(order)) if callout is not None else len(order),
-            )
+            reading = order.get(id(callout), len(order)) if callout is not None else len(order)
+            result.ranks[len(result.payload)] = (RANK_END if place.at_end else RANK_START, reading)
+            result.tiers[len(result.payload)] = 1
+            result.reading[id(note)] = (1, 2 * reading + 1)
             result.payload.append(note)
             found.notes[feature.key] += 1
             where = (
@@ -800,12 +815,367 @@ def _articles(
                 found.mid_verse.append(f"{name} (in {place.book} {place.chapter}:{place.verse})")
         found.order.append((key, article))
         found.texts[key] = plain_text(flat).translate(_DIGITS)
-        _article_texts(found, key, lines, ctx)
+        _article_texts(found.raw, found.solo, found.spans, key, lines, ctx)
 
 
 _WS_ALL = re.compile(r"\s+")
 _DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 MARKER_SIZE = 7
+
+
+# --- What the Bible Says About and Perspectives (V8-S3b) --------------------------------------
+
+WBSA, PERSP = "WBSA", "PERSP"
+# Quotations whose words differ from the verse text they cite beyond the classes
+# (``quotes.classify``), each read in the book and confirmed as its own edit — words left out
+# without ". . ." (docs/dev-notes.md, V8-S3b). Keys:
+# feature, topic number in the index, the reference as printed — references only.
+QUOTES_AS_PRINTED: frozenset[str] = frozenset(
+    {
+        "WBSA 18 Luke 12:16-21",  # leaves out a clause and its quotation's inner marks
+        "WBSA 6 1 Peter 2:5, 9",  # its second part starts inside the verse
+    }
+)
+# Boxes whose index entry prints another passage than the box itself (the box's own print is
+# used). References only.
+BOX_INDEX_DIFFERS: frozenset[str] = frozenset({"PERSP Ezekiel 11:1-4"})  # the index: 11:1-3
+# Links read in their sentence whose book's target disagrees (none expected).
+REVIEWED_FEATURE_LINKS: frozenset[tuple[str, str]] = frozenset()
+# Topics or boxes where the PDF prints words the EPUB lacks, checked on the rendered page.
+VERIFIED_FEATURES: frozenset[Key] = frozenset(
+    {
+        ("WBSA 43", 0, 1),  # a period the EPUB adds after a reference
+    }
+)
+
+
+@dataclass(slots=True)
+class FeatureFindings:
+    """What the Bible Says About and Perspectives (V8-S3b): found, placed and checked."""
+
+    topics: TopicRegion = field(default_factory=TopicRegion)
+    boxes: BoxRegion = field(default_factory=BoxRegion)
+    callouts: int = 0  # callout lines into the topics' section
+    notes: Counter[str] = field(default_factory=Counter[str])  # by feature
+    quoted: int = 0  # references the topics quote
+    pointers: int = 0  # references a topic links on to, not quoted
+    two_references: int = 0  # reference lines with two references
+    classes: dict[str, Counter[str]] = field(default_factory=dict[str, Counter[str]])
+    others: list[str] = field(default_factory=list[str])  # reviewed "other" quotations
+    unreviewed: list[str] = field(default_factory=list[str])
+    anchors: Counter[tuple[str, str]] = field(default_factory=Counter[tuple[str, str]])
+    outside: list[str] = field(default_factory=list[str])
+    mid_verse: list[str] = field(default_factory=list[str])
+    shown_first: list[str] = field(default_factory=list[str])
+    shapes: Counter[str] = field(default_factory=Counter[str])
+    structures: dict[str, Counter[str]] = field(default_factory=dict[str, Counter[str]])
+    words: dict[str, list[int]] = field(default_factory=dict[str, list[int]])
+    links: list[LinkFinding] = field(default_factory=list[LinkFinding])
+    fixes: Counter[str] = field(default_factory=Counter[str])
+    hygiene: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    errors: list[str] = field(default_factory=list[str])
+    topic_order: list[tuple[Key, Topic]] = field(default_factory=list[tuple[Key, Topic]])
+    box_order: list[tuple[Key, Box]] = field(default_factory=list[tuple[Key, Box]])
+    texts: dict[Key, str] = field(default_factory=dict[Key, str])
+    raw: dict[Key, str] = field(default_factory=dict[Key, str])
+    solo: dict[str, dict[Key, str]] = field(default_factory=dict[str, dict[Key, str]])
+    spans: dict[Key, tuple[int, int]] = field(default_factory=dict[Key, tuple[int, int]])
+
+    @property
+    def unexplained_index(self) -> list[Box]:
+        return [b for b in self.boxes.index_differs if b.name not in BOX_INDEX_DIFFERS]
+
+    @property
+    def ok(self) -> bool:
+        return (
+            not self.errors
+            and not self.topics.errors
+            and not self.boxes.errors
+            and not self.topics.unmatched_callouts
+            and not self.topics.unindexed
+            and not self.boxes.unindexed
+            and not self.unexplained_index
+            and not self.unreviewed
+            and not any(self.hygiene.values())
+            and all(f.evidence != "unexplained" for f in self.links)
+        )
+
+
+Cited = tuple[str, int, int, int, int]  # book, first chapter and verse, last chapter and verse
+
+
+def _target_range(target: str, ctx: _Context) -> Cited:
+    """A ``ref:`` target as the verses it spans (a chapter target: the whole chapters)."""
+    (book, c1, v1), (_, c2, v2) = target_verses(target)
+    if "." not in target.partition(".")[2]:
+        return book, c1, 1, c2, ctx.last_verse.get((book, c2), 1)
+    return book, c1, v1, c2, v2
+
+
+def _cited_text(cited: Sequence[Cited], ctx: _Context) -> str:
+    """The verse text a quotation cites, its verses in order, a combined verse once."""
+    texts: list[str] = []
+    seen: set[Key] = set()
+    for book, c1, v1, c2, v2 in cited:
+        for chapter in range(c1, c2 + 1):
+            first = v1 if chapter == c1 else 1
+            last = v2 if chapter == c2 else ctx.last_verse.get((book, chapter), 0)
+            for verse in range(first, last + 1):
+                stored = ctx.stored.get((book, chapter, verse))
+                key = (book, chapter, stored) if stored is not None else None
+                if key is None or key in seen or key not in ctx.verse_text:
+                    continue
+                seen.add(key)
+                texts.append(ctx.verse_text[key])
+    return " ".join(texts)
+
+
+def _covers(cited: Sequence[Cited], book: str, chapter: int, verse: int) -> bool:
+    return any(
+        b == book and (c1, v1) <= (chapter, verse) <= (c2, v2) for b, c1, v1, c2, v2 in cited
+    )
+
+
+def _features(
+    result: NotesResult, doc: PdfDocument, layout: Layout, parse: ParseResult, ctx: _Context
+) -> None:
+    found = result.features
+    sections_ = sections(doc, layout)
+    callouts = parse.diagnostics.feature_callouts
+    reading = {id(c): n for n, c in enumerate(callouts)}
+
+    def is_link(item: TextItem) -> bool:
+        page = item.link_page
+        return page is not None and layout.bible_start <= page < layout.notes_start
+
+    def inline_for(run_of: dict[int, int], counts: Counter[str]) -> topics.Inline:
+        def inline(block: Sequence[Line]) -> list[Piece]:
+            return assemble(
+                block,
+                ctx.vocabulary,
+                Fixes(),
+                counts,
+                repair=ctx.repair,
+                run_of=run_of,
+                bold=True,
+                split_fused=True,
+                split_sentences=True,
+            )
+
+        return inline
+
+    def check(name: str, lines: list[Line], flat: list[Piece], written: topics.Written) -> None:
+        for problem in written.problems:
+            found.hygiene.setdefault(problem, []).append(name)
+        for pattern_name, pattern in _HYGIENE.items():
+            if pattern.search(written.plain):
+                found.hygiene.setdefault(pattern_name, []).append(name)
+        if _broken_words(_spaced(lines, ctx), ctx.vocabulary):
+            found.hygiene.setdefault("broken-word", []).append(name)
+        if _WS_ALL.sub("", plain_text(flat)) != written.printed:
+            found.errors.append(f"{name}: its blocks don't hold exactly the text it prints")
+
+    def quotation(feature: str, name: str, quoted: str, cited: list[Cited]) -> None:
+        kind = classify(quoted, _cited_text(cited, ctx))
+        found.classes.setdefault(feature, Counter())[kind.value] += 1
+        if kind is QuoteClass.OTHER:
+            (found.others if name in QUOTES_AS_PRINTED else found.unreviewed).append(name)
+
+    def add(note: dict[str, Any], feature: str, at_end: bool, order: int) -> None:
+        n = len(result.payload)
+        result.ranks[n] = (RANK_END if at_end else RANK_START, order)
+        result.tiers[n] = 2
+        result.reading[id(note)] = (2, order)
+        result.payload.append(note)
+        found.notes[feature] += 1
+
+    # the topics
+    region = topics.parse_topics(doc, layout, sections_)
+    found.topics = region
+    found.callouts = len(topics.assign_callouts(region, callouts))
+    for topic in region.topics:
+        name = f"{WBSA} {topic.number}"
+        key: Key = (name, 0, 1)
+        body = topic.body
+        run_of, runs = link_runs(body, is_link)
+        inline = inline_for(run_of, Counter())
+        flat = inline_for(run_of, found.fixes)(body)
+        places: list[tuple[str, int, int, bool, int]] = []  # book, chapter, verse, at end, order
+        for callout in topic.callouts:
+            if callout.after is not None:
+                book, (chapter, verse), at_end = callout.book, callout.after, True
+            elif callout.before is not None:
+                (book, chapter, verse), at_end = callout.before, False
+            else:
+                found.errors.append(f"{name}: a callout with no verse by it (p{callout.page})")
+                continue
+            stored = ctx.stored.get((book, chapter, verse), verse)
+            places.append((book, chapter, stored, at_end, 2 * reading[id(callout)] + 1))
+        first = places[0] if places else None
+        spans = _link_spans(
+            found.links,
+            found.errors,
+            first[0] if first is not None else "",
+            name,
+            flat,
+            runs,
+            (first[1], first[2]) if first is not None else (0, 0),
+            ctx,
+            reviewed=REVIEWED_FEATURE_LINKS,
+        )
+        quoted_all: list[Cited] = []
+        for q in topic.quotations:
+            line_pieces = inline([q.reference])
+            between = run_separators(line_pieces)
+            line_runs = list(dict.fromkeys(p.run for p in line_pieces if p.run is not None))
+            if len(line_runs) > 1:
+                found.two_references += 1
+            cited: list[Cited] = []
+            for k, run in enumerate(line_runs):
+                if k and between.get(run, "").strip() not in (";", ","):
+                    found.pointers += 1  # the book points on to it; it doesn't quote it
+                    continue
+                found.quoted += 1
+                cited += [_target_range(target, ctx) for _, _, target in spans.get(run, [])]
+            quoted_all += cited
+            printed = plain_text(line_pieces).strip().removeprefix("(").removesuffix(")")
+            quotation(WBSA, f"{name} {printed}", plain_text(inline(q.lines)), cited)
+        if not places:  # never called out: the start of its first quoted verse
+            if not quoted_all:
+                found.errors.append(f"{name}: no callout and no quoted verse")
+                continue
+            book, chapter, verse, _, _ = quoted_all[0]
+            places.append(
+                (book, chapter, ctx.stored.get((book, chapter, verse), verse), False, 1 << 30)
+            )
+        written = topics.write(topic, inline, lambda pieces, spans=spans: relink(pieces, spans))
+        check(name, body, flat, written)
+        built = found.structures.setdefault(WBSA, Counter())
+        built.update(written.counts)
+        built["speaker tags"] += sum(
+            1 for q in topic.quotations if plain_text(inline(q.lines)).startswith("[")
+        )
+        built["omissions marked . . ."] += sum(
+            1 for q in topic.quotations if ". . ." in plain_text(inline(q.lines))
+        )
+        found.words.setdefault(WBSA, []).append(len(written.plain.split()))
+        for (book, chapter, verse, at_end, order), callout in zip(
+            places, [*topic.callouts, None], strict=False
+        ):
+            verse_text = ctx.verse_text.get((book, chapter, verse))
+            if verse_text is None:
+                found.errors.append(f"{name}: anchor {book} {chapter}:{verse} has no text")
+                continue
+            note: dict[str, Any] = {
+                "book": book,
+                "chapter": chapter,
+                "verse": verse,
+                "type": ARTICLE,
+                "label": topics.LABEL,
+                "title": topic.title,
+                "text": written.markdown,
+                "text_format": MARKDOWN,
+                "char_offset": len(verse_text) if at_end else 0,
+            }
+            if not at_end:
+                note["ordinal"] = FIRST_ORDINAL
+            add(note, WBSA, at_end, order)
+            if callout is None:
+                where = "never called out"
+            elif _covers(quoted_all, book, chapter, verse):
+                where = "end of a verse it quotes"
+            elif any(b == book for b, *_ in quoted_all):
+                where = "in a book it quotes elsewhere"
+            else:
+                where = "in a book it doesn't quote"
+            found.anchors[(WBSA, where)] += 1
+            if callout is not None and (
+                callout.before is None or callout.before[:2] != (book, chapter)
+            ):
+                found.anchors[(WBSA, "at a chapter's end")] += 1
+        found.topic_order.append((key, topic))
+        found.texts[key] = plain_text(flat).translate(_DIGITS)
+        _article_texts(found.raw, found.solo, found.spans, key, body, ctx)
+
+    # the boxes
+    boxes = perspectives.parse_boxes(
+        parse.diagnostics.boxes, doc, layout, sections_, ctx.by_alias, ctx.last_verse
+    )
+    found.boxes = boxes
+    for box in boxes.boxes:
+        name = box.name
+        key = (name, 0, 1)
+        found.shapes[perspectives.shape(box, ctx.last_verse)] += 1
+        for book, part in box.parts:
+            for chapter, verse in (
+                (part.start_chapter, part.start_verse),
+                (part.end_chapter, part.end_verse),
+            ):
+                if not exists(ctx.skeleton, book, chapter, verse):
+                    found.errors.append(f"{name}: names no verse {book} {chapter}:{verse}")
+        place = perspectives.anchor(box, ctx.stored)
+        if isinstance(place, str):
+            found.errors.append(f"{name}: {place}")
+            continue
+        body = box.body
+        run_of, runs = link_runs(body, is_link)
+        inline = inline_for(run_of, Counter())
+        flat = inline_for(run_of, found.fixes)(body)
+        titled = [
+            dataclasses.replace(p, text=perspectives.title_case(p.text)) if p.run is not None else p
+            for p in flat
+        ]
+        spans = _link_spans(
+            found.links,
+            found.errors,
+            box.book,
+            name,
+            titled,
+            runs,
+            (place.chapter, place.verse),
+            ctx,
+            reviewed=REVIEWED_FEATURE_LINKS,
+        )
+        cited = [
+            (book, p.start_chapter, p.start_verse, p.end_chapter, p.end_verse)
+            for book, p in box.parts
+        ]
+        quotation(PERSP, name, plain_text(inline(box.quote)), cited)
+        written = perspectives.write(box, inline, lambda pieces, spans=spans: relink(pieces, spans))
+        check(name, body, flat, written)
+        built = found.structures.setdefault(PERSP, Counter())
+        built.update(written.counts)
+        built["attribution lines"] += len(box.attribution)
+        found.words.setdefault(PERSP, []).append(len(written.plain.split()))
+        verse_text = ctx.verse_text.get((place.book, place.chapter, place.verse))
+        if verse_text is None:
+            found.errors.append(f"{name}: anchor {place.chapter}:{place.verse} has no text")
+            continue
+        note = {
+            "book": place.book,
+            "chapter": place.chapter,
+            "verse": place.verse,
+            "type": ARTICLE,
+            "label": perspectives.LABEL,
+            "text": written.markdown,
+            "text_format": MARKDOWN,
+            "char_offset": len(verse_text) if place.at_end else 0,
+        }
+        if not place.at_end:
+            note["ordinal"] = FIRST_ORDINAL
+        parts = _article_passages([p for _, p in box.parts], (place.chapter, place.verse))
+        if parts:
+            note["passages"] = parts
+        add(note, PERSP, place.at_end, 2 * box.record.callouts_before)
+        found.anchors[(PERSP, "end of a verse" if place.at_end else "start of a verse")] += 1
+        where = f"{name} (at {place.book} {place.chapter}:{place.verse})"
+        if place.outside:
+            found.outside.append(where)
+        if box.record.mid_verse:
+            found.mid_verse.append(where)
+        found.box_order.append((key, box))
+        found.texts[key] = plain_text(flat).translate(_DIGITS)
+        _article_texts(found.raw, found.solo, found.spans, key, body, ctx)
 
 
 def _article_passages(parts: list[Part], anchor_verse: tuple[int, int]) -> list[dict[str, int]]:
@@ -826,7 +1196,14 @@ def _article_passages(parts: list[Part], anchor_verse: tuple[int, int]) -> list[
     ]
 
 
-def _article_texts(found: ArticleFindings, key: Key, lines: list[Line], ctx: _Context) -> None:
+def _article_texts(
+    raw: dict[Key, str],
+    solo: dict[str, dict[Key, str]],
+    spans: dict[Key, tuple[int, int]],
+    key: Key,
+    lines: list[Line],
+    ctx: _Context,
+) -> None:
     """An article's plain text with no fixes and with each fix alone (the cross-check)."""
     none = Fixes.none()
     scratch: Counter[str] = Counter()
@@ -837,13 +1214,11 @@ def _article_texts(found: ArticleFindings, key: Key, lines: list[Line], ctx: _Co
         )
         return plain_text(pieces).translate(_DIGITS)
 
-    found.raw[key] = plain(none)
+    raw[key] = plain(none)
     for fix in dataclasses.fields(Fixes):
-        found.solo.setdefault(fix.name, {})[key] = plain(
-            dataclasses.replace(none, **{fix.name: True})
-        )
+        solo.setdefault(fix.name, {})[key] = plain(dataclasses.replace(none, **{fix.name: True}))
     pages = [line.page for line in lines]
-    found.spans[key] = (min(pages), max(pages)) if pages else (0, 0)
+    spans[key] = (min(pages), max(pages)) if pages else (0, 0)
 
 
 _TYPE_ORDER = {"sn": 0, "tn": 1}
@@ -861,6 +1236,7 @@ def build_notes(
     _textual(result, doc, layout, parse, ctx)
     _study(result, doc, layout, parse, ctx)
     _articles(result, doc, layout, parse, ctx)
+    _features(result, doc, layout, parse, ctx)
     order = {seed.id: seed.canonical_order for seed in canonical_books()}
 
     def sort_key(pair: tuple[int, dict[str, Any]]) -> tuple[int, ...]:
@@ -870,7 +1246,7 @@ def build_notes(
             order[note["book"]],
             note["chapter"],
             note["verse"],
-            int(n in result.ranks),  # an article after the verse's other notes (see ARTICLE)
+            result.tiers.get(n, 0),  # each slice's notes after the verse's earlier ones
             note["char_offset"],
             rank,
             callout,
@@ -878,7 +1254,52 @@ def build_notes(
         )
 
     result.payload = [note for _, note in sorted(enumerate(result.payload), key=sort_key)]
+    _show_in_print_order(result)
     return result
+
+
+def _show_in_print_order(result: NotesResult) -> None:
+    """An S3b note the book prints above an S3a article at the same verse end takes an
+    explicit ``ordinal`` one below the article's, so it shows first. The file keeps it after
+    every earlier note at the verse, so no earlier note's number moves (a verse's notes are
+    served by ``ordinal``, by default their place among the verse's notes in the file, then
+    by file order)."""
+    seq: Counter[tuple[str, int, int]] = Counter()
+    shown: dict[int, int] = {}
+    at: dict[tuple[str, int, int], list[int]] = {}
+    for n, note in enumerate(result.payload):
+        key = (note["book"], note["chapter"], note["verse"])
+        seq[key] += 1
+        shown[n] = note.get("ordinal", seq[key])
+        at.setdefault(key, []).append(n)
+    for indexes in at.values():
+        for n in indexes:
+            note = result.payload[n]
+            tier, reading = result.reading.get(id(note), (0, 0))
+            if tier != 2 or not note["char_offset"]:
+                continue
+            later = [
+                shown[m]
+                for m in indexes
+                if result.reading.get(id(result.payload[m]), (0, 0))[0] == 1
+                and result.payload[m]["char_offset"]
+                and result.reading[id(result.payload[m])][1] > reading
+            ]
+            if not later:
+                continue
+            ordinal = min(later) - 1
+            if ordinal < 0:
+                result.features.errors.append(f"no ordinal shows a note before its article: {n}")
+                continue
+            placed: dict[str, Any] = {}
+            for name, value in note.items():
+                placed[name] = value
+                if name == "char_offset":
+                    placed["ordinal"] = ordinal
+            result.payload[n] = placed
+            result.features.shown_first.append(
+                f"{note['book']} {note['chapter']}:{note['verse']} (ordinal {ordinal})"
+            )
 
 
 def notes_payload(result: NotesResult, code: str) -> dict[str, Any]:
@@ -984,3 +1405,34 @@ VERIFIED_ARTICLES: frozenset[Key] = frozenset(
         ("PG Isaiah 57:18-21", 0, 1),  # a word of the epigraph
     }
 )
+
+
+def cross_check_epub_features(
+    result: NotesResult,
+    epub_path: Path,
+    doc: PdfDocument,
+    layout: Layout,
+    verse_texts: dict[Key, str],
+) -> CrossCheck:
+    """The topics' and boxes' text, PDF vs EPUB (V8-S3b): a topic keyed by its number in the
+    index, a box by its printed passage."""
+    found = result.features
+    epub_topics = parse_epub_topics(epub_path, found.topic_order)
+    epub_boxes = parse_epub_boxes(epub_path, found.box_order)
+    wanted = {page for _, box in found.box_order for page in range(box.page, box.page + 2)}
+    section = found.topics.section
+    pages: dict[int, list[str]] = {}
+    for item in doc.items:
+        if item.page in wanted or (section is not None and section.holds(item.page)):
+            pages.setdefault(item.page, []).append(item.text)
+    return cross_check_notes(
+        fixed=found.texts,
+        raw=found.raw,
+        solo=found.solo,
+        epub={**epub_topics.texts, **epub_boxes.texts},
+        epub_damaged=epub_topics.damaged | epub_boxes.damaged,
+        context_texts={**verse_texts, **result.texts, **result.articles.texts, **found.texts},
+        pages={page: " ".join(t) for page, t in pages.items()},
+        spans=found.spans,
+        verified=VERIFIED_FEATURES,
+    )

@@ -8,7 +8,8 @@ fused words and left markup scraps, so it is only used to cross-check the PDF pa
 - verse number: ``<sup>`` text (``"12"``, ``"20-21"``, ``"11:1"``);
 - heading: a block whose text is all bold *and* italic;
 - callout: bold (not italic) text, usually with a banner image — never verse text;
-- Perspectives box: the content between a pair of ``<hr>`` rules — never verse text;
+- Perspectives box: the content between a pair of ``<hr>`` rules — never verse text (its text
+  is kept for the boxes' witness, V8-S3b);
 - italic-only blocks follow the same rules as the PDF parse (psalm titles prefixed to verse
   1; Ps 119 stanza and Song of Songs speaker labels as headings; otherwise verse text);
 - a dropped-text break (``BREAK`` in the verse text): an empty ``<a>`` with no attributes,
@@ -58,6 +59,7 @@ class EpubBible:
         default_factory=dict[tuple[str, int], list[str]]
     )
     damaged: set[Key] = field(default_factory=set[Key])  # scraps seen by the parser itself
+    boxes: list[str] = field(default_factory=list[str])  # each Perspectives box's text (V8-S3b)
 
 
 def spine_documents(archive: zipfile.ZipFile) -> list[str]:
@@ -103,6 +105,7 @@ class _Reader(HTMLParser):
         self.bold_skip_depth: int | None = None
         self.in_box = False
         self.boxes = 0
+        self.box_text: list[str] = []
         self.bare_anchor = False
         self.block = _Block()
         self.book: str | None = None
@@ -118,11 +121,14 @@ class _Reader(HTMLParser):
         if tag == "hr":
             self.end_block()
             if self.chapter:  # intros use rules too; only chapters hold boxes
+                self.close_box()
                 self.in_box = not self.in_box
                 self.boxes += self.in_box
             return
         if tag in self.BLOCKS:
             self.end_block()
+            if self.in_box:
+                self.box_text.append(" ")
         if tag in ("img", "br", "hr", "meta", "link"):
             return
         if tag == "a":
@@ -146,7 +152,10 @@ class _Reader(HTMLParser):
                     break
 
     def handle_data(self, data: str) -> None:
-        if self.in_box or not data:
+        if self.in_box:
+            self.box_text.append(data)
+            return
+        if not data:
             return
         if self.bare_anchor and data.strip():
             self.bare_anchor = False
@@ -168,6 +177,12 @@ class _Reader(HTMLParser):
         bold = "b" in self.stack or "strong" in self.stack
         italic = "i" in self.stack or "em" in self.stack
         self.block.text.append((_GAP.sub(f" {BREAK} ", data), bold, italic))
+
+    def close_box(self) -> None:
+        """A box ends (its closing rule, or a chapter header): keep its text."""
+        if self.in_box:
+            self.out.boxes.append(_WS.sub(" ", "".join(self.box_text)).strip())
+        self.box_text = []
 
     # -- blocks
 
@@ -206,6 +221,7 @@ class _Reader(HTMLParser):
         number = next((t for t in tokens if t.isdigit()), None)
         if code is None:
             return
+        self.close_box()
         self.in_box = False
         if code != self.book:
             self.flush()

@@ -28,6 +28,7 @@ from emb_convert.clean import (
     Fixes,
     Vocabulary,
     fraction,
+    fused_sentences,
     fused_words,
     line_joiner,
     unspace,
@@ -88,6 +89,7 @@ def _line_pieces(
     run_of: Mapping[int, int],
     bold: bool = False,
     split_fused: bool = False,
+    split_sentences: bool = False,
 ) -> list[Piece]:
     first_content = next((i for i in line.items if i.stripped), None)
     justified = line.right >= WRAP_RIGHT
@@ -132,6 +134,9 @@ def _line_pieces(
             if split_fused and item.italic:
                 text, split = fused_words(text, vocabulary)
                 counts["fused-words"] += split
+            elif split_sentences:
+                text, split = fused_sentences(text)
+                counts["fused-sentences"] += split
         if repair is not None and fixes.compound_hyphens:
             text, repaired = repair.repair(text)
             counts["compound-hyphens"] += repaired
@@ -165,13 +170,15 @@ def assemble(
     keep_spaces: bool = False,
     bold: bool = False,
     split_fused: bool = False,
+    split_sentences: bool = False,
 ) -> list[Piece]:
     """The pieces of a note's text, line by line. ``skip``: ids of items that aren't text (a
     note's label); ``run_of``: item id → the link run it belongs to (study notes);
     ``keep_spaces``: leave the PDF's spacing as printed — a double space is a justification
     gap, so a real word gap — with a line break as a double space (the broken-word check);
     ``bold``: keep bold as a style (articles); ``split_fused``: split words the italic font ran
-    together (articles, ``clean.fused_words``)."""
+    together (articles, ``clean.fused_words``); ``split_sentences``: split a sentence run into
+    the next in roman text too (topics and boxes, ``clean.fused_sentences``)."""
     runs: Mapping[int, int] = run_of or {}
     pieces: list[Piece] = []
     previous: Line | None = None
@@ -189,6 +196,7 @@ def assemble(
             runs,
             bold,
             split_fused and fixes.letter_spacing,
+            split_sentences,
         )
         if previous is not None and pieces:
             tail = "".join(p.text for p in pieces)

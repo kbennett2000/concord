@@ -21,9 +21,12 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from emb_convert import perspectives, topics
 from emb_convert.articles import MWG, PG, SYSK, Article, Feature
-from emb_convert.epub import BREAK
+from emb_convert.epub import BREAK, parse_epub
 from emb_convert.epub_notes import read_runs
+from emb_convert.layout import canonical_books
+from emb_convert.skeleton import load_skeleton
 
 Key = tuple[str, int, int]
 
@@ -204,3 +207,84 @@ def _past_reference(text: str, reference: str) -> tuple[str, bool]:
             return text, False
         k += 1
     return ("", True) if k == len(want) else (text, False)
+
+
+# --- What the Bible Says About and Perspectives (V8-S3b) --------------------------------------
+
+
+def parse_epub_topics(path: Path, order: list[tuple[Key, topics.Topic]]) -> EpubArticles:
+    """The topics' witness: the section runs from its index header (its outline title in
+    capitals, "..." aside) to the next index header; each topic opens with the feature's name
+    and its own (the PDF's head, read at run time), in the PDF's order, and runs to the next
+    topic's head. A head the EPUB lost is found by the topic's first subhead instead, and the
+    topic counts as damaged."""
+    runs = read_runs(path)
+    found = EpubArticles()
+    start = next(
+        (n for n, (t, bold) in enumerate(runs) if bold and _key(t) == _key(topics.OUTLINE)), None
+    )
+    if start is None:
+        found.missing += [key for key, _ in order]
+        return found
+    end = next(
+        (n for n in range(start + 1, len(runs)) if runs[n][1] and _INDEX.match(_clean(runs[n][0]))),
+        len(runs),
+    )
+    text = _clean(" ".join(t for t, _ in runs[start + 1 : end]))
+    places: list[tuple[Key, int, int]] = []  # key, head start, body start
+    at = 0
+    for key, topic in order:
+        words = [*topics.LABEL.split(), *topic.printed.split()]
+        match = _words_at(text, words, at)
+        if match is not None:
+            places.append((key, match.start(), match.end()))
+            at = match.end()
+            continue
+        # a head the EPUB lost: the topic's text starts at its first subhead
+        first = topic.parts[0].subhead if topic.parts else []
+        match = _words_at(text, " ".join(line.text for line in first).split(), at)
+        if not first or match is None:
+            found.missing.append(key)
+            continue
+        places.append((key, match.start(), match.start()))
+        found.damaged.add(key)
+        at = match.end()
+    for k, (key, _, body) in enumerate(places):
+        stop = places[k + 1][1] if k + 1 < len(places) else len(text)
+        found.texts[key] = text[body:stop].strip()
+    return found
+
+
+def _words_at(text: str, words: list[str], at: int) -> re.Match[str] | None:
+    """``words`` in ``text`` from ``at`` on, any spacing between them, case aside."""
+    if not words:
+        return None
+    pattern = re.compile(r"\s+".join(re.escape(w) for w in words), re.IGNORECASE)
+    return pattern.search(text, at)
+
+
+def parse_epub_boxes(path: Path, order: list[tuple[Key, perspectives.Box]]) -> EpubArticles:
+    """The boxes' witness: each box is the EPUB's text between its two rules inside a chapter
+    (``epub.EpubBible.boxes``), found by the passage the PDF's box prints and read from after
+    its label (a conversion scrap on the label aside)."""
+    bible = parse_epub(path, canonical_books(), load_skeleton())
+    found = EpubArticles()
+    texts = [_clean(t) for t in bible.boxes]
+    label = perspectives.LABEL.upper()
+    for key, box in order:
+        want = _FLAT.sub("", box.reference)
+        matches = [t for t in texts if want in _FLAT.sub("", t)]
+        if len(matches) != 1:
+            found.missing.append(key)
+            continue
+        text = matches[0]
+        cut = text.find(label)
+        damaged = cut == -1
+        body = text[cut + len(label) :] if cut != -1 else text
+        first, _, rest = body.strip().partition(" ")
+        if ">" in first:  # the label's own scrap ("mall>")
+            body = rest
+        found.texts[key] = body.strip()
+        if damaged:
+            found.damaged.add(key)
+    return found

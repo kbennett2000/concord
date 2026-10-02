@@ -340,7 +340,7 @@ def _article(
     return Article(feature, head.page, printed, reference, parts, body, byline)
 
 
-def _one(named: list[_T], exact: list[_T]) -> _T | None:
+def pick(named: list[_T], exact: list[_T]) -> _T | None:
     """The one candidate its name picks, else the one at exactly its page."""
     if len(named) == 1:
         return named[0]
@@ -363,7 +363,7 @@ def _index(
     free = list(entries)
     for article in articles:
         near = [e for e in free if abs(e.page - article.page) <= 1]
-        found = _one(
+        found = pick(
             [e for e in near if _key(e.name) == _key(article.printed)],
             [e for e in near if e.page == article.page],
         )
@@ -396,7 +396,7 @@ def assign_callouts(region: ArticleRegion, callouts: list[FeatureCallout]) -> No
             for a in region.articles
             if a.feature is section.feature and abs(a.page - callout.target_page) <= 1
         ]
-        found = _one(
+        found = pick(
             [a for a in near if _key(callout.label) in (_key(a.title), _key(a.printed))],
             [a for a in near if a.page == callout.target_page],
         )

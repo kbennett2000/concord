@@ -33,7 +33,10 @@ MWG_PAGE = FEATURES_PAGE + 3
 SYSK_PAGE = FEATURES_PAGE + 8
 PG_AUTHORS_PAGE = FEATURES_PAGE + 13
 PG_PAGE = FEATURES_PAGE + 14
-STUDY_PAGE = FEATURES_PAGE + 20
+# V8-S3b: the topics' section and the Perspectives index, after Personal Gold
+WBSA_PAGE = FEATURES_PAGE + 20
+PERSP_PAGE = FEATURES_PAGE + 27
+STUDY_PAGE = FEATURES_PAGE + 30
 STUDY_NOTES_PAGE = STUDY_PAGE + 1
 PAGE_BOX = 'top="0" left="0" height="496" width="378"'
 
@@ -201,6 +204,8 @@ def document(pages: dict[int, list[T]], extra_outline: list[tuple[int, str]] | N
         (SYSK_PAGE, "Someone You Should Know Index"),
         (PG_AUTHORS_PAGE, "Personal Gold Author Index"),
         (PG_PAGE, "Personal Gold Index"),
+        (WBSA_PAGE, "What the Bible Says About Index"),
+        (PERSP_PAGE, "Perspectives Index"),
         (STUDY_PAGE, "Study Notes Index"),
     ]
     outline += extra_outline or []

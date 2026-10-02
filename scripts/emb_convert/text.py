@@ -18,8 +18,8 @@ Rules (docs/v8/SPEC.md §3, the S1 plan):
   unfinished sentence (an italic book title wrapped onto its own line). Anything else is
   unclassified.
 - Never verse text: book intros and chapter-navigation lists, Perspectives boxes (label →
-  reference → attribution), callout labels (bold blue links into the feature region), table
-  header rows.
+  reference → attribution; recorded with where they stand, V8-S3b), callout labels (bold blue
+  links into the feature region), table header rows.
 """
 
 from __future__ import annotations
@@ -147,6 +147,23 @@ class FeatureCallout:
 
 
 @dataclass(slots=True)
+class PerspectivesBox:
+    """A Perspectives box: its lines (label first) and where it stands (V8-S3b).
+
+    ``after`` is the verse open when the box opens — (chapter, verse) — and ``before`` the next
+    verse to start; ``mid_verse`` says the open verse's text went on after the box;
+    ``callouts_before`` is how many callout lines came before it (their reading order)."""
+
+    book: str
+    page: int
+    after: tuple[int, int] | None
+    callouts_before: int
+    lines: list[Line] = field(default_factory=list[Line])
+    before: tuple[str, int, int] | None = None
+    mid_verse: bool = False
+
+
+@dataclass(slots=True)
 class Diagnostics:
     counts: Counter[str] = field(default_factory=Counter[str])
     combined: list[str] = field(default_factory=list[str])
@@ -160,6 +177,7 @@ class Diagnostics:
     italic_verse_text: set[str] = field(default_factory=set[str])  # Interlude and kin
     callouts: list[Callout] = field(default_factory=list[Callout])  # study-note verse numbers
     feature_callouts: list[FeatureCallout] = field(default_factory=list[FeatureCallout])
+    boxes: list[PerspectivesBox] = field(default_factory=list[PerspectivesBox])
 
     def note(self, kind: str, ref: str) -> None:
         self.counts[kind] += 1
@@ -321,6 +339,7 @@ class _Parser:
         self.box = _Box()
         self.seq = 0
         self.pending_callouts: list[FeatureCallout] = []
+        self.pending_boxes: list[PerspectivesBox] = []
         self.raw_marks: list[tuple[str, int, int, Where, int, _Mark]] = []
         self.heading_marks: list[tuple[str, int, ParsedHeading, int, _Mark]] = []
         scan = find_tables(self.lines)
@@ -384,6 +403,7 @@ class _Parser:
         if self.book_range is None or book_range.code != self.book_range.code:
             self.start_book(book_range)
         if self.mode is _Mode.BOX and self.box_line(content):
+            self.diag.boxes[-1].lines.append(line)
             return
         after_header = self.after_header == (line.page, self.chapter_index())
         self.after_header = None
@@ -410,6 +430,7 @@ class _Parser:
             self.mode = _Mode.BOX
             self.box = _Box(where=self.where(line))
             self.diag.counts["perspectives-boxes"] += 1
+            self.perspectives_box(line)
             return
         if self.is_callout_line(content):
             self.diag.counts["callout-lines"] += 1
@@ -445,6 +466,22 @@ class _Parser:
         )
         self.diag.feature_callouts.append(callout)
         self.pending_callouts.append(callout)
+
+    def perspectives_box(self, line: Line) -> None:
+        """Record where a box stands; ``start_verse`` fills in the verse after it."""
+        assert self.book_range is not None
+        after = None
+        if self.chapter is not None and self.verse is not None:
+            after = (self.chapter.number, self.verse[0])
+        box = PerspectivesBox(
+            book=self.book_range.code,
+            page=line.page,
+            after=after,
+            callouts_before=len(self.diag.feature_callouts),
+            lines=[line],
+        )
+        self.diag.boxes.append(box)
+        self.pending_boxes.append(box)
 
     def chapter_index(self) -> int:
         return self.chapter.number if self.chapter else 0
@@ -565,6 +602,9 @@ class _Parser:
         for callout in self.pending_callouts:
             callout.before = (self.book.code, self.chapter.number, first)
         self.pending_callouts = []
+        for box in self.pending_boxes:
+            box.before = (self.book.code, self.chapter.number, first)
+        self.pending_boxes = []
         self.flush_verse()
         self.verse = (first, last)
         self.verse_pages = (0, 0)
@@ -835,6 +875,8 @@ class _Parser:
         self.attach_mid_verse()
         for callout in self.pending_callouts:
             callout.mid_verse = True  # the verse the line interrupts goes on
+        for box in self.pending_boxes:
+            box.mid_verse = True
         self.verse_buffer.add(text)
         start = self.verse_pages[0] or line.page
         self.verse_pages = (start, line.page)
