@@ -2146,3 +2146,87 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `ConcordClient` inside `songbird-songbird-1`: the 2 Cor 12:1 study note reads correctly (the only
   change in 2 Cor 12); NET John 3's 71 notes identical to a capture taken before the swap; 20
   translations, the same ids.
+
+### Feature V8-S3a — EMB's feature articles (private)
+
+- **Date:** 2026-10-01. **PR:** _(this PR)_ (`slice/v8-s3a-emb-articles`). The spec's V8-S3 split
+  in two: S3a is the three features that are articles about a passage, each called out in the
+  text (Men, Women, and God; Someone You Should Know; Personal Gold); S3b follows with What the
+  Bible Says About and Perspectives. SPEC §7 shows both rows.
+- **What landed:** `scripts/emb_convert/` gains `articles.py` (sections, index, heads,
+  references, callouts, anchors), `articletext.py` (body → Markdown blocks) and
+  `epub_articles.py` (the EPUB witness); the text pass records every callout line with the verse
+  before and after it (`text.FeatureCallout`); notes gain bold and always-Markdown rendering; the
+  summary gains a Feature articles section and an articles cross-check
+  (`work/EMB/articles-crosscheck.tsv`). 10 synthetic tests (made-up text). A run takes ~1 min
+  40 s and is byte-identical on re-run; `EMB.json`, `markers.json`, both earlier cross-checks and
+  the 7,284 existing notes are byte-identical (and served identically, `ordinal` included: every
+  chapter compared with the server over HTTP).
+- **Callouts:** 269 = Men, Women, and God 101 + Someone You Should Know 94 + Personal Gold 24 +
+  What the Bible Says About 50 (S3b's). S1's 266 callout lines missed 3 set in book
+  introductions (Neh, Job, John), which the text pass reads in intro mode. Every callout names one
+  article — of its feature, on its target page (±1), by its index name or that exact page: none
+  twice, none never, 0 without an article.
+- **Spec corrections:** Men, Women, and God is **101 articles, not 99** — 101 heads, 101 index
+  entries, 101 callouts each to a different article (the measuring session recorded no method).
+  Shapes: Men, Women, and God 56 ranges · 25 whole chapters · 3 runs of whole chapters · 1 whole
+  book (Esther) · 8 multi-part · 2 in two books · 5 verses · 1 cross-chapter; Someone You Should
+  Know 50 · 9 · 13 runs · 12 cross-chapter · 10 verses (25 of 94 cross chapters); Personal Gold
+  20 ranges (4 whole chapters printed as full ranges) · 4 verses.
+- **Anchors (measured, then the rule):** Men, Women, and God and Personal Gold close their
+  passage — the callout line follows its last verse (Gen 3:13 and John 8:11: inside the verse's
+  last paragraph); Someone You Should Know opens it (83 before the first verse, 8 a few verses
+  early, 3 in book introductions). Rule: when the line follows the article's first verse in its
+  book, the end of the verse it follows (`char_offset` = the verse's length), else the start of
+  the verse it precedes. Outside the passage, listed: MAT 5:30, LUK 7:19, JHN 4:38 (Men, Women,
+  and God), GEN 29:13, JON 4:1, MAT 1:18, LUK 1:11, ACT 15:36, 1TI 1:5, 2TI 4:9, JAS 4:7 (Someone
+  You Should Know), NUM 14:30 (Personal Gold). **Order:** a verse's notes are served by
+  `ordinal` (by default their place among the verse's notes in the file), so articles follow the
+  verse's other notes in the file and one opening a verse carries `ordinal` 0 — 55 articles show
+  first at a shared verse, 24 last. A first build that sorted them first in the file renumbered
+  existing notes in 55 chapters; caught by the HTTP comparison.
+- **Two books:** Lev 18; Deut 22:13-30 (called out in Leviticus) and 1 Kgs 17 and 2 Kgs 4 (in
+  2 Kings) — each called out once, so one note each, the other book's part in `cross_references`
+  (DEU 22:13-30; 1KI 17:1-24).
+- **Titles** are the index's names; four Someone You Should Know articles print a name their
+  index words otherwise (GEN 41:1-46, EXO 1:8-22, DAN 3:8-30, LUK 1:15-17). Personal Gold's
+  author note (23 — the author index has none for one author) and credit line (24) are V8-S5's.
+- **Banners:** all 102 are one image (PDF object 13818, 1024×134) — on the Men, Women, and God
+  index page and above each of its articles; its only words are the feature's name, which the
+  label carries. Not copied.
+- **Structures (Markdown):** Men, Women, and God — 101 lead-ins, 627 paragraphs, 2 quotations,
+  1 list (10 items), 1 numbered list (4); Someone You Should Know — 94 headlines (`##`), 98
+  quotations (the 94 summaries and 4 more), 93 lead-ins, 791 paragraphs, 4 subheads (`###`),
+  11 lists (52 items), 3 numbered lists (13 items, 5 with their own paragraphs), 2 verse
+  quotations line by line (15 lines), 3 source notes (superscript numbers), 94 closing lines;
+  Personal Gold — 24 bylines, 33 quotations (the 24 epigraphs and 9 more), 163 paragraphs, 1
+  numbered list (3). Words: 185 / median 269 / 406; 346 / 514 / 599; 282 / 446 / 487.
+- **Text fixes, measured:** 45 broken-word items; the passage font breaks a word after "m" (40);
+  the italic font runs words together (7 — e.g. "x?Y", split only into words the public texts
+  use often); the italic "k" break leaves a no-word rest (articles only); a source note's
+  "“ X" gap (1 — the rendered page prints none). Kept as the rendered pages print them, each
+  checked: a space after an opening quote (5 articles, listed in `notes.ARTICLES_AS_PRINTED`),
+  a space before a closing quote at a citation, nested quotes, "401(k)", a misprinted
+  apostrophe, decades ("1960s") and "ff".
+- **Links:** 944 → 996 targets; the book's own target agrees for 929; 6 name their book but
+  target another; 6 repeat an earlier link's; 1 the note's own verse; 2 bare references read in
+  their sentence (2 Kgs 2:9-10 article "4:2-7", Dan 1:6-21 article "12:13": the book links the
+  last book named); 1 bare reference given its book by its sentence (Psalms 73–83 article "16:5"
+  → 1 Chr, as the book's link has it); 0 unexplained. New forms: "v. 25", "ch. 5", "2:15ff", a
+  second named book inside one link, "and" continuing a list.
+- **Articles cross-check (with `--epub`):** 35 agree · 5 fixed PDF quirks · **0 fix
+  regressions** · 157 visible EPUB damage · 6 splices · 3 loss with evidence · 10 verified on the
+  rendered page (MWG Job 2:9-10, Matt 1, John 19:23-27; SYSK 1 Sam 1:19–3:21 (a paragraph), 1 Kgs
+  17:1–19:21, Acts 10:1-48, 1 Tim 1:7-8, 3 John 1:9-10; PG Job 33:14, Isa 57:18-21) · **0 open
+  where the EPUB article is undamaged** · 3 open in damaged EPUB articles (Josh 14:6-15, Luke
+  1:5-25, Matt 1:19). The EPUB sets one Someone You Should Know heading in plain text (Isa
+  6:1-13); its reader falls back to the label and name and marks it damaged.
+- **Found, not fixed here** (existing notes may not change in this slice): the italic "k" break
+  leaves a no-word rest in two textual notes, tn 2SA 23:8 and tn 1CH 25:24 — the articles' rule
+  fixes both; a follow-up can turn it on for the notes.
+- **`make check` green** (849 passed, 48 deselected; ruff and pyright strict clean, openapi.json
+  unchanged). `make build-db` loads 65,756 notes (7,503 EMB) and 16,169 note cross-references (+2)
+  with no error. A local API on :8077 served EMB `note_count` 7,503, an article of each feature
+  with label, title, passages and Markdown, both two-book articles with their cross-references, a
+  notes search finding an article, Genesis 1's 7 existing notes and NET John 3's 71 equal to the
+  server's.
