@@ -97,7 +97,7 @@ def summary(
         "Checks (any failure blocks writing EMB.json)",
         f"  verse sequence vs KJV skeleton      {_ok(not validation.sequence)}",
         f"  chapters vs skeleton + nav lists    {_ok(not validation.chapters)}",
-        f"  hygiene (scraps, *, spacing, fused) {_ok(not any(validation.hygiene.values()))}",
+        f"  hygiene, punctuation spacing        {_ok(not any(validation.hygiene.values()))}",
         f"  unclassified items                  {_ok(not diag.unclassified)}",
         f"  parse errors                        {_ok(not diag.errors)}",
     ]

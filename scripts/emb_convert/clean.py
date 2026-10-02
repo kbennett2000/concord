@@ -96,6 +96,18 @@ class Vocabulary:
     def is_word(self, word: str) -> bool:
         return self._pdf[word] > 0 or self._public.words[word] > 0
 
+    def joins_after_k(self, left: str, right: str) -> bool:
+        """Is ``left`` + ``right`` one word the italic font broke right after its "k" ("talk"
+        + "ed", "k" + "iss")? Both halves may be words; the PDF must not print them as a
+        phrase."""
+        return (
+            left.endswith("k")
+            and bool(right)
+            and self.is_word(left + right)
+            and (left, right) not in self._phrases
+            and not self._public.prefers_phrase([left, right])
+        )
+
     def broken(self, pieces: list[str], hyphenated: str | None = None) -> bool:
         """Do ``pieces`` (lower-case letters) look like one word split by spaces?
 
@@ -125,8 +137,10 @@ def letters(token: str) -> str:
 
 
 _CHUNKS = re.compile(r"( {2,})")
-_CLOSING = frozenset(".,;:!?)’”")
+_CLOSING = frozenset(".,;:!?)]’”")
 _OPENING = frozenset("(“‘[")
+_DIGIT = re.compile(r"\d")
+_LAST_DIGIT = re.compile(r"\d[.,;:!?)\]’”]*")
 _APOSTROPHES = ("’", "'")
 
 
@@ -137,6 +151,7 @@ def letter_spacing(
     whole_item: bool,
     glued_tail: bool = False,
     apostrophe_splits: bool = True,
+    k_breaks: bool = False,
 ) -> str | None:
     """Join words the text layer broke with spaces ("g o o d .", "prophes y.", "ask ing").
 
@@ -149,7 +164,9 @@ def letter_spacing(
     ("thighs .") closes up. ``glued_tail``: the item's last letters continue in the next item
     (small caps: "be the L" + "ORD"), so its last piece is not a fragment.
     ``apostrophe_splits=False``: a word split just after an apostrophe ("Name’ s") is left as
-    printed. Returns the fixed text, or None when nothing changed.
+    printed. ``k_breaks``: the notes' italic font breaks a word right after a "k" even where
+    both halves are words ("bark ed", "a k ite"); those join first (``joins_after_k``).
+    Returns the fixed text, or None when nothing changed.
     """
     parts = _CHUNKS.split(text)
     changed = False
@@ -164,6 +181,7 @@ def letter_spacing(
             keep_last=glued_tail and last,
             anywhere=whole_item,
             apostrophe_splits=apostrophe_splits,
+            k_breaks=k_breaks,
         )
         if fixed != parts[index]:
             parts[index], changed = fixed, True
@@ -178,6 +196,7 @@ def _join_chunk(
     keep_last: bool,
     anywhere: bool,
     apostrophe_splits: bool = True,
+    k_breaks: bool = False,
 ) -> str:
     lead = chunk[: len(chunk) - len(chunk.lstrip())]
     tail = chunk[len(chunk.rstrip()) :]
@@ -194,6 +213,8 @@ def _join_chunk(
             else:
                 merged.append(piece)
         pieces = merged
+    if k_breaks and anywhere:
+        pieces = _join_after_k(pieces, vocabulary)
     out: list[str] = []
     i = 0
     opening = at_start and len(pieces) >= 3 and all(c in _OPENING for c in pieces[0])
@@ -211,11 +232,17 @@ def _join_chunk(
             words = [letters(p) for p in run]
             while words and not any(c.isalnum() for c in run[len(words) - 1]):
                 words.pop()  # trailing punctuation pieces (" .") join along
+            if any(not all(c in _CLOSING for c in p) for p in run[len(words) :]):
+                continue  # only closing marks join along; an opening one ("(") starts what follows
             joined = "".join(run)
             hyphenated = joined if _HYPHEN in joined else None
-            if words and all(words) and vocabulary.broken(words, hyphenated):
-                if opening and i == 1:
-                    out[0] += joined
+            if hyphenated is not None and all(
+                all(vocabulary.is_piece_word(w) for w in words_of(p)) for p in run if letters(p)
+            ):
+                continue  # every piece is a word by its parts: "it" + "self-giving" is a phrase
+            if (words and all(words) and vocabulary.broken(words, hyphenated)) or _digits(run):
+                if out and out[-1] and all(c in _OPENING for c in out[-1]):
+                    out[-1] += joined  # "( s e e", "( glim mering": the mark opens the word
                 else:
                     out.append(joined)
                 i += size
@@ -226,6 +253,34 @@ def _join_chunk(
     if kept is not None:
         out.append(kept)
     return lead + " ".join(out) + tail
+
+
+def _join_after_k(pieces: list[str], vocabulary: Vocabulary) -> list[str]:
+    """Join each piece ending in "k" to the next when ``Vocabulary.joins_after_k`` says the
+    italic font broke one word there ("bark ed", "a k ite" → "a kite"). A lone "k" is never a
+    word: it always opens the next piece ("a k elmor", "[k elmor" — names the vocabulary
+    lacks)."""
+    out: list[str] = []
+    for piece in pieces:
+        if (
+            out
+            and out[-1][-1:].isalpha()
+            and piece[:1].isalpha()
+            and (
+                out[-1].lstrip("".join(sorted(_OPENING))) == "k"
+                or vocabulary.joins_after_k(letters(out[-1]), letters(piece))
+            )
+        ):
+            out[-1] += piece
+            continue
+        out.append(piece)
+    return out
+
+
+def _digits(run: list[str]) -> bool:
+    """A number spread digit by digit ("5 4 3", "1 9 9 9,"): single digits, the last of them
+    perhaps with closing punctuation."""
+    return all(_DIGIT.fullmatch(p) for p in run[:-1]) and bool(_LAST_DIGIT.fullmatch(run[-1]))
 
 
 _ELLIPSIS = re.compile(r"\.\s+\.")  # ". . ." is a real ellipsis, spaced on purpose
@@ -241,6 +296,7 @@ def unspace(
     glued: bool = False,
     anywhere: bool = False,
     apostrophe_splits: bool = True,
+    k_breaks: bool = False,
 ) -> str | None:
     """One item's text with broken words joined, or None when nothing changed.
 
@@ -249,7 +305,7 @@ def unspace(
     item of punctuation alone, spread by justification (") . " after a "*"), closes up.
     ``glued``: the item's last letters continue in the next item (small caps). ``anywhere``:
     read the whole item as italic text is read (the notes' justified lines);
-    ``apostrophe_splits``: see ``letter_spacing``.
+    ``apostrophe_splits``, ``k_breaks``: see ``letter_spacing``.
     """
     bare = text.strip()
     if bare and not any(c.isalnum() for c in bare) and not _ELLIPSIS.search(bare) and " " in bare:
@@ -262,6 +318,7 @@ def unspace(
         whole_item=italic or anywhere,
         glued_tail=glued,
         apostrophe_splits=apostrophe_splits,
+        k_breaks=k_breaks,
     )
 
 

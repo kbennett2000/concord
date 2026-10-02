@@ -60,6 +60,7 @@ from emb_convert.textual import (
     match,
     parse_textual,
 )
+from emb_convert.validate import PUNCTUATION
 
 TN_LABEL = "Textual Note"
 SN_LABEL = "Study Note"
@@ -108,6 +109,7 @@ _HYGIENE: dict[str, re.Pattern[str]] = {
         r"(?<!\dQ)[A-Za-z]\d|\d(?!(?:st|nd|rd|th)\b|Q[A-Za-z]|[a-e]\b)[A-Za-z]"
     ),
     "small-caps-fragment": re.compile(r"\bORD\b"),
+    **PUNCTUATION,
 }
 
 

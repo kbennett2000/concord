@@ -427,6 +427,56 @@ def test_epub_spacing_artifacts_do_not_count_as_differences() -> None:
     assert result.findings[0].verdict is Verdict.AGREE
 
 
+def test_a_spacing_difference_is_judged_space_by_space() -> None:
+    """The 2 Cor 12:1 shape (made-up words): the EPUB prints the same broken word, so a
+    non-word sits beside the difference — it must not excuse the space the fix took out."""
+
+    def key(n: int) -> tuple[str, int, int]:
+        return ("sn GEN 1:1", 0, n)
+
+    fixed = {
+        key(1): "the glimmering(here now",  # the fix glued the bracket on
+        key(2): "the glimmering (here now",  # the fix joined the broken word only
+        key(3): "they bark ed up",  # a broken word the PDF kept
+        key(4): "their way",  # the EPUB split a word the PDF prints whole
+        key(5): "it self-giving",  # the fix joined two words both sides print
+    }
+    raw = {
+        key(1): "the glim mering (here now",
+        key(2): "the glim mering (here now",
+        key(3): "they bark ed up",
+        key(4): "their way",
+        key(5): "it self-giving",
+    }
+    epub = {  # 2: damaged elsewhere too, as EPUB notes mostly are
+        key(1): "the glim mering (here now",
+        key(2): 'the glim mering (here now ht="0">',
+        key(3): "they barked up",
+        key(4): "the ir way",
+        key(5): "it self-giving",
+    }
+    fixed[key(5)] = "itself-giving"
+    spans = {k: (10, 10) for k in fixed}
+    context = {**fixed, ("x", 0, 0): "the way they barked"}
+    result = cross_check_notes(fixed, raw, {}, epub, set(), context, {10: "x"}, spans)
+    verdicts = {f.key[2]: f.verdict for f in result.findings}
+    assert verdicts == {
+        1: Verdict.FIX_REGRESSION,
+        2: Verdict.EPUB_VISIBLE,
+        3: Verdict.OPEN,
+        4: Verdict.EPUB_VISIBLE,
+        5: Verdict.FIX_REGRESSION,
+    }
+
+
+def test_note_text_with_a_mark_out_of_place_blocks_the_write() -> None:
+    pages = {**TEXTUAL, NOTES_PAGE: list(TEXTUAL[NOTES_PAGE])}
+    pages[NOTES_PAGE][1] = T(" Or near(the ", 97, 54)
+    _, notes = parse_notes(pages)
+    assert notes.hygiene["word-into-opening-mark"]
+    assert not notes.ok
+
+
 # -- the file Concord loads -------------------------------------------------------------------
 
 
