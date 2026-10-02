@@ -120,6 +120,19 @@ def _past_scraps(text: str) -> tuple[str, bool]:
     return text, False
 
 
+def read_runs(path: Path) -> list[tuple[str, bool]]:
+    """The EPUB's text as (text, bold) runs, in reading order (the articles' witness reads
+    them too, V8-S3a)."""
+    tokens = _Tokens()
+    with zipfile.ZipFile(path) as archive:
+        for name in spine_documents(archive):
+            if name.endswith((".html", ".xhtml", ".htm")):
+                tokens.feed(archive.read(name).decode("utf-8", errors="replace"))
+                tokens.emit(" ", False)
+    tokens.close()
+    return [(run.text, run.bold) for run in tokens.runs]
+
+
 def parse_epub_notes(
     path: Path,
     by_alias: dict[str, str],

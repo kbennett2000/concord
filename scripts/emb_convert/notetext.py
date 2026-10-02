@@ -23,7 +23,15 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
-from emb_convert.clean import CompoundRepair, Fixes, Vocabulary, fraction, line_joiner, unspace
+from emb_convert.clean import (
+    CompoundRepair,
+    Fixes,
+    Vocabulary,
+    fraction,
+    fused_words,
+    line_joiner,
+    unspace,
+)
 from emb_convert.lines import Line
 from emb_convert.pdfxml import TextItem
 
@@ -41,11 +49,13 @@ _ASCII_PUNCT = frozenset(string.punctuation)
 
 @dataclass(frozen=True, slots=True)
 class Piece:
-    """A stretch of note text with one style: italic or not, inside a link run or not."""
+    """A stretch of note text with one style: italic or not, inside a link run or not, and
+    (articles only) bold or not."""
 
     text: str
     italic: bool = False
     run: int | None = None
+    bold: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +86,8 @@ def _line_pieces(
     counts: Counter[str],
     repair: CompoundRepair | None,
     run_of: Mapping[int, int],
+    bold: bool = False,
+    split_fused: bool = False,
 ) -> list[Piece]:
     first_content = next((i for i in line.items if i.stripped), None)
     justified = line.right >= WRAP_RIGHT
@@ -113,14 +125,18 @@ def _line_pieces(
                 anywhere=justified,
                 apostrophe_splits=False,
                 k_breaks=item.italic,
+                k_fragments=item.italic and split_fused,
             )
             if fixed is not None:
                 counts["letter-spaced"] += 1
                 text = fixed
+            if split_fused and item.italic:
+                text, split = fused_words(text, vocabulary)
+                counts["fused-words"] += split
         if repair is not None and fixes.compound_hyphens:
             text, repaired = repair.repair(text)
             counts["compound-hyphens"] += repaired
-        pieces.append(Piece(text, item.italic, run_of.get(id(item))))
+        pieces.append(Piece(text, item.italic, run_of.get(id(item)), bold and item.bold))
         k += 1
     return pieces
 
@@ -148,11 +164,15 @@ def assemble(
     skip: frozenset[int] = frozenset(),
     run_of: Mapping[int, int] | None = None,
     keep_spaces: bool = False,
+    bold: bool = False,
+    split_fused: bool = False,
 ) -> list[Piece]:
     """The pieces of a note's text, line by line. ``skip``: ids of items that aren't text (a
     note's label); ``run_of``: item id → the link run it belongs to (study notes);
     ``keep_spaces``: leave the PDF's spacing as printed — a double space is a justification
-    gap, so a real word gap — with a line break as a double space (the broken-word check)."""
+    gap, so a real word gap — with a line break as a double space (the broken-word check);
+    ``bold``: keep bold as a style (articles); ``split_fused``: split words the italic font ran
+    together (articles, ``clean.fused_words``)."""
     runs: Mapping[int, int] = run_of or {}
     pieces: list[Piece] = []
     previous: Line | None = None
@@ -160,7 +180,17 @@ def assemble(
         items = [i for i in line.items if id(i) not in skip]
         if not any(i.stripped for i in items):
             continue
-        new = _line_pieces(line, items, vocabulary, fixes, counts, repair, runs)
+        new = _line_pieces(
+            line,
+            items,
+            vocabulary,
+            fixes,
+            counts,
+            repair,
+            runs,
+            bold,
+            split_fused and fixes.letter_spacing,
+        )
         if previous is not None and pieces:
             tail = "".join(p.text for p in pieces)
             head = "".join(p.text for p in new)
@@ -175,6 +205,7 @@ def assemble(
                     joiner,
                     left.italic and right.italic,
                     left.run if left.run is not None and left.run == right.run else None,
+                    left.bold and right.bold,
                 )
             )
         pieces.extend(new)
@@ -215,6 +246,7 @@ def normalize(pieces: list[Piece], *, collapse: bool = True) -> list[Piece]:
                     piece.text,
                     left.italic and right.italic,
                     left.run if left.run is not None and left.run == right.run else None,
+                    left.bold and right.bold,
                 )
         styled.append(piece)
     out: list[Piece] = []
@@ -224,7 +256,11 @@ def normalize(pieces: list[Piece], *, collapse: bool = True) -> list[Piece]:
             text = text[1:]
         if not text:
             continue
-        if out and (out[-1].italic, out[-1].run) == (piece.italic, piece.run):
+        if out and (out[-1].italic, out[-1].run, out[-1].bold) == (
+            piece.italic,
+            piece.run,
+            piece.bold,
+        ):
             out[-1] = replace(out[-1], text=out[-1].text + text)
         else:
             out.append(replace(piece, text=text))
@@ -300,18 +336,22 @@ def _edges(text: str) -> tuple[str, str, str]:
     return text[:start], text[start:end], text[end:]
 
 
-def render(pieces: Sequence[Piece], targets: Sequence[str] = ()) -> NoteText:
-    """Plain text, and Markdown when the note has italics or links."""
+def render(
+    pieces: Sequence[Piece], targets: Sequence[str] = (), *, always: bool = False
+) -> NoteText:
+    """Plain text, and Markdown when the note has italics or links (``always``: an article's
+    blocks are Markdown whatever their styles). Bold is ``**``, bold italics ``***``."""
     parts: list[str] = []
-    needs = False
+    needs = always
     for piece in pieces:
         if piece.run is not None:
             parts.append(f"[{escape(piece.text)}](ref:{targets[piece.run]})")
             needs = True
-        elif piece.italic:
+        elif piece.italic or piece.bold:
             lead, core, trail = _edges(piece.text)
+            stars = "*" * ((1 if piece.italic else 0) + (2 if piece.bold else 0))
             if core:
-                parts.append(f"{escape(lead)}*{escape(core)}*{escape(trail)}")
+                parts.append(f"{escape(lead)}{stars}{escape(core)}{stars}{escape(trail)}")
                 needs = True
             else:
                 parts.append(escape(piece.text))
@@ -354,22 +394,26 @@ def _punctuation(c: str) -> bool:
 
 
 def emphasis_ok(markdown: str) -> bool:
-    """Every unescaped ``*`` pairs up, each opener left-flanking and each closer right-flanking
-    (CommonMark 0.31 §6.2)."""
-    delimiters: list[int] = []
+    """Every run of unescaped ``*`` pairs with the next run of the same length, each opener
+    left-flanking and each closer right-flanking (CommonMark 0.31 §6.2)."""
+    runs: list[tuple[int, int]] = []  # (start, length)
     i = 0
     while i < len(markdown):
         if markdown[i] == "\\":
             i += 2
             continue
         if markdown[i] == "*":
-            delimiters.append(i)
+            start = i
+            while i < len(markdown) and markdown[i] == "*":
+                i += 1
+            runs.append((start, i - start))
+            continue
         i += 1
-    if len(delimiters) % 2:
+    if len(runs) % 2 or any(runs[n][1] != runs[n + 1][1] for n in range(0, len(runs), 2)):
         return False
-    for n, at in enumerate(delimiters):
+    for n, (at, length) in enumerate(runs):
         before = markdown[at - 1] if at else " "
-        after = markdown[at + 1] if at + 1 < len(markdown) else " "
+        after = markdown[at + length] if at + length < len(markdown) else " "
         if n % 2 == 0:
             ok = not _space(after) and (
                 not _punctuation(after) or _space(before) or _punctuation(before)

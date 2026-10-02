@@ -37,13 +37,18 @@ _HYGIENE: dict[str, re.Pattern[str]] = {
 }
 
 # How a broken-word fix that misjudges a mark, or a gap the text layer kept, shows (the
-# 2 Cor 12:1 study note's "word(", docs/dev-notes.md). Each exception is the book's own printing:
-# an editorial completion inside a word ("x[s]"), a spaced ellipsis (". . ." and ". . . ,"), a
-# word-initial apostrophe ("’tis") and single-letter abbreviations ("B.C.", "i.e.").
+# 2 Cor 12:1 study note's "word(", docs/dev-notes.md). Each exception is the book's own printing,
+# checked on rendered pages: an editorial completion inside a word ("x[s]"), "401(k)", an
+# apostrophe set as an opening quote ("x‘s"), nested quotes ("“ ‘", "’ ”"), a spaced ellipsis
+# (". . ." and ". . . ,"), a word-initial apostrophe ("’tis"), single-letter abbreviations
+# ("B.C."), and the articles' space before a closing quote that ends at a citation ('x ” (',
+# 'x ?”').
 PUNCTUATION: dict[str, re.Pattern[str]] = {
-    "word-into-opening-mark": re.compile(r"[A-Za-z0-9](?:[(“‘]|\[(?![a-z]+\]))"),
-    "space-after-opening-mark": re.compile(r"[(\[“‘] "),
-    "space-before-closing-mark": re.compile(r"(?<![.…]) (?:[,;:!?)\]”]|’(?![A-Za-z])|\.(?! \.))"),
+    "word-into-opening-mark": re.compile(r"[A-Za-z0-9](?:\((?![a-z]\))|“|‘(?!s\b)|\[(?![a-z]+\]))"),
+    "space-after-opening-mark": re.compile(r"[(\[“‘] (?![‘“])"),
+    "space-before-closing-mark": re.compile(
+        r"(?<![.…’]) (?:[,;:!)\]]|\?(?!”)|”(?! ?\()|’(?![A-Za-z])|\.(?! \.))"
+    ),
     "closing-mark-into-word": re.compile(r"[,;:!?)\]”][A-Za-z]|[A-Za-z]{2}\.[A-Za-z]"),
     "spaced-digits": re.compile(r"(?<![\d,.])\d(?: \d)+(?![\d,])"),
     "mark-into-line-slash": re.compile(r"[,;:.!?—]/ "),  # a quoted line break is " / "

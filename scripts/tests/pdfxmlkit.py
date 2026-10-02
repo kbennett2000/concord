@@ -27,6 +27,12 @@ CODES = [
 NAMES = {s.id: s.name for s in parse_canonical_books(load_canonical_books_text())}
 NOTES_PAGE = FIRST_BOOK_PAGE + BOOK_PAGES * len(CODES)
 FEATURES_PAGE = NOTES_PAGE + 20
+# the feature sections (V8-S3a): each index's page; "Feature Index" (where the S1 callouts and
+# boxes point) stays a section of its own
+MWG_PAGE = FEATURES_PAGE + 3
+SYSK_PAGE = FEATURES_PAGE + 8
+PG_AUTHORS_PAGE = FEATURES_PAGE + 13
+PG_PAGE = FEATURES_PAGE + 14
 STUDY_PAGE = FEATURES_PAGE + 20
 STUDY_NOTES_PAGE = STUDY_PAGE + 1
 PAGE_BOX = 'top="0" left="0" height="496" width="378"'
@@ -189,7 +195,14 @@ def document(pages: dict[int, list[T]], extra_outline: list[tuple[int, str]] | N
             out.append(_text(item, fonts))
         out.append("</page>")
     outline = [(start(code), NAMES[code]) for code in CODES]
-    outline += [(FEATURES_PAGE, "Feature Index"), (STUDY_PAGE, "Study Notes Index")]
+    outline += [
+        (FEATURES_PAGE, "Feature Index"),
+        (MWG_PAGE, "Men, Women, and God Index"),
+        (SYSK_PAGE, "Someone You Should Know Index"),
+        (PG_AUTHORS_PAGE, "Personal Gold Author Index"),
+        (PG_PAGE, "Personal Gold Index"),
+        (STUDY_PAGE, "Study Notes Index"),
+    ]
     outline += extra_outline or []
     out.append("<outline>")
     out += [f'<item page="{page}">{escape(title)}</item>' for page, title in outline]

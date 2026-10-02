@@ -11,9 +11,10 @@ your **local** `bible.db`. The published image ships **zero** EMB content.
 > `data/private/`, which is never committed and never baked into the published image — that is
 > your responsibility to keep clean, and Concord's pipeline is built to make it automatic.
 
-This page covers the **text** (verses and section headings, V8-S1) and the **textual and study
-notes** (V8-S2b). Features, images, documents and the Verse Finder follow in later slices
-(SPEC §7).
+This page covers the **text** (verses and section headings, V8-S1), the **textual and study
+notes** (V8-S2b) and three of the five **features** — the articles the text calls out at a
+passage: Men, Women, and God; Someone You Should Know; Personal Gold (V8-S3a). The other two
+features, images, documents and the Verse Finder follow in later slices (SPEC §7).
 
 ## The user flow
 
@@ -22,7 +23,7 @@ notes** (V8-S2b). Features, images, documents and the Verse Finder follow in lat
 2. **Install poppler-utils** — the converter calls its `pdftohtml` (e.g.
    `sudo apt install poppler-utils`). Nothing else: the converter is standard-library Python
    plus `bible-core`, already in the repo's environment.
-3. **Run the one command** from the repo root (about a minute and a half):
+3. **Run the one command** from the repo root (under two minutes):
 
    ```bash
    uv run python scripts/convert_emb.py --pdf "<your EMB.pdf>" --epub "<your EMB.epub>"
@@ -47,10 +48,11 @@ The same PDF always gives byte-identical output, so re-running is safe.
 | File | What |
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
-| `data/private/notes/EMB.json` | Its textual and study notes: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
+| `data/private/notes/EMB.json` | Its textual and study notes and feature articles: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
 | `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors |
 | `data/private/work/EMB/crosscheck.tsv` | Every verse cross-check finding by reference and class (local only) |
 | `data/private/work/EMB/notes-crosscheck.tsv` | Every note cross-check finding by note and class (local only) |
+| `data/private/work/EMB/articles-crosscheck.tsv` | Every article cross-check finding by feature, passage and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 
 No loader scans `data/private/work/`. Notes on the text:
@@ -73,6 +75,21 @@ Notes on the notes:
 - **Text** is Markdown (`text_format: "markdown"`) only when a note has italics or links: italics
   as `*…*`, the book's own `[`, `]` and other Markdown characters escaped, and each reference the
   book links as a `ref:` link (ADR-0011). Other notes are plain text.
+
+Notes on the feature articles (`article`, labelled with the feature's name; SPEC §4.2):
+
+- **Title** is what the book's own index calls the article. The passage it covers is `passages`
+  (in the note's book; a second book's parts go to `cross_references`).
+- **Where it attaches:** where the book calls it out. Men, Women, and God and Personal Gold call
+  an article out after its passage, so the note sits at the end of the passage's last verse;
+  Someone You Should Know calls it out before, so the note sits at the start of the first verse
+  (three callouts stand in book introductions: verse 1:1). At its verse an article shows before
+  the other notes when it opens a passage, after them when it closes one.
+- **Text** is always Markdown: paragraphs, bold lead-ins, set-off blocks as quotations, the
+  book's lists (`- `, numbered), verse quoted line by line with hard breaks, headings shown bold,
+  a source note's number as a superscript. Personal Gold's text opens with "from" and the author.
+  The banners above Men, Women, and God articles are one decorative image (its only words are
+  the feature's name, the label) and are not copied.
 
 ## Reading the summary
 
@@ -108,6 +125,18 @@ Notes on the notes:
   took out that the raw parse and the EPUB both print is a fix regression — even in a note the
   EPUB damaged elsewhere — and a broken word the PDF kept is open. Again *fix regressions* and
   *open, EPUB text without damage* must be **0**.
+- **Feature articles** — the callout lines (269: 101 + 94 + 24 for this slice's features, 50 for
+  What the Bible Says About, 3 of them in book introductions; *callouts without an article* must
+  be **0**); per feature the articles against their targets (101, 94, 24), their index entries,
+  how often each is called out, where the notes attach, the passages' shapes, what the text
+  prints (paragraphs, quotations, lists, …) and its length in words; the anchors outside their
+  passage and the callout lines inside a verse, listed; the two-book passages and their
+  cross-references; links and fixes as for the notes; and the article checks (every callout
+  matched, every article indexed and placed, links explained, hygiene and Markdown). Any ✗
+  blocks the write.
+- **Articles cross-check** (with `--epub`) — the same classes and evidence rules, article by
+  article: the printed body against the EPUB's, keyed by feature and printed passage. Again
+  *fix regressions* and *open, EPUB text without damage* must be **0**.
 
 ## Getting your private data into your own Docker image
 
