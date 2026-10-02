@@ -171,7 +171,9 @@ def resolve(text: str, ctx: Context) -> tuple[list[tuple[str, str]], str, list[s
     return [(halves[0], rest), (halves[1], opening)], "into the next book", letters
 
 
-def _evidence(target: str, page: int | None, ctx: Context) -> str:
+def link_evidence(target: str, page: int | None, ctx: Context) -> str:
+    """Where the book's own link page stands against a target's first verse (also the Verse
+    Finder's, V8-S6b): on its page, one page off, or unexplained."""
     book, chapter, verse = target_verses(target)[0]
     stored = ctx.stored.get((book, chapter, verse))
     span = ctx.verse_pages.get((book, chapter, stored)) if stored is not None else None
@@ -241,7 +243,7 @@ def build_plan(section: Section, ctx: Context) -> PlanFindings:
                     elif (b, c, v) not in ctx.stored:
                         found.omitted.append(f"{reading.text} ({b} {c}:{v})")
             first = next((i.link_page for i in reading.line.nonblank if i.link_page), None)
-            reading.evidence = _evidence(targets[0], first, ctx)
+            reading.evidence = link_evidence(targets[0], first, ctx)
             found.evidence[reading.evidence] += 1
             found.links += len(targets)
             text = blocks.text(pieces=pieces, targets=targets)
