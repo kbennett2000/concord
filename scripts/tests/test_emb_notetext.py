@@ -227,3 +227,10 @@ def test_the_italic_font_breaks_right_after_k() -> None:
 def test_a_hyphenated_run_of_words_is_a_phrase() -> None:
     words = vocabulary("it is self-giving itself")
     assert letter_spacing("is it self-giving now", words, whole_item=True) is None
+
+
+def test_printed_initials_stay_apart() -> None:
+    """Initials the book prints apart ("Q. Z. Name") are not a broken word, even where their
+    letters join into one the vocabulary knows (V8-S5c: a fix regression the EPUB showed)."""
+    words = vocabulary("qz qz qz", "a made-up name")
+    assert letter_spacing("Q. Z. Name, a made-up name", words, whole_item=True) is None
