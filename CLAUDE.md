@@ -87,16 +87,21 @@ install.
 
 ## Out of scope for v1
 
-**v2 (semantic search), v3 (biblical geography), and v4 (translator's notes) are all
-shipped.** v2's meaning-based retrieval landed in the `bible-semantic` package. v3 added
-place data + the bi-directional place↔verse link (`places` + `place_verses` tables in
-`bible.db`, owned by `bible-core`; `/v1/places*` endpoints in `bible-api`), designed in
-`docs/v3/SPEC.md`. v4 added translator's/study/text-critical notes (`translator_notes` +
-`note_cross_references` tables; the `/v1/translations/{translation}/notes/{book}/{chapter}`
-endpoint), designed in `docs/v4/SPEC.md` — notes are **user-supplied and never shipped in
-the public image**. Each milestone was **purely additive** — no schema rewrites — baked via
-the existing build like v1's cross-references. **Journeys / routes is the named next
-frontier.** The items below remain out of scope unless explicitly expanded.
+**v2 through v8 are all shipped (release v1.3.0).** v2's meaning-based retrieval landed in
+the `bible-semantic` package. v3 added place data + the bi-directional place↔verse link
+(`places` + `place_verses` tables in `bible.db`, owned by `bible-core`; `/v1/places*` endpoints
+in `bible-api`), designed in `docs/v3/SPEC.md`. v4 added translator's/study/text-critical notes
+(`translator_notes` + `note_cross_references` tables; the
+`/v1/translations/{translation}/notes/{book}/{chapter}` endpoint), designed in
+`docs/v4/SPEC.md`. Section headings (ADR-0005) and Nave's topical index (ADR-0006) followed. v5
+added keyword notes search and multi-translation keyword verse search (ADR-0003). v6 added word
+study — the Greek NT and Hebrew OT as translations, the Strong's lexicon, tagged word tokens
+(ADR-0007). v7 added curated journeys over v3's places (ADR-0008). v8 lets an operator serve a
+study Bible they own: note fields, images, documents and a private topical source beside Nave's
+(ADR-0011..0013, `docs/v8/SPEC.md`). Notes, images, documents and private topics are
+**user-supplied and never shipped in the public image**. Each milestone was **purely
+additive** — no schema rewrites — baked via the existing build like v1's cross-references. The
+items below remain out of scope unless explicitly expanded.
 
 Do not build these without an explicit decision to expand scope:
 
@@ -104,15 +109,15 @@ Do not build these without an explicit decision to expand scope:
 - Auth (LAN-trusted).
 - Catholic / deuterocanonical books, and any cross-scheme versification mapping. The
   schema is versification-ready; the data and mapping are deferred.
-- Multi-translation search (search is single-translation).
+- Multi-translation *semantic* search (it ranks one embedded translation, WEB, and renders hits
+  in any; keyword search went multi-translation in v5, ADR-0003).
 - Semicolon-joined multi-reference strings in the parser (e.g. `John 3:16; Rom 8:1`).
 - Committing non-distributable translations — they stay local-only in `data/private/`.
 - Any internet dependency at runtime.
-- **Journeys / routes** (Paul's missionary journeys, the Exodus path) — ordered sequences,
-  competing proposed routes, segment-level links, and dating debates. **The named next
-  frontier after v4**, deliberately deferred; it will *reference* v3's place data (hence
-  v3's stable-id + disambiguation foundation), not rebuild it. Region grouping/containment
-  and the dataset's full scholarly apparatus are deferred with it.
+- **Competing journey routes.** v7 shipped one commonly proposed reconstruction per journey,
+  referencing v3's place data (ADR-0008); competing proposed routes, route variants,
+  segment-level links and dating debates stay deferred, as do region grouping/containment and
+  the dataset's full scholarly apparatus.
 
 ## Git Workflow
 
