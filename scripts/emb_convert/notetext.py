@@ -125,7 +125,6 @@ def _line_pieces(
                 anywhere=justified,
                 apostrophe_splits=False,
                 k_breaks=item.italic,
-                k_fragments=item.italic and split_fused,
             )
             if fixed is not None:
                 counts["letter-spaced"] += 1

@@ -153,6 +153,15 @@ def test_italic_font_breaks_after_k_are_joined() -> None:
     assert text.plain == "Or make it know the Greeks."
 
 
+def test_after_an_italic_k_a_no_word_rest_joins_in_a_note_too() -> None:
+    # V8-S3b: the articles' rule, on for the notes (made-up name)
+    items = [item("Or ", 38), item("the Fork elsom stood.", 55, italic=True)]
+    text = note(items, "the work stood here")
+    assert text.plain == "Or the Forkelsom stood."
+    roman = note([item("Or the Fork elsom stood.", 38)], "the work stood here")
+    assert roman.plain == "Or the Fork elsom stood."
+
+
 def test_a_justified_note_line_joins_broken_words_anywhere_but_not_after_an_apostrophe() -> None:
     line = item("They spoke con cerning the Maker’ s plan and more words here.", 38, width=303)
     text = note([line, item("End.", 38, 114)], "concerning the plan", "the Maker’s hand")
