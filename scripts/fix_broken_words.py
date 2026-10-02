@@ -76,7 +76,7 @@ KINDS = {"broken": BROKEN, "glued": GLUED, "all": BROKEN + GLUED}
 BOTH_WORDS = "both halves are words"
 THIN = "thin evidence: the word stands alone fewer than three times and no sibling prints it"
 ONE_LETTER = "a one-letter word beside a word printed elsewhere"
-ONE_LETTER_CONTEXT = "a one-letter word: the two words fit the next word better than the joined one"
+ONE_LETTER_CONTEXT = "a one-letter word, and the joined word is not attested beside its neighbours"
 COMPOUND = "printed as a compound or the translation's own spelling, not two words"
 RIVAL = "two readings fit equally"
 LINE_BREAK = "line-break hyphen: the word is printed solid, so the hyphen would have to go too"
@@ -104,6 +104,25 @@ def split_token(token: str) -> Token:
 def _attach(left: Token, right: Token) -> bool:
     """Could ``left`` and ``right`` be one word with a stray space between them?"""
     return left.alpha and right.alpha and not left.trail and not right.lead
+
+
+def _space_kind(a: str, b: str) -> str | None:
+    """Is the space between raw tokens ``a`` and ``b`` a stray one beside a hyphen ("sin-
+    offering", "Ben -hadad") or inside a possessive ("father’ s", "woman ’s")?"""
+    if (len(a) > 1 and a[-1] == "-" and a[-2].isalpha() and b[:1].isalpha()) or (
+        len(b) > 1 and b[0] == "-" and b[1].isalpha() and a[-1:].isalpha()
+    ):
+        return "hyphen"
+    possessive_s = split_token(b)
+    if (
+        len(a) > 1
+        and a[-1] in APOSTROPHES
+        and a[-2].isalpha()
+        and possessive_s.core == "s"
+        and not possessive_s.lead
+    ) or (a[-1:].isalpha() and b[:1] in APOSTROPHES and b[1:2] == "s" and not b[2:3].isalpha()):
+        return "apostrophe"
+    return None
 
 
 class Words:
@@ -433,18 +452,20 @@ class _Verse:
             self.leave("split", printed, THIN)
 
     def fits_context(self, run: _Run) -> bool:
-        """With a one-letter word as a piece ("a lone witness"), does the joined word precede
-        (or follow) its neighbour more often than the other piece does? The split's own
-        occurrence counts for it, so a word the translation never puts there loses."""
+        """With a one-letter word as a piece ("a lone witness"), is the joined word attested here?
+
+        The translation must print the joined word after this verse's left neighbour or before
+        its right one elsewhere (both, when no sibling prints it in this verse), and the piece
+        must not go on to the next word more often elsewhere than the joined word does
+        ("lone witness" beside a never-printed "alone witness")."""
+        pairs, lower = self.words.pairs, self.lower
         end = run.start + run.size
-        pairs = self.words.pairs
-        if self.tokens[run.start].core in LETTER_WORDS and end < len(self.lower):
-            right = self.lower[end]
-            return pairs[(run.joined, right)] > pairs[(self.lower[end - 1], right)]
-        if run.start > 0:
-            left = self.lower[run.start - 1]
-            return pairs[(left, run.joined)] > pairs[(left, self.lower[run.start])]
-        return run.siblings > 0
+        right = lower[end] if end < len(lower) else None
+        if right is not None and pairs[(lower[end - 1], right)] - 1 > pairs[(run.joined, right)]:
+            return False
+        before = run.start > 0 and pairs[(lower[run.start - 1], run.joined)] > 0
+        after = right is not None and pairs[(run.joined, right)] > 0
+        return (before or after) if run.siblings else (before and after)
 
     def resolve(self, cluster: list[_Run]) -> list[_Run] | None:
         """The best reading of overlapping runs, or None when two readings tie."""
@@ -494,21 +515,8 @@ class _Verse:
             if i in self.used or i + 1 in self.used:
                 continue
             a, b = raw[i], raw[i + 1]
-            if (len(a) > 1 and a[-1] == "-" and a[-2].isalpha() and b[:1].isalpha()) or (
-                len(b) > 1 and b[0] == "-" and b[1].isalpha() and a[-1:].isalpha()
-            ):
-                kind = "hyphen"
-            elif (
-                len(a) > 1
-                and a[-1] in APOSTROPHES
-                and a[-2].isalpha()
-                and split_token(b).core == "s"
-                and not split_token(b).lead
-            ) or (
-                a[-1:].isalpha() and b[:1] in APOSTROPHES and b[1:2] == "s" and not b[2:3].isalpha()
-            ):
-                kind = "apostrophe"
-            else:
+            kind = _space_kind(a, b)
+            if kind is None:
                 continue
             joined = split_token(a + b).core.lower()
             forms = {joined, joined.replace("’", "'"), joined.replace("'", "’")}
@@ -605,9 +613,9 @@ def repair(
     raise RuntimeError("repairs did not settle in 8 rounds")
 
 
-# A lone letter other than a/A/I/O, as UTF-8 bytes (curly quotes end in 0x98-0x9D, start 0xE2).
-_LONE = re.compile(rb"(?<![^\s(\[\"'\x98\x9c])[b-zB-HJ-NP-Z](?![^\s.,;:!?)\]\"'\xe2])")
-_HYPHEN_SPACE = re.compile(r"- | -")
+# A lone letter other than a/A/I/O between spaces or before a mark: the literal leading space
+# keeps the scan fast. Verses are joined with "\n " so each starts after a space.
+_LONE = re.compile(r" [b-zB-HJ-NP-Z][ ,.;:!?\n]")
 
 
 def quick_check(verses: Mapping[Ref, str]) -> list[tuple[Ref, str]]:
@@ -615,42 +623,41 @@ def quick_check(verses: Mapping[Ref, str]) -> list[tuple[Ref, str]]:
 
     A lone letter (not a/A/I/O) that joins a neighbour into a word the translation prints at
     least ``COMMON`` times ("t he", "an d", about a third of all breaks), and a stray space
-    beside a hyphen in a compound the translation prints whole ("sin- offering"). About two
-    seconds for the whole corpus, where ``detect`` takes a minute; ``detect`` is the full guard.
+    beside a hyphen in a compound the translation prints whole ("sin- offering"). Under a
+    second for the whole corpus, where ``detect`` takes a minute; ``detect`` is the full guard.
     """
     refs = list(verses)
-    text = "\n".join(verses.values())
-    counts: Counter[str] = Counter()
-    compounds: set[str] = set()
-    for token, n in Counter(text.lower().split()).items():
-        core = split_token(token).core
-        counts[core] += n
-        if "-" in core:
-            compounds.add(core)
-    found: list[tuple[Ref, str]] = []
+    text = " " + "\n ".join(verses.values())
+    lower = text.lower()
+    counted: dict[str, int] = {}
 
-    def verse_at(starts: list[int], offset: int) -> Ref:
-        return refs[bisect_right(starts, offset) - 1]
+    def common(word: str) -> bool:  # space-delimited occurrences: enough to prove COMMON
+        if word not in counted:
+            counted[word] = lower.count(f" {word} ")
+        return counted[word] >= COMMON
+
+    found: list[tuple[Ref, str]] = []
+    hyphenated = [ref for ref, verse in verses.items() if "- " in verse or " -" in verse]
+    if hyphenated:
+        compounds = {
+            core
+            for verse in verses.values()
+            if "-" in verse
+            for token in verse.lower().split()
+            if "-" in (core := split_token(token).core) and core[0] != "-" and core[-1] != "-"
+        }
+        for ref in hyphenated:
+            raw = verses[ref].split(" ")
+            for a, b in zip(raw, raw[1:], strict=False):
+                if _space_kind(a, b) == "hyphen" and split_token(a + b).core.lower() in compounds:
+                    found.append((ref, f"{a} {b}"))
 
     starts: list[int] = []
     at = 0
     for verse in verses.values():
         starts.append(at)
-        at += len(verse) + 1
-    for m in _HYPHEN_SPACE.finditer(text):
-        space = m.start() + (text[m.start()] == "-")
-        left = max(text.rfind(" ", 0, space), text.rfind("\n", 0, space)) + 1
-        ends = [e for e in (text.find(" ", space + 1), text.find("\n", space + 1)) if e != -1]
-        right = min(ends, default=len(text))
-        if split_token(text[left:space] + text[space + 1 : right]).core.lower() in compounds:
-            found.append((verse_at(starts, space), text[left:right]))
-
-    byte_starts: list[int] = []
-    at = 0
-    for verse in verses.values():
-        byte_starts.append(at)
-        at += len(verse.encode()) + 1
-    lone = {verse_at(byte_starts, m.start()) for m in _LONE.finditer(text.encode())}
+        at += len(verse) + 2
+    lone = {refs[bisect_right(starts, m.start()) - 1] for m in _LONE.finditer(text)}
     for ref in sorted(lone):
         raw = verses[ref].split(" ")
         tokens = [split_token(t) for t in raw]
@@ -661,8 +668,9 @@ def quick_check(verses: Mapping[Ref, str]) -> list[tuple[Ref, str]]:
                 if (
                     a >= 0
                     and b < len(tokens)
+                    and tokens[a if b == i else b].core not in LETTER_WORDS  # "a s": detect's call
                     and _attach(tokens[a], tokens[b])
-                    and counts[(tokens[a].core + tokens[b].core).lower()] >= COMMON
+                    and common((tokens[a].core + tokens[b].core).lower())
                 ):
                     found.append((ref, f"{raw[a]} {raw[b]}"))
     return found

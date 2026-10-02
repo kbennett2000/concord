@@ -197,12 +197,12 @@ def test_a_one_letter_word_whose_neighbour_prefers_the_split_is_left_alone() -> 
     found = find(texts)
     assert not found.changes
     assert [left.reason for left in found.left if left.ref == TEST] == [
-        "a one-letter word: the two words fit the next word better than the joined one"
+        "a one-letter word, and the joined word is not attested beside its neighbours"
     ]
 
 
 def test_a_one_letter_split_whose_joined_word_fits_is_joined() -> None:
-    lines = ["also the man", "also the house", "also the field"]
+    lines = ["and also the house", "and also the field", "also the man"]
     texts = corpus({"AAA": "and a lso the man", "BBB": "and also the man"}, both(lines))
     assert fixed(texts) == "and also the man"
 
