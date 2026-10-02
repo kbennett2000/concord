@@ -1,9 +1,12 @@
-"""Read ``pdftohtml -xml`` output into typed text items.
+"""Read ``pdftohtml -xml`` output into typed text items and images.
 
-``pdftohtml -xml -i`` emits one ``<text>`` element per run of same-styled text, positioned in
-page coordinates, plus ``<fontspec>`` elements (size, colour) and the PDF outline. Font size,
-colour, bold/italic and link targets carry all of the book's structure, so each item keeps
-exactly those and nothing else.
+``pdftohtml -xml`` emits one ``<text>`` element per run of same-styled text, positioned in
+page coordinates, plus ``<fontspec>`` elements (size, colour), one ``<image>`` element per
+placed image, and the PDF outline. Font size, colour, bold/italic and link targets carry all
+of the book's structure, so each item keeps exactly those and nothing else. The images (V8-S4b)
+sit in their own list, so the text items are the same as with ``-i``: pdftohtml writes each
+image's file next to its output — a JPEG exactly as the PDF stores it — into a directory the
+caller owns.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ from __future__ import annotations
 import re
 import subprocess
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # The colour Calibre gives every hyperlink; links (verse numbers with a study note, ``*``
@@ -46,6 +49,18 @@ class TextItem:
 
 
 @dataclass(frozen=True, slots=True)
+class ImageItem:
+    """One ``<image>``: where it sits on its page, its size there, and its extracted file."""
+
+    page: int
+    top: int
+    left: int
+    width: int
+    height: int
+    src: Path
+
+
+@dataclass(frozen=True, slots=True)
 class OutlineEntry:
     page: int
     title: str
@@ -57,13 +72,17 @@ class PdfDocument:
     outline: list[OutlineEntry]
     page_count: int
     producer_version: str
+    images: list[ImageItem] = field(default_factory=list[ImageItem])
 
 
-def run_pdftohtml(pdf: Path) -> str:
-    """Convert ``pdf`` to pdftohtml's XML on stdout (images ignored)."""
+def run_pdftohtml(pdf: Path, out_dir: Path) -> str:
+    """Convert ``pdf`` to pdftohtml's XML, its images written into ``out_dir``.
+
+    Never ``-stdout`` here: with it, pdftohtml writes the images next to the PDF."""
+    stem = out_dir / "emb"
     try:
-        done = subprocess.run(
-            ["pdftohtml", "-xml", "-i", "-q", "-stdout", str(pdf)],
+        subprocess.run(
+            ["pdftohtml", "-xml", "-q", str(pdf), str(stem)],
             capture_output=True,
             check=True,
             text=True,
@@ -74,7 +93,10 @@ def run_pdftohtml(pdf: Path) -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         raise PdfXmlError(f"pdftohtml failed on {pdf}: {exc.stderr.strip()}") from exc
-    return done.stdout
+    xml = stem.with_suffix(".xml")
+    if not xml.is_file():
+        raise PdfXmlError(f"pdftohtml wrote no {xml.name} for {pdf}")
+    return xml.read_text(encoding="utf-8")
 
 
 def _int_attr(element: ET.Element, name: str) -> int:
@@ -108,6 +130,7 @@ def parse_pdf_xml(xml: str) -> PdfDocument:
 
     fonts: dict[str, tuple[int, bool]] = {}
     items: list[TextItem] = []
+    images: list[ImageItem] = []
     pages = 0
     for page in root.iter("page"):
         pages += 1
@@ -137,6 +160,17 @@ def parse_pdf_xml(xml: str) -> PdfDocument:
                         link_page=_link_page(element),
                     )
                 )
+            elif element.tag == "image":
+                images.append(
+                    ImageItem(
+                        page=number,
+                        top=_int_attr(element, "top"),
+                        left=_int_attr(element, "left"),
+                        width=_int_attr(element, "width"),
+                        height=_int_attr(element, "height"),
+                        src=Path(element.get("src", "")),
+                    )
+                )
 
     outline = [
         OutlineEntry(page=int(entry.get("page", "0")), title="".join(entry.itertext()).strip())
@@ -148,4 +182,5 @@ def parse_pdf_xml(xml: str) -> PdfDocument:
         outline=outline,
         page_count=pages,
         producer_version=root.get("version", ""),
+        images=images,
     )

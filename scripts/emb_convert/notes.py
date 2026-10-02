@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from emb_convert import perspectives, topics
+from emb_convert import charts, perspectives, topics
 from emb_convert.articles import (
     Article,
     ArticleRegion,
@@ -203,6 +203,38 @@ class ArticleFindings:
 
 
 @dataclass(slots=True)
+class ChartFindings:
+    """EMB's charts (V8-S4b): found, placed and checked."""
+
+    region: charts.ChartRegion = field(default_factory=charts.ChartRegion)
+    notes: int = 0
+    shapes: Counter[str] = field(default_factory=Counter[str])
+    whole_chapters: int = 0  # ranges printed in full that are the whole chapter
+    places: Counter[str] = field(default_factory=Counter[str])
+    away: list[str] = field(default_factory=list[str])  # inside or after the passage
+    passages: int = 0  # notes carrying passages
+    mid_verse: list[str] = field(default_factory=list[str])
+    link_books: list[str] = field(default_factory=list[str])  # index links into another book
+    unused: list[str] = field(default_factory=list[str])  # images no note names once
+    spots: dict[int, tuple[str, int, int]] = field(default_factory=dict[int, tuple[str, int, int]])
+    assets: dict[str, bytes] = field(default_factory=dict[str, bytes])
+    hygiene: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    errors: list[str] = field(default_factory=list[str])
+
+    @property
+    def ok(self) -> bool:
+        return (
+            not self.errors
+            and not self.region.errors
+            and not self.region.unclaimed
+            and not self.mid_verse
+            and not self.link_books
+            and not self.unused
+            and not any(self.hygiene.values())
+        )
+
+
+@dataclass(slots=True)
 class NotesResult:
     payload: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     textual: TextualRegion = field(default_factory=TextualRegion)
@@ -228,9 +260,11 @@ class NotesResult:
     first_study: tuple[str, str] = ("", "")
     articles: ArticleFindings = field(default_factory=ArticleFindings)
     features: FeatureFindings = field(default_factory=lambda: FeatureFindings())
+    charts: ChartFindings = field(default_factory=ChartFindings)
     # payload index → (rank, callout order): where an article sorts among notes at its spot
     ranks: dict[int, tuple[int, int]] = field(default_factory=dict[int, tuple[int, int]])
-    # payload index → tier: 0 a verse's notes, 1 S3a's articles, 2 S3b's (each after the last)
+    # payload index → tier: 0 a verse's notes, 1 S3a's articles, 2 S3b's, 3 S4b's charts (each
+    # after the last)
     tiers: dict[int, int] = field(default_factory=dict[int, int])
     # id(note) → (tier, reading order): for placing S3b's notes among S3a's at one spot
     reading: dict[int, tuple[int, int]] = field(default_factory=dict[int, tuple[int, int]])
@@ -245,6 +279,7 @@ class NotesResult:
             and all(f.evidence != "unexplained" for f in self.links)
             and self.articles.ok
             and self.features.ok
+            and self.charts.ok
         )
 
 
@@ -1178,6 +1213,74 @@ def _features(
         _article_texts(found.raw, found.solo, found.spans, key, body, ctx)
 
 
+def _charts(
+    result: NotesResult, parse: ParseResult, ctx: _Context, region: charts.ChartRegion
+) -> None:
+    """Each chart's note, where its image stands, after every earlier note at that verse."""
+    found = result.charts
+    found.region = region
+    at = {(record.page, record.top): record for record in parse.diagnostics.charts}
+    for chart in region.charts:
+        if chart.image is None or not chart.media_type:
+            continue  # the region recorded why
+        record = at.get((chart.image.page, chart.image.top))
+        if record is None:
+            found.errors.append(f"{chart.key}: the text pass never reached p{chart.image.page}")
+            continue
+        placed = charts.place(chart, record, ctx.by_alias, ctx.last_verse, ctx.stored)
+        if isinstance(placed, str):
+            found.errors.append(f"{chart.key}: {placed}")
+            continue
+        where = f"{chart.key} ({placed.book} {placed.chapter}:{placed.verse})"
+        if ctx.page_book(chart.reference_page) != placed.book:
+            found.link_books.append(f"{where}: the index links p{chart.reference_page}")
+        verse_text = ctx.verse_text.get((placed.book, placed.chapter, placed.verse))
+        if verse_text is None:
+            found.errors.append(f"{where}: no verse text to anchor at")
+            continue
+        for name, pattern in _HYGIENE.items():
+            if pattern.search(chart.title):
+                found.hygiene.setdefault(name, []).append(chart.key)
+        note: dict[str, Any] = {
+            "book": placed.book,
+            "chapter": placed.chapter,
+            "verse": placed.verse,
+            "type": charts.NOTE_TYPE,
+            "label": charts.LABEL,
+            "title": chart.title,
+            "text": f"[{chart.reference}](ref:{placed.target})",
+            "text_format": MARKDOWN,
+            "char_offset": len(verse_text) if placed.at_end else 0,
+        }
+        if not placed.at_end:
+            note["ordinal"] = FIRST_ORDINAL
+        passages = _article_passages(placed.parts, (placed.chapter, placed.verse))
+        if passages:
+            note["passages"] = passages
+            found.passages += 1
+        note["image"] = chart.name
+        n = len(result.payload)
+        result.ranks[n] = (RANK_END if placed.at_end else RANK_START, chart.number)
+        result.tiers[n] = 3
+        result.payload.append(note)
+        found.assets[chart.name] = chart.data
+        found.notes += 1
+        found.shapes[placed.shape] += 1
+        found.whole_chapters += placed.whole_chapter
+        found.places[placed.where] += 1
+        if placed.where != "closes its passage":
+            found.away.append(f"{where}: {placed.where}")
+        if record.mid_verse:
+            found.mid_verse.append(where)
+        if record.after is not None:
+            found.spots[chart.number] = (record.book, *record.after)
+    used = Counter(note["image"] for note in result.payload if note.get("image"))
+    found.unused = sorted(
+        {name for name in found.assets if used[name] != 1}
+        | {name for name in used if name not in found.assets}
+    )
+
+
 def _article_passages(parts: list[Part], anchor_verse: tuple[int, int]) -> list[dict[str, int]]:
     """Every part of the passage in the note's book — none for a single verse the note
     anchors at (S2b's rule)."""
@@ -1230,6 +1333,7 @@ def build_notes(
     parse: ParseResult,
     public: PublicWords,
     skeleton: dict[tuple[str, int], int],
+    chart_region: charts.ChartRegion | None = None,
 ) -> NotesResult:
     ctx = _context(doc, layout, parse, public, skeleton)
     result = NotesResult()
@@ -1237,6 +1341,8 @@ def build_notes(
     _study(result, doc, layout, parse, ctx)
     _articles(result, doc, layout, parse, ctx)
     _features(result, doc, layout, parse, ctx)
+    if chart_region is not None:
+        _charts(result, parse, ctx, chart_region)
     order = {seed.id: seed.canonical_order for seed in canonical_books()}
 
     def sort_key(pair: tuple[int, dict[str, Any]]) -> tuple[int, ...]:

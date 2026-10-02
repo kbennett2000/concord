@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -41,7 +42,7 @@ from emb_convert.clean import (
 )
 from emb_convert.layout import BookRange, Layout, LinkKind
 from emb_convert.lines import Line, group_lines
-from emb_convert.pdfxml import PdfDocument, TextItem
+from emb_convert.pdfxml import ImageItem, PdfDocument, TextItem
 from emb_convert.tables import CELL_SEPARATOR, Table, build_rows, find_tables
 
 VERSE_NUMBER_SIZE = 7
@@ -164,6 +165,21 @@ class PerspectivesBox:
 
 
 @dataclass(slots=True)
+class ChartImage:
+    """Where a chart's image stands in the text (V8-S4b).
+
+    ``after`` is the verse open when the image comes — (chapter, verse) — and ``before`` the
+    next verse to start; ``mid_verse`` says the open verse's text went on after the image."""
+
+    book: str
+    page: int
+    top: int
+    after: tuple[int, int] | None
+    before: tuple[str, int, int] | None = None
+    mid_verse: bool = False
+
+
+@dataclass(slots=True)
 class Diagnostics:
     counts: Counter[str] = field(default_factory=Counter[str])
     combined: list[str] = field(default_factory=list[str])
@@ -178,6 +194,7 @@ class Diagnostics:
     callouts: list[Callout] = field(default_factory=list[Callout])  # study-note verse numbers
     feature_callouts: list[FeatureCallout] = field(default_factory=list[FeatureCallout])
     boxes: list[PerspectivesBox] = field(default_factory=list[PerspectivesBox])
+    charts: list[ChartImage] = field(default_factory=list[ChartImage])
 
     def note(self, kind: str, ref: str) -> None:
         self.counts[kind] += 1
@@ -309,7 +326,14 @@ def trusted_text(line: Line) -> list[str]:
 
 
 class _Parser:
-    def __init__(self, doc: PdfDocument, layout: Layout, fixes: Fixes, public: PublicWords) -> None:
+    def __init__(
+        self,
+        doc: PdfDocument,
+        layout: Layout,
+        fixes: Fixes,
+        public: PublicWords,
+        charts: Sequence[ImageItem] = (),
+    ) -> None:
         self.layout = layout
         self.fixes = fixes
         items = [i for i in doc.items if layout.bible_start <= i.page < layout.notes_start]
@@ -340,6 +364,8 @@ class _Parser:
         self.seq = 0
         self.pending_callouts: list[FeatureCallout] = []
         self.pending_boxes: list[PerspectivesBox] = []
+        self.chart_queue = sorted(charts, key=lambda c: (c.page, c.top), reverse=True)
+        self.pending_charts: list[ChartImage] = []
         self.raw_marks: list[tuple[str, int, int, Where, int, _Mark]] = []
         self.heading_marks: list[tuple[str, int, ParsedHeading, int, _Mark]] = []
         scan = find_tables(self.lines)
@@ -379,6 +405,7 @@ class _Parser:
         index = 0
         while index < len(self.lines):
             line = self.lines[index]
+            self.charts_before((line.page, line.top))
             table = self.tables.get(index)
             if table is not None and self.mode is _Mode.TEXT and self.chapter is not None:
                 self.table(table)
@@ -386,6 +413,7 @@ class _Parser:
                 continue
             self.line(line)
             index += 1
+        self.charts_before(None)
         self.end_book()
         if self.mode is _Mode.BOX:
             self.diag.errors.append(f"unterminated Perspectives box at {self.box.where}")
@@ -466,6 +494,29 @@ class _Parser:
         )
         self.diag.feature_callouts.append(callout)
         self.pending_callouts.append(callout)
+
+    def charts_before(self, where: tuple[int, int] | None) -> None:
+        """Record every chart image placed before ``where`` (page, top) — all when None."""
+        while self.chart_queue and (
+            where is None or (self.chart_queue[-1].page, self.chart_queue[-1].top) < where
+        ):
+            self.chart_image(self.chart_queue.pop())
+
+    def chart_image(self, image: ImageItem) -> None:
+        """Record where a chart stands; ``start_verse`` fills in the verse after it."""
+        book_range = self.layout.book_at(image.page)
+        if book_range is None or self.book_range is None or book_range != self.book_range:
+            self.diag.errors.append(f"the chart on p{image.page} stands outside its book's text")
+            return
+        if self.mode is not _Mode.TEXT:
+            self.diag.errors.append(f"the chart on p{image.page} stands in a {self.mode.value}")
+            return
+        after = None
+        if self.chapter is not None and self.verse is not None:
+            after = (self.chapter.number, self.verse[0])
+        chart = ChartImage(book=book_range.code, page=image.page, top=image.top, after=after)
+        self.diag.charts.append(chart)
+        self.pending_charts.append(chart)
 
     def perspectives_box(self, line: Line) -> None:
         """Record where a box stands; ``start_verse`` fills in the verse after it."""
@@ -605,6 +656,9 @@ class _Parser:
         for box in self.pending_boxes:
             box.before = (self.book.code, self.chapter.number, first)
         self.pending_boxes = []
+        for chart in self.pending_charts:
+            chart.before = (self.book.code, self.chapter.number, first)
+        self.pending_charts = []
         self.flush_verse()
         self.verse = (first, last)
         self.verse_pages = (0, 0)
@@ -877,6 +931,8 @@ class _Parser:
             callout.mid_verse = True  # the verse the line interrupts goes on
         for box in self.pending_boxes:
             box.mid_verse = True
+        for chart in self.pending_charts:
+            chart.mid_verse = True
         self.verse_buffer.add(text)
         start = self.verse_pages[0] or line.page
         self.verse_pages = (start, line.page)
@@ -1012,10 +1068,12 @@ def parse_bible(
     layout: Layout,
     fixes: Fixes | None = None,
     public: PublicWords | None = None,
+    charts: Sequence[ImageItem] = (),
 ) -> ParseResult:
     """Parse the Bible text region of ``doc``.
 
     ``public`` (the committed public-domain translations as a word list) widens the words
-    the letter-spacing fix checks against; the PDF's own words are always in it.
+    the letter-spacing fix checks against; the PDF's own words are always in it. ``charts``
+    are the chart images (V8-S4b): each is recorded where it stands, and nothing else changes.
     """
-    return _Parser(doc, layout, fixes or Fixes(), public or PublicWords(())).run()
+    return _Parser(doc, layout, fixes or Fixes(), public or PublicWords(()), charts).run()
