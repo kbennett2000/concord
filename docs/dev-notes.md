@@ -2136,3 +2136,13 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
 - **`make check` green** (839 passed, 48 deselected; ruff and pyright strict clean, openapi.json
   unchanged). `make build-db` loads 65,537 notes; a local API on :8077 served the fixed 2 Cor 12:1
   note and NET John 3's 71 notes equal to the server's.
+- **Deployed 2026-10-01** to the LAN Concord (192.168.1.62:8000) from this branch.
+  `make docker-build-private` 43 s, the embed `CACHED`, the temporary `Dockerfile.dockerignore`
+  gone afterwards. The image checked on :8077 (20 translations, EMB 7,284 notes of which exactly
+  these 24 differ from the server's, NET John 3's 71 equal, semantic search on). `docker save |
+  gzip` 10 s (504 MB), `scp` 38 s, `docker load` + `compose up -d` 52 s, healthy. Rollback:
+  `concord:pre-note-spacing` (the V8-S2b image) — `docker tag concord:pre-note-spacing
+  concord:latest && docker compose up -d` in `~/applications/concord`. Read through Songbird's own
+  `ConcordClient` inside `songbird-songbird-1`: the 2 Cor 12:1 study note reads correctly (the only
+  change in 2 Cor 12); NET John 3's 71 notes identical to a capture taken before the swap; 20
+  translations, the same ids.
