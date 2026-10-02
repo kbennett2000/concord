@@ -10,6 +10,9 @@ CREATION (GEN 1:1-2), LOVE (JHN 3:16). No dependence on the real Nave's dataset.
 ADR-0013 (a second, private source): ``source`` on every body, ``?source=``, ``sources``, the
 400 ``unknown_source``, and the union across sources — against a copy of the corpus with two
 made-up topics of a made-up source (``two_sources``), so the one-source expectations above stand.
+
+V8-S7a (one A-Z list): names compare ignoring case, ties break by id, on the browse and the
+reverse lookup alike — against another copy with made-up topics in both sources (``case_mix``).
 """
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
@@ -198,8 +201,8 @@ def test_immutable_etag_304_all_endpoints(client: TestClient) -> None:
 @pytest.fixture(scope="module")
 def two_sources(db_path: Path, tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
     """The corpus plus a made-up private source: "Care made up" (GEN 1:2, JHN 3:16) and a
-    redirect, "Zeal made up" → vf-1. Mixed-case names sort after the all-capitals public names
-    that share their first letter (binary order)."""
+    redirect, "Zeal made up" → vf-1. Mixed-case names interleave with the all-capitals public
+    names (the order ignores case)."""
     path = tmp_path_factory.mktemp("two-sources") / "bible.db"
     shutil.copyfile(db_path, path)
     with sqlite3.connect(path) as conn:
@@ -225,8 +228,8 @@ def test_two_sources_browse_union_and_totals(two_sources: TestClient) -> None:
     assert [t["id"] for t in body["topics"]] == [
         "anxiety",
         "care",
-        "creation",
         "vf-1",
+        "creation",
         "love",
         "vf-2",
     ]
@@ -252,7 +255,7 @@ def test_source_filter_pages_one_source(two_sources: TestClient, client: TestCli
 
 def test_sources_honour_q_and_section(two_sources: TestClient) -> None:
     body = two_sources.get("/v1/topics", params={"section": "C"}).json()
-    assert [t["id"] for t in body["topics"]] == ["care", "creation", "vf-1"]
+    assert [t["id"] for t in body["topics"]] == ["care", "vf-1", "creation"]
     assert body["sources"] == [{"source": PRIVATE, "total": 1}, {"source": NAVES, "total": 2}]
     none = two_sources.get("/v1/topics", params={"q": "nothing-matches"}).json()
     assert none["total"] == 0
@@ -293,3 +296,92 @@ def test_source_filter_etag_304(two_sources: TestClient) -> None:
         "/v1/topics", params={"source": PRIVATE}, headers={"If-None-Match": resp.headers["etag"]}
     )
     assert again.status_code == 304
+
+
+# --- V8-S7a: one A-Z list ------------------------------------------------------------
+
+# The corpus's four topics plus made-up ones in both sources: a pair differing only in case
+# ("BETA (Zed)" / "BETA (a thing)"), and names equal but for case in two sources, whose id
+# decides — "care" (vf-3) after CARE, "Willow" (vf-4) before WILLOW.
+CASE_MIX_ORDER = [
+    "anxiety",
+    "beta-a-thing",
+    "beta-zed",
+    "care",
+    "vf-3",
+    "creation",
+    "love",
+    "vf-5",
+    "vf-4",
+    "willow",
+]
+
+
+@pytest.fixture(scope="module")
+def case_mix(db_path: Path, tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
+    path = tmp_path_factory.mktemp("case-mix") / "bible.db"
+    shutil.copyfile(db_path, path)
+    added = [
+        ("beta-zed", "BETA (Zed)", "B", NAVES),
+        ("beta-a-thing", "BETA (a thing)", "B", NAVES),
+        ("willow", "WILLOW", "W", NAVES),
+        ("vf-3", "care", "C", PRIVATE),
+        ("vf-4", "Willow", "W", PRIVATE),
+        ("vf-5", "Love made up", "L", PRIVATE),
+    ]
+    with sqlite3.connect(path) as conn:
+        conn.executemany(
+            "INSERT INTO topics (id, name, section, see_also, source) VALUES (?, ?, ?, NULL, ?)",
+            added,
+        )
+        conn.executemany(
+            "INSERT INTO topic_verses (topic_id, book_id, chapter, verse) VALUES (?, 'JHN', 4, 1)",
+            [(tid,) for tid, *_ in added] + [("care",)],
+        )
+    app = create_app(db_path=path, enable_semantic=False)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_browse_one_list_ignoring_case(case_mix: TestClient) -> None:
+    body = case_mix.get("/v1/topics").json()
+    assert [t["id"] for t in body["topics"]] == CASE_MIX_ORDER
+    assert body["total"] == len(CASE_MIX_ORDER)
+    sections = {
+        s: [t["id"] for t in case_mix.get("/v1/topics", params={"section": s}).json()["topics"]]
+        for s in ("B", "C", "W")
+    }
+    assert sections == {
+        "B": ["beta-a-thing", "beta-zed"],
+        "C": ["care", "vf-3", "creation"],
+        "W": ["vf-4", "willow"],
+    }
+
+
+def test_paging_is_stable(case_mix: TestClient) -> None:
+    for limit in (1, 2, 3):
+        walked = [
+            t["id"]
+            for offset in range(0, len(CASE_MIX_ORDER), limit)
+            for t in case_mix.get("/v1/topics", params={"limit": limit, "offset": offset}).json()[
+                "topics"
+            ]
+        ]
+        assert walked == CASE_MIX_ORDER, limit
+    first = case_mix.get("/v1/topics", params={"limit": 3, "offset": 3})
+    again = case_mix.get("/v1/topics", params={"limit": 3, "offset": 3})
+    assert first.content == again.content and first.headers["etag"] == again.headers["etag"]
+
+
+def test_reverse_lookup_one_list_ignoring_case(case_mix: TestClient) -> None:
+    body = case_mix.get("/v1/verses/John 4:1/topics").json()
+    assert [t["id"] for t in body["topics"]] == [
+        "beta-a-thing",
+        "beta-zed",
+        "care",
+        "vf-3",
+        "vf-5",
+        "vf-4",
+        "willow",
+    ]
+    assert [t["source"] for t in body["topics"]][2:4] == [NAVES, PRIVATE]

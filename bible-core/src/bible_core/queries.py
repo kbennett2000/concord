@@ -1186,8 +1186,9 @@ def list_topics(
     """Browse topics, optionally filtered by name substring (``q``), ``section`` letter and
     ``source`` (exact, ADR-0013).
 
-    Ordered ``name, id`` (a stable tiebreak so same-named topics paginate deterministically);
-    ``total`` is a separate count over the same filter.
+    One A-Z list across every source (V8-S7a): ordered by ``name`` ignoring ASCII case, then
+    ``id`` (a stable tiebreak, so names equal but for case paginate deterministically); ``total``
+    is a separate count over the same filter.
     """
     clauses, params = _topic_filter(q, section)
     if source is not None:
@@ -1198,7 +1199,8 @@ def list_topics(
     rows = tuple(
         _row_to_topic(r)
         for r in conn.execute(
-            f"SELECT {_TOPIC_SELECT} FROM topics{where} ORDER BY name, id LIMIT ? OFFSET ?",
+            f"SELECT {_TOPIC_SELECT} FROM topics{where} "
+            "ORDER BY name COLLATE NOCASE, id LIMIT ? OFFSET ?",
             [*params, limit, offset],
         )
     )
@@ -1259,7 +1261,8 @@ def get_topics_for_reference(conn: sqlite3.Connection, reference: Reference) -> 
     """The distinct topics that cite any verse in ``reference`` (the union across its spans).
 
     The inverse of ``get_topic_verses``. ``SELECT DISTINCT`` dedups a topic that cites several
-    verses of the range; ordered ``name, id``. No pagination (a reference cites few topics).
+    verses of the range; ordered as the browse (``name`` ignoring ASCII case, then ``id``). No
+    pagination (a reference cites few topics).
     """
     clauses: list[str] = []
     params: list[str | int] = [reference.book_id]
@@ -1275,7 +1278,7 @@ def get_topics_for_reference(conn: sqlite3.Connection, reference: Reference) -> 
         for r in conn.execute(
             f"SELECT DISTINCT {cols} "
             "FROM topics t JOIN topic_verses tv ON tv.topic_id = t.id "
-            f"WHERE {where} ORDER BY t.name, t.id",
+            f"WHERE {where} ORDER BY t.name COLLATE NOCASE, t.id",
             params,
         )
     )
