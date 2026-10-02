@@ -166,8 +166,9 @@ class TranslatorNote(BaseModel):
     place the marker, and the note's own cross-references. ``type`` is one of tn, sn, tc, map,
     other, article, chart, or null. The v8 fields (ADR-0011) follow: the source's ``label`` for
     the kind, a ``title``, ``text_format`` (``"markdown"`` or null for plain text; Markdown may
-    carry ``ref:`` links), the ``passages`` covered, and ``image`` (reserved, always null) —
-    null or empty when a source doesn't use them."""
+    carry ``ref:`` links), the ``passages`` covered, and ``image`` (the name of one of the
+    translation's images, served at ``/v1/translations/{translation}/assets/{name}`` — ADR-0012)
+    — null or empty when a source doesn't use them."""
 
     book: str
     chapter: int

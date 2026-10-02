@@ -737,6 +737,33 @@ def search_notes(
     return NoteSearchPage(hits=hits, total=total)
 
 
+# --- assets (v8, ADR-0012) -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AssetRow:
+    """One of a translation's images: its bytes exactly as loaded, their type and size."""
+
+    translation_id: str
+    name: str
+    media_type: str
+    width: int
+    height: int
+    data: bytes
+
+
+def get_asset(conn: sqlite3.Connection, translation_id: str, name: str) -> AssetRow | None:
+    """The asset ``name`` of ``translation_id`` (exact, case-sensitive), or ``None``."""
+    row = conn.execute(
+        "SELECT translation_id, name, media_type, width, height, bytes FROM translation_assets "
+        "WHERE translation_id = ? AND name = ?",
+        (translation_id, name),
+    ).fetchone()
+    if row is None:
+        return None
+    return AssetRow(row[0], row[1], row[2], row[3], row[4], bytes(row[5]))
+
+
 # --- metadata + random ---------------------------------------------------------------
 
 

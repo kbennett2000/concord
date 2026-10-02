@@ -18,6 +18,9 @@ the *ignore-file* guards that keep the clean build clean and the public path shi
 V8-S1b: BuildKit lets a ``<Dockerfile>.dockerignore`` replace ``.dockerignore``. A private build
 writes a temporary ``Dockerfile.dockerignore`` without ``data/private/`` — so that file must stay
 gitignored, and every *committed* ignore file must still exclude ``data/private/``.
+
+V8-S4a (ADR-0012): a translation's images live under ``data/private/assets/`` — a clean checkout
+bakes zero of them, and no image is ever committed under ``data/``.
 """
 
 # pyright: reportPrivateUsage=false
@@ -28,7 +31,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from bible_core.loader import _default_data_dirs, build_database
+from bible_core.loader import _default_assets_dirs, _default_data_dirs, build_database
+from imagekit import png
 from loaderkit import book, chapter, translation, verse, write_translation
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -112,3 +116,37 @@ def test_local_private_translations_are_added_only_when_present(tmp_path: Path) 
     write_translation(tmp_path / "private" / "work" / "PRIV", _one_verse("WORK"))
     # work/ files (the v8 converter's markers and reports) are never scanned as translations
     assert _build(tmp_path) == ["PRIV", "PUB"]
+
+
+def _asset_count(base: Path) -> int:
+    """Build from the directories the loader's CLI picks under ``base``; count the baked assets."""
+    db = base / "bible.db"
+    build_database(db, _default_data_dirs(base), assets_dirs=_default_assets_dirs(base))
+    with sqlite3.connect(db) as conn:
+        return conn.execute("SELECT COUNT(*) FROM translation_assets").fetchone()[0]
+
+
+def test_clean_checkout_bakes_zero_assets(tmp_path: Path) -> None:
+    """No data/private/ → no images baked (ADR-0012). The second half proves the build would have
+    picked them up had they been there, so the zero isn't vacuous."""
+    write_translation(tmp_path / "translations", _one_verse("PUB"))
+    assert _asset_count(tmp_path) == 0
+    write_translation(tmp_path / "private", _one_verse("PRIV"))
+    image = tmp_path / "private" / "assets" / "PRIV" / "made-up.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(png())
+    assert _asset_count(tmp_path) == 1
+
+
+def test_no_image_is_committed_under_data() -> None:
+    """Every image a build bakes is user-supplied under the dual-ignored data/private/ (SPEC v8 §2):
+    none may be tracked anywhere under data/."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", "data"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\n")
+    images = [name for name in tracked if name.lower().endswith((".jpg", ".jpeg", ".png"))]
+    assert tracked and not images, f"images committed under data/: {images}"

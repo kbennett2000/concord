@@ -74,7 +74,7 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 - `title` — the item's heading, where it has one.
 - `text_format` — `"markdown"` when `text` is Markdown (paragraphs, italics, bold, lists, quotes); absent means plain text (NET is unchanged).
 - `passages` — the canonical ranges the note covers, when that is more than its anchor verse. A note on "Genesis 12:10-20 and chapter 20" has two. **As S2a settled:** each is `{start_chapter, start_verse, end_chapter, end_verse}` in the note's own book. A range may cross chapters, a whole chapter is written with its last verse, and the response adds a `reference`.
-- `image` — an image name (§4.4), for charts. **Reserved in S2a:** always `null`, and the loader rejects a value until S4 adds images.
+- `image` — an image name (§4.4), for charts. Reserved in S2a; **live since S4a** (ADR-0012): absent, `null`, or the name of one of the note's own translation's images — any other value fails the build.
 - The `type` set gains `article` (the five features) and `chart`. Textual notes are `tn`, study notes `sn`.
 - **Where the marker goes:** a textual note at its `*`; a study note at the start of the verse where the book calls it out (its blue verse number), or of its first verse when it has no callout of its own; a feature or chart where the book puts its callout. A feature the book calls out more than once shows at each callout; one it never calls out anchors at the start of its first passage (S3's plan checks both against the data). References the book links inside a note become `cross_references`, or `ref:` links in the Markdown. ADR-0011 gives the grammar: `[text](ref:JHN.3.16)` with the forms `BOOK.C`, `BOOK.C-C`, `BOOK.C.V`, `BOOK.C.V-V` and `BOOK.C.V-C.V`. Each maps onto a reference `/v1/verses/{ref}` accepts, and the loader rejects a malformed target in a Markdown note.
 - **As S2b settled** (textual notes `tn`/"Textual Note", marker `*`; study notes `sn`/"Study Note", no title):
@@ -103,6 +103,7 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 **4.3 Documents — `data/private/documents/EMB.json` (ADR-0012, S5).** New table `translation_documents`: `slug`, `kind` (`book-introduction`, `front-matter`, `reading-plan`, `about`), `title`, `book` (book introductions only), `ordinal`, Markdown `text`, and the image names it uses. References inside the text are `ref:` links.
 
 **4.4 Images — `data/private/assets/EMB/` (ADR-0012, S4).** New table `translation_assets`: `name`, `media_type`, `width`, `height`, `bytes` — baked into `bible.db` like everything else (no runtime mount). The slice reports the `bible.db` size change. The 102 banner images above feature articles are decorative unless S3 finds one carrying words that aren't in the text layer; decorative ones aren't copied (the note's `label` replaces them). S3a looked: all 102 are one image whose only words are the feature's name, which the `label` carries — none is copied.
+- **As S4a settled** (ADR-0012): the loader reads `data/private/assets/<CODE>/<name>` (one folder per loaded translation, files only); a name is lower-case letters, digits, `-` and `_`, then `.jpg`, `.jpeg` or `.png`; the bytes must be a complete JPEG or PNG (sniffed, the extension agreeing), non-empty, at most 2 MiB and 8,192 px a side, width and height read from the header with `struct` (no new dependency). Bytes are stored exactly as supplied. Assets load before notes. Any violation fails the build, naming the file.
 
 **4.5 Verse Finder — `data/private/topics/` (ADR-0013, S6).** The topics loader scans `[data/topics, data/private/topics]` (ADR-0004's pattern). Same topics contract; `source` = "Tyndale Verse Finder"; ids prefixed `vf-`; ranges expand to their verses.
 
@@ -111,7 +112,7 @@ A measuring-only session (1 Oct 2026) compared Kris's two files. Both are Calibr
 - `GET /v1/translations` — each entry gains `note_count` (S2a) and `document_count` (S5). songbird offers any translation with `note_count > 0` as a notes source.
 - `GET /v1/translations/{t}/notes/{book}/{chapter}` and `GET /v1/notes/search` — notes gain the §4.2 fields (null or empty when absent), appended after the existing keys in the order `label, title, text_format, passages, image` (S2a). Paths unchanged. These two endpoints and `/v1/translations` now declare their bodies in `docs/openapi.json`.
 - `GET /v1/translations/{t}/documents` (`?book=`, `?kind=`) — summaries. `GET /v1/translations/{t}/documents/{slug}` — one document. (S5)
-- `GET /v1/translations/{t}/assets/{name}` — the image bytes, their content type, an immutable ETag. (S4)
+- `GET /v1/translations/{t}/assets/{name}` — the image bytes, their content type, an immutable ETag. (S4) **As S4a settled:** `Cache-Control` immutable, `Vary: Origin`, `304` on `If-None-Match`; an unknown translation is `404 unknown_translation`, a name the translation lacks `404 unknown_asset` (`detail`: `translation`, `name`), whatever its shape. `docs/openapi.json` declares the `200` as `image/jpeg` or `image/png` binary.
 - `GET /v1/topics*` — topics gain `source`; `/v1/topics` gains `?source=`. (S6)
 - Honest absence as everywhere: a known translation with none → `200` and an empty list; an unknown translation, slug or image → `404`.
 
@@ -135,9 +136,10 @@ Each slice ends with Kris able to use the result. songbird's matching slices (it
 | songbird A | Notes from any source | Per-translation "show notes from" choices replacing the NET-only checkbox (an existing NET choice is kept); labels, titles, passages, Markdown | EMB notes on every other translation, like NET's |
 | V8-S3a | Feature articles | The converter emits Men, Women, and God; Someone You Should Know; Personal Gold — the articles the text calls out at a passage; deploy | Those articles in the reader, on any translation |
 | V8-S3b | Topics and Perspectives | The converter emits What the Bible Says About and Perspectives; deploy | All five features in the reader |
-| V8-S4 | Images + charts | ADR-0012 (images): table, endpoint; charts and reading-time figures | Chart notes resolve to images |
+| V8-S4a | Images contract | ADR-0012 (images): `translation_assets`, the assets loader, the endpoint; a note's `image` goes live. No converter, no deploy | — (nothing a user sees changes yet) |
+| V8-S4b | Charts | The converter emits EMB's 44 charts as `chart` notes with their images; deploy. (The reading-time figures moved to V8-S5, where the introductions are read — Kris's call, 2 Oct 2026.) | Chart notes resolve to images |
 | songbird B | Charts | Images in the note view | Charts in the reader |
-| V8-S5 | Documents | ADR-0012 (documents): table, endpoints; book introductions, front matter, Personal Gold authors, reading plan | — |
+| V8-S5 | Documents | ADR-0012 (documents): table, endpoints; book introductions (with their reading-time figures, moved from S4), front matter, Personal Gold authors, reading plan | — |
 | songbird C | Introductions + About | A book's introduction from the reader; an About page for this Bible (front matter, reading plan); `ref:` links jump to the reader | Book intros, front matter and reading plan in songbird |
 | V8-S6 | Verse Finder | ADR-0013: private topics path, `source`, `?source=` | — |
 | songbird D | Topics by source | The Topics page and verse topics show the source, with a filter | Verse Finder beside Nave's |

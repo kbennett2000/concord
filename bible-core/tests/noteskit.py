@@ -49,6 +49,7 @@ def note(
     title: str | None = None,
     text_format: str | None = None,
     passages: list[dict[str, Any]] | None = None,
+    image: str | None = None,
 ) -> dict[str, Any]:
     """One note in the input shape. Optional fields are omitted when None, so the loader's
     defaulting (NULL type, char_offset 0, per-verse ordinal, no v8 fields) is exercised."""
@@ -63,7 +64,13 @@ def note(
         payload["ordinal"] = ordinal
     if cross_references is not None:
         payload["cross_references"] = cross_references
-    optional = {"label": label, "title": title, "text_format": text_format, "passages": passages}
+    optional = {
+        "label": label,
+        "title": title,
+        "text_format": text_format,
+        "passages": passages,
+        "image": image,
+    }
     payload.update({k: v for k, v in optional.items() if v is not None})
     return payload
 

@@ -1,6 +1,7 @@
 # ADR-0011: v8 note fields, note types, `note_count` and `ref:` links
 
-**Status:** Accepted
+**Status:** Accepted. The `image` reservation (Decision 1 and 4) is lifted by
+[ADR-0012](ADR-0012-images-and-documents.md) (V8-S4a): `image` names one of the translation's images.
 
 <!--
 Records the notes contract the v8 private study Bibles need (docs/v8/SPEC.md §4.2, §5), settled

@@ -2,7 +2,8 @@
 
 Verses never change, so every successful response carries a strong, body-derived ETag
 and a one-year immutable Cache-Control, and honors ``If-None-Match`` with a 304. The
-ETag is hashed from the exact bytes sent, so it is correct by construction.
+ETag is hashed from the exact bytes sent, so it is correct by construction. A
+translation's images (ADR-0012) are served the same way, with their own media type.
 """
 
 from __future__ import annotations
@@ -25,6 +26,11 @@ def cached_json_response(model: BaseModel, request: Request) -> Response:
     # by_alias serializes fields with a serialization alias (e.g. cross-refs' "from");
     # a no-op for every model without aliases.
     body = model.model_dump_json(by_alias=True).encode("utf-8")
+    return cached_bytes_response(body, "application/json", request)
+
+
+def cached_bytes_response(body: bytes, media_type: str, request: Request) -> Response:
+    """Send ``body`` as ``media_type`` with a strong ETag; return 304 on an If-None-Match hit."""
     etag = _etag(body)
     # Vary: Origin marks the response as origin-dependent so a cache entry created by a
     # no-Origin navigation (no Access-Control-Allow-Origin) is not replayed to a later
@@ -35,7 +41,7 @@ def cached_json_response(model: BaseModel, request: Request) -> Response:
     if if_none_match and etag in {tag.strip() for tag in if_none_match.split(",")}:
         return Response(status_code=304, headers=headers)
 
-    return Response(content=body, media_type="application/json", headers=headers)
+    return Response(content=body, media_type=media_type, headers=headers)
 
 
 def no_store_json_response(model: BaseModel) -> Response:

@@ -2331,3 +2331,41 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   identical to a capture taken before the swap in every field Songbird reads; EMB Genesis 1 and
   Exodus 24 keep their notes and gain a topic (two in Genesis 1) and a box; 20 translations, the
   same ids, only EMB's `note_count` changed (7,503 → 7,579).
+
+### Feature V8-S4a — the images contract (ADR-0012)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s4a-images-contract`). The spec's V8-S4
+  split in two: S4a settles how Concord keeps and serves a translation's images, with no
+  converter work and no deploy; S4b has the converter emit EMB's 44 charts. The reading-time
+  figures move to V8-S5, where the book introductions are read (Kris's call). SPEC §7 shows the
+  rows.
+- **Contract:**
+  - `translation_assets` (`translation_id`, `name`, `media_type`, `width`, `height`, `bytes`),
+    unique per translation and name, baked into `bible.db`. Bytes are stored exactly as supplied.
+  - `bible_core.assets` loads `data/private/assets/<CODE>/<name>` before the notes. Rules: the
+    folder is a loaded translation's exact id; files only; a lower-case name ending `.jpg`,
+    `.jpeg` or `.png`; a complete JPEG or PNG sniffed from the bytes, the extension agreeing;
+    non-empty, ≤ 2 MiB, ≤ 8,192 px a side. Width and height come from the header (a JPEG's first
+    frame header, a PNG's `IHDR`) with `struct`, so `bible-core` stays standard-library only; a
+    JPEG must end with its end-of-image marker and a PNG with `IEND`. Every violation fails the
+    build, naming the file.
+  - A note's `image` is live: absent, `null`, or the name of an asset of the note's own
+    translation. Anything else fails the build, naming the file and the note.
+  - `GET /v1/translations/{t}/assets/{name}`: the bytes with their content type, a strong ETag
+    from the bytes (`cached_json_response` now delegates to a new `cached_bytes_response`, so
+    JSON ETags don't change), immutable `Cache-Control`, `Vary: Origin`, `304` on
+    `If-None-Match`; `404 unknown_translation`, or `404 unknown_asset` for any name the
+    translation lacks. `docs/openapi.json` declares the `200` as `image/jpeg` / `image/png`.
+- **Tests:** images are made in the test (`bible-core/tests/imagekit.py`: a PNG via `zlib`, a
+  baseline greyscale JPEG assembled with `struct`; both decode). pytest's `pythonpath` gains
+  `bible-core/tests` so every suite shares the kit (pyright already resolved it). 32 tests in
+  `test_assets.py` (the header reader, each loader rule, `get_asset`, `image` round trips and
+  failures), 13 in `test_assets_endpoint.py`, two licensing tests (a clean checkout bakes zero
+  assets, shown non-vacuous; no image is committed under `data/`). The API fixture gained a JPEG,
+  a PNG and a chart note (KJV `note_count` 7 → 8).
+- **Cleanup:** `scripts/tests/test_emb_topics.py` had a five-word fragment of a verse the book
+  quotes in its fused-sentence fixture; it now uses made-up words.
+- **Proof with real private data:** `make build-db` loads 0 assets, 65,832 notes (EMB 7,579,
+  NET 58,253), unchanged.
+- **`make check` green** (908 passed, 48 deselected; ruff and pyright strict clean; openapi.json
+  up to date after regeneration).

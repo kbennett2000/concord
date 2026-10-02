@@ -13,12 +13,17 @@ from pathlib import Path
 
 from bible_core.schema import create_schema
 from bible_core.seed import seed_books
+from imagekit import jpeg, png
 
 TRANSLATIONS = [
     ("KJV", "King James Version"),
     ("WEB", "World English Bible"),
     ("YLT", "Young's Literal Translation"),
 ]
+
+# The made-up images the assets endpoint serves (ADR-0012).
+CHART_JPEG = jpeg(20, 10)
+DIAGRAM_PNG = png(5, 4)
 
 # (translation_id, book_id, chapter, verse) tuples intentionally absent.
 OMITTED = {("WEB", "JHN", 3, 16)}
@@ -268,6 +273,26 @@ def build_corpus(path: Path) -> None:
         "INSERT INTO note_passages (note_id, start_chapter, start_verse, end_chapter, end_verse) "
         "VALUES (?, ?, ?, ?, ?)",
         [(7, 12, 10, 12, 20), (7, 20, 1, 21, 3)],
+    )
+    # A translation's images (ADR-0012), made in the test: a JPEG a chart note names (note 8, in
+    # a chapter no other test reads, GEN 13) and a PNG no note names. YLT carries none.
+    conn.executemany(
+        "INSERT INTO translation_assets (translation_id, name, media_type, width, height, bytes) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            ("KJV", "chart-01.jpg", "image/jpeg", 20, 10, CHART_JPEG),
+            ("KJV", "diagram.png", "image/png", 5, 4, DIAGRAM_PNG),
+        ],
+    )
+    conn.execute(
+        "INSERT INTO translator_notes (id, translation_id, book_id, chapter, verse, note_type, "
+        "text, char_offset, marker, ordinal, label, title, text_format, image) "
+        "VALUES (8, 'KJV', 'GEN', 13, 4, 'chart', '[Gen. 13:1-4](ref:GEN.13.1-4)', 13, NULL, 1, "
+        "'Chart', 'A Made-up Chart', 'markdown', 'chart-01.jpg')"
+    )
+    conn.execute(
+        "INSERT INTO note_passages (note_id, start_chapter, start_verse, end_chapter, end_verse) "
+        "VALUES (8, 13, 1, 13, 4)"
     )
     conn.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
 

@@ -108,7 +108,8 @@ _TABLES: tuple[str, ...] = (
     # constrained set; NULL is allowed for a plain footnote. Notes are user-supplied from
     # `data/private/` and never ship in the public image (SPEC v4 §2). The v8 columns after
     # `ordinal` (ADR-0011) are optional: the source's `label` for the kind, a `title`,
-    # `text_format` ('markdown' or NULL for plain text) and `image` (reserved until V8-S4).
+    # `text_format` ('markdown' or NULL for plain text) and `image` — the name of one of the
+    # note's translation's `translation_assets` rows (ADR-0012), or NULL.
     """
     CREATE TABLE IF NOT EXISTS translator_notes (
         id             INTEGER PRIMARY KEY,
@@ -151,6 +152,21 @@ _TABLES: tuple[str, ...] = (
         start_verse    INTEGER NOT NULL,
         end_chapter    INTEGER NOT NULL,
         end_verse      INTEGER NOT NULL
+    )
+    """,
+    # A translation's images (v8, ADR-0012): the bytes exactly as supplied, their media type
+    # and pixel size, keyed by a name unique within the translation. A note's `image` names
+    # one. User-supplied from `data/private/assets/<CODE>/`; never in the public image.
+    """
+    CREATE TABLE IF NOT EXISTS translation_assets (
+        id             INTEGER PRIMARY KEY,
+        translation_id TEXT NOT NULL REFERENCES translations (id),
+        name           TEXT NOT NULL,
+        media_type     TEXT NOT NULL CHECK (media_type IN ('image/jpeg', 'image/png')),
+        width          INTEGER NOT NULL CHECK (width > 0),
+        height         INTEGER NOT NULL CHECK (height > 0),
+        bytes          BLOB NOT NULL,
+        UNIQUE (translation_id, name)
     )
     """,
     # Section headings (additive). A heading anchors a CHAPTER position — it renders BEFORE

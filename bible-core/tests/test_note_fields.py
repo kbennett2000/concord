@@ -1,7 +1,7 @@
 """The v8 note fields (ADR-0011) on synthetic fixtures: label, title, text_format, passages, the
-reserved image, the article/chart types, ref: links in Markdown text, and note_count. Each round-
-trips through the loader and the queries; every bad value fails the build loudly. Made-up text only
-— no EMB or NET content (SPEC v8 §2)."""
+image (live since ADR-0012; tests/test_assets.py covers it with assets), the article/chart types,
+ref: links in Markdown text, and note_count. Each round-trips through the loader and the queries;
+every bad value fails the build loudly. Made-up text only — no EMB or NET content (SPEC v8 §2)."""
 
 from __future__ import annotations
 
@@ -196,7 +196,9 @@ _GOOD_PASSAGE = note_passage(12, 10, 12, 20)
         ({"passages": [{**_GOOD_PASSAGE, "start_chapter": 0}]}, "must be positive"),
         ({"passages": [note_passage(12, 20, 12, 10)]}, r"ends \(12:10\) before it starts"),
         ({"passages": [note_passage(13, 1, 12, 30)]}, r"ends \(12:30\) before it starts"),
-        ({"image": "chart.png"}, "'image' is reserved until the images slice"),
+        ({"image": "chart.png"}, "'image' names 'chart.png', but translation 'NETX' has no asset"),
+        ({"image": 7}, "'image' must be a string"),
+        ({"image": " "}, "'image' is empty"),
     ],
 )
 def test_a_bad_value_fails_loudly(tmp_path: Path, bad: dict[str, Any], message: str) -> None:

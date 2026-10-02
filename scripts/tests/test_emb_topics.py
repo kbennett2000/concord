@@ -222,7 +222,7 @@ def test_an_edit_the_converter_has_not_reviewed_fails_the_run() -> None:
 
 
 def test_a_sentence_run_into_the_next_is_split() -> None:
-    assert fused_sentences("loving them anyway.He had") == ("loving them anyway. He had", 1)
+    assert fused_sentences("plim vosk drane.Telo wint") == ("plim vosk drane. Telo wint", 1)
     assert fused_sentences("in 500 B.C. Then") == ("in 500 B.C. Then", 0)
 
 

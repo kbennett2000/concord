@@ -39,7 +39,8 @@ carries notes in more than one directory, both load (union, in directory order).
           "text_format": "markdown",        # optional: "markdown", or omit for plain text
           "passages": [                     # optional: ranges covered, in the note's own book
             {"start_chapter": 3, "start_verse": 16, "end_chapter": 3, "end_verse": 21}
-          ]                                 # ("image" is reserved until V8-S4: omit or null)
+          ],
+          "image": "chart-01.jpg"           # optional (ADR-0012): an asset of this translation
         }
       ]
     }
@@ -55,6 +56,7 @@ import json
 import re
 import sqlite3
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -238,11 +240,13 @@ def parse_notes_file(
     next_id: int,
     translation_ids: frozenset[str],
     alias_to_book: dict[str, str],
+    asset_names: Mapping[str, frozenset[str]] | None = None,
 ) -> tuple[list[NoteRow], list[NoteXrefRow], list[PassageRow]]:
     """Parse one notes JSON file into note rows, cross-ref rows and passage rows.
 
     Note ids are assigned from ``next_id`` upward, in array order, so the build is
-    reproducible. Structural violations fail loudly with ``LoaderError``.
+    reproducible. Structural violations fail loudly with ``LoaderError``. A note's ``image``
+    must name one of ``asset_names[translation]`` (ADR-0012).
     """
     try:
         raw: Any = json.loads(path.read_text(encoding="utf-8"))
@@ -261,6 +265,7 @@ def parse_notes_file(
     xref_rows: list[NoteXrefRow] = []
     passage_rows: list[PassageRow] = []
     book_ids = frozenset(alias_to_book.values())
+    assets = (asset_names or {}).get(translation_id, frozenset[str]())
     # Per-verse running counter for the default `ordinal` (stable render order).
     seq: Counter[tuple[str, int, int]] = Counter()
     note_id = next_id
@@ -295,9 +300,11 @@ def parse_notes_file(
             )
         if text_format == "markdown":
             _check_ref_links(text, book_ids, ctx)
-        if fields.get("image") is not None:
+        image = _opt_text(fields, "image", ctx)
+        if image is not None and image not in assets:
             raise LoaderError(
-                f"{ctx}: 'image' is reserved until the images slice (V8-S4); omit it or use null."
+                f"{ctx}: 'image' names {image!r}, but translation {translation_id!r} has no "
+                "asset by that name."
             )
 
         seq[(book_id, chapter, verse)] += 1
@@ -320,7 +327,7 @@ def parse_notes_file(
                 label,
                 title,
                 text_format,
-                None,  # image: reserved until V8-S4
+                image,
             )
         )
 
@@ -364,18 +371,22 @@ def load_notes(
     notes_dirs: list[Path],
     translation_ids: frozenset[str],
     alias_to_book: dict[str, str],
+    asset_names: Mapping[str, frozenset[str]] | None = None,
 ) -> NotesStats:
     """Ingest notes JSON files from ``notes_dirs`` into ``translator_notes`` /
     ``note_cross_references`` / ``note_passages`` and rebuild ``notes_fts``. Directories are
     scanned in order and unioned (ADR-0004). A missing/empty directory loads nothing (the
-    public-image / clean-build case for ``data/private/notes/``) — not an error."""
+    public-image / clean-build case for ``data/private/notes/``) — not an error. ``asset_names``
+    holds each translation's loaded asset names, which a note's ``image`` must be among."""
     note_rows: list[NoteRow] = []
     xref_rows: list[NoteXrefRow] = []
     passage_rows: list[PassageRow] = []
     by_type: Counter[str] = Counter()
     next_id = 1
     for path in discover_notes_files_in_dirs(notes_dirs):
-        notes, xrefs, passages = parse_notes_file(path, next_id, translation_ids, alias_to_book)
+        notes, xrefs, passages = parse_notes_file(
+            path, next_id, translation_ids, alias_to_book, asset_names
+        )
         note_rows.extend(notes)
         xref_rows.extend(xrefs)
         passage_rows.extend(passages)
