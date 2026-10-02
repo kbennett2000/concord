@@ -2770,3 +2770,63 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   before; `bible.db` 305,848,320 bytes, unchanged.
 - **`make check` green** (1,053 passed, 48 deselected; ruff and pyright strict clean; openapi.json
   regenerated and up to date).
+
+### Feature V8-S6b — EMB's Tyndale Verse Finder, and italics in the Perspectives boxes (private)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s6b-emb-verse-finder`). The converter
+  emits the Verse Finder as a second topical source beside Nave's (ADR-0013, merged in S6a) and,
+  for what the topics contract can't hold, as one more document (Kris's call). At Kris's call,
+  the 26 Perspectives boxes set their quotation and saying in italics.
+- **What landed:**
+  - `scripts/emb_convert/versefinder.py`: the section `documents.find_front` set aside as the
+    reference section, read by print style; the topics payload, the `front-matter-6` document,
+    the checks and the EPUB witness. `readingplan._evidence` is now `link_evidence`, shared.
+  - `convert.py` writes `topics/EMB.json`, appends the document after `about-1`, cuts the EPUB
+    for the Verse Finder on its own (so `documents-crosscheck.tsv` doesn't move) and writes
+    `work/EMB/verse-finder-crosscheck.tsv`; `report.py` gains its section and targets.
+  - `topics.Writer.unit`/`quoted` take `italic=`; only `perspectives.write` passes it. A unit
+    already holding italics files the hygiene problem `italics-inside-italics` (blocks the write;
+    none does).
+  - 11 synthetic tests in `test_emb_versefinder.py` and one in `test_emb_topics.py` (made-up
+    text); the box test now expects the italics.
+- **The Verse Finder, measured and held as targets:** 191 pages (a 7-page index of 183 links;
+  184 topic pages, one topic on two); 183 topics, paired with the index page by page; 1,286
+  entries, each a statement and one reference; 0 lines of another form (no sub-entries). By
+  form: 154 topics with entries only, 21 with a "see also" (23 topics named: 19 one, 2 two), 8
+  "see" redirects without entries (11 named: 6 one, 1 two, 1 three). One pointer prints its
+  target's space as a hyphen; pointers are matched by link page and letters.
+- **References:** 1,286 (1,287 parts): 799 verses (one entry prints a two-verse list), 486
+  ranges in a chapter, 1 across chapters (EPH 5:21–6:4), 1 whole chapter. Expanded verse by
+  verse: **3,157 topic–verse links**; 3 verses cited twice under a topic kept once; 2 verses the
+  NLT omits skipped (MRK 9:44, 9:46, inside MRK 9:43-48, topic 160). Link pages: 1,243 agree,
+  43 a page off, 0 unexplained. Print order is canonical in every topic.
+- **The topics** (`topics/EMB.json`): ids `vf-1` … `vf-183` in the book's order (numbers: names
+  are book text), section the name's first letter, `see_also` the first target of each of the 8
+  redirects (`see_also` is a redirect to clients, so "see also" stays in the document).
+- **The document** (`front-matter-6`, ordinal 6, titled as the outline names it): each topic
+  `## <name>`, its pointer an italic paragraph, its entries a `- ` list with a `ref:` link each
+  (1,287 links); 11,000 words, 94,985 bytes.
+- **Perspectives:** neither the PDF's text layer nor the EPUB sets a box's quotation or saying
+  in italics. Now 58 units (lines and paragraphs) are italic, each its own emphasis with the
+  edge punctuation outside it (the renderer's rule); references and attributions unchanged.
+- **Cross-check (with `--epub`)**, 183 topics: 88 agree; 0 fixed PDF quirks; **0 fix
+  regressions**; 87 visible EPUB damage; 7 splices; 1 loss with evidence; **0 open**; the EPUB
+  lost one topic's opening (#85). Keying by entry was tried and dropped: entry openings recur
+  later in the book and throw the sequential search off.
+- **Unchanged:** `EMB.json`, `markers.json`, the 110 images and all seven earlier cross-check TSVs
+  are byte-identical; the 73 documents are the same entries, first in the file and byte for
+  byte; `notes/EMB.json` differs in exactly the 26 Perspectives notes, only in `text`, each with
+  the same plain text. A run takes ~2 min 22 s and is byte-identical on re-run (125 files by
+  sha256).
+- **Proof:**
+  - `make build-db` loads 74 documents and 5,502 topics (5,319 + 183), 141,295 topic–verse links,
+    with no error; `bible.db` 305,848,320 → 306,176,000 bytes (+0.3 MiB).
+  - A local API on :8077, against the server: `/v1/topics` lists both sources (5,319 / 183),
+    total 5,502; `?source=` pages each; an unknown source is 400; `vf-1` with its 12 verses in
+    EMB; EXO 21:22's topics name both sources (4; the Nave's ones equal to the server's); CARE's
+    detail and verses and a Nave's list page equal to the server's apart from `source`; 20
+    translations, only EMB's `document_count` changed (73 → 74); the 73 documents equal,
+    `front-matter-6` new; all 7,597 other EMB notes in 1,189 chapters equal; the 26 boxes differ
+    only in `text`, same plain text (GEN 39:23's shown by shape); NET John 3's 71 notes equal.
+- **`make check` green** (1,065 passed, 48 deselected; ruff and pyright strict clean; openapi.json
+  unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.

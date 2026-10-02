@@ -16,8 +16,9 @@ notes** (V8-S2b), all five **features**: the articles the text calls out at a pa
 Women, and God; Someone You Should Know; Personal Gold (V8-S3a) — and What the Bible Says About
 and Perspectives (V8-S3b), the **charts** with their images (V8-S4b), the 66 **book
 introductions** with their reading-time figures (V8-S5b), and the **front matter**, the **One
-Year Reading Plan** and **Personal Gold's author notes and credits** (V8-S5c), as documents. The
-Verse Finder follows in a later slice (SPEC §7).
+Year Reading Plan** and **Personal Gold's author notes and credits** (V8-S5c), as documents, and
+the **Tyndale Verse Finder** (V8-S6b) as a second topical source beside Nave's and as one more
+document.
 
 ## The user flow
 
@@ -26,7 +27,7 @@ Verse Finder follows in a later slice (SPEC §7).
 2. **Install poppler-utils** — the converter calls its `pdftohtml` (e.g.
    `sudo apt install poppler-utils`). Nothing else: the converter is standard-library Python
    plus `bible-core`, already in the repo's environment.
-3. **Run the one command** from the repo root (under two minutes):
+3. **Run the one command** from the repo root (about two and a half minutes):
 
    ```bash
    uv run python scripts/convert_emb.py --pdf "<your EMB.pdf>" --epub "<your EMB.epub>"
@@ -39,14 +40,18 @@ Verse Finder follows in a later slice (SPEC §7).
    code is non-zero.
 5. **Rebuild** Concord: `make build-db` for a local run, or `make docker-build-private` for your
    own Docker image (below). The build summary then counts one more translation, EMB's notes,
-   its 110 images (assets: 44 charts and 66 reading-time figures) and its 73 documents (66 book
-   introductions, 5 front-matter pieces, the reading plan and Personal Gold's authors).
+   its 110 images (assets: 44 charts and 66 reading-time figures), its 74 documents (66 book
+   introductions, 6 front-matter pieces — the sixth the Verse Finder as printed — the reading
+   plan and Personal Gold's authors) and the Verse Finder's 183 topics among the topics.
 6. **Served.** `EMB` appears in `GET /v1/translations` as "Every Man's Bible (NLT)", with its
    `note_count`, and reads through every existing endpoint; its notes through
    `/v1/translations/EMB/notes/{book}/{chapter}` and `/v1/notes/search`; a chart's image through
    `/v1/translations/EMB/assets/{name}`, the name its note gives in `image`; the documents
    through `/v1/translations/EMB/documents` (`?book=`, `?kind=`) and
-   `/v1/translations/EMB/documents/{slug}` ([documents-ingest](documents-ingest.md)).
+   `/v1/translations/EMB/documents/{slug}` ([documents-ingest](documents-ingest.md)); the Verse
+   Finder's topics through `/v1/topics?source=Tyndale Verse Finder`, `/v1/topics/{id}`,
+   `/v1/topics/{id}/verses` and `/v1/verses/{ref}/topics`, each topic with its `source`
+   ([topics-ingest](topics-ingest.md)).
 
 The same PDF always gives byte-identical output, so re-running is safe.
 
@@ -56,7 +61,8 @@ The same PDF always gives byte-identical output, so re-running is safe.
 |---|---|
 | `data/private/EMB.json` | The translation: Concord's translation contract, code `EMB`, attribution read from the book's copyright page |
 | `data/private/notes/EMB.json` | Its textual and study notes, its five features and its charts: the notes contract (`docs/v4/notes-ingest.md`, ADR-0011) |
-| `data/private/documents/EMB.json` | The 66 book introductions, then the front matter, the reading plan and Personal Gold's authors: the documents contract (`docs/v8/documents-ingest.md`, ADR-0012) |
+| `data/private/documents/EMB.json` | The 66 book introductions, then the front matter, the reading plan, Personal Gold's authors and the Verse Finder as printed: the documents contract (`docs/v8/documents-ingest.md`, ADR-0012) |
+| `data/private/topics/EMB.json` | The Verse Finder as a topical source: the topics contract (`docs/v8/topics-ingest.md`, ADR-0013) |
 | `data/private/assets/EMB/chart-01.jpg` … `chart-44.jpg` | Each chart's image, exactly as the PDF stores it, numbered in the book's order (ADR-0012) |
 | `data/private/assets/EMB/reading-time-gen.jpg` … | Each introduction's reading-time figure, exactly as the PDF stores it, named by its book |
 | `data/private/work/EMB/markers.json` | Where each removed `*` sat (book, chapter, verse, offset, where, target page, order) — the textual notes' anchors |
@@ -67,6 +73,7 @@ The same PDF always gives byte-identical output, so re-running is safe.
 | `data/private/work/EMB/charts-crosscheck.tsv` | Each chart's index entry and image against the EPUB's (local only) |
 | `data/private/work/EMB/introductions-crosscheck.tsv` | Every introduction finding by book, section and class (local only) |
 | `data/private/work/EMB/documents-crosscheck.tsv` | Every other document's finding by piece and section, plan day, author note or credit, and class (local only) |
+| `data/private/work/EMB/verse-finder-crosscheck.tsv` | Every Verse Finder topic's finding by topic number and class (local only) |
 | `data/private/work/EMB/summary.txt` | The printed summary |
 
 No loader scans `data/private/work/`. Notes on the text:
@@ -116,7 +123,10 @@ SPEC §4.2):
 - **A Perspectives box** stands inside the Bible text. Its note holds the passage it quotes, that
   passage's reference as a link, the saying and the attribution, as printed (no title: the box
   prints none). It attaches at the end of the verse the box follows, and its passages are the
-  reference the box prints.
+  reference the box prints. The quoted passage and the saying are set in italics (since V8-S6b;
+  the book prints them roman): each printed line or paragraph is its own emphasis, closed before
+  each line break, with the punctuation at either end outside it as everywhere the converter
+  writes italics; the reference and the attribution stay as printed.
 - Where a topic or box shares a verse end with a Men, Women, and God article, it shows in the
   book's order, and the verse's earlier notes keep their numbers.
 
@@ -172,10 +182,28 @@ Notes on the front matter, the reading plan and Personal Gold's authors (documen
   printed) over its four readings, each a `ref:` link a client can open. A reading that runs on
   into the next book is two links, the text unchanged; a reading ending on part of a verse
   ("…a") links the whole verse. The plan's month list is navigation and isn't copied.
+- **The Verse Finder** is one more front-matter document, `front-matter-6`, the book's section as
+  printed: each topic a heading, its "see" or "see also" line in italics, and its entries as a
+  list, each a statement and its reference as a `ref:` link. Its index is navigation and isn't
+  copied.
 - **Personal Gold's authors** is one document, `about-1`: the author index's notes as printed
   (each author's name in bold), then the Personal Gold index's entries — each excerpt's title,
   its author, and the credit for the book it is taken from. Each ties to its article; the
   summary lists the one article whose author has no note.
+
+Notes on the Verse Finder as topics (`topics/EMB.json`; SPEC §4.5, ADR-0013):
+
+- **Every topic the book lists** (183), in the book's order, with id `vf-<n>` (its place in the
+  book — a number, as topic names are the book's words), its name as printed, and its section
+  (the name's first letter). The source is "Tyndale Verse Finder".
+- **Its verses** are every reference it gives, expanded verse by verse: a range, a whole
+  chapter, a range across chapters, a list. A verse the NLT omits is skipped (the summary lists
+  it); a verse cited twice under one topic is kept once.
+- **A "see" topic** (no entries of its own) points at its first target in `see_also`, which
+  clients follow. A "see also" between topics that both carry verses can't be a `see_also`
+  (clients read it as a redirect and would hide the topic's own verses); it, the further
+  targets of a "see" naming more than one, and every statement beside a reference live in the
+  `front-matter-6` document.
 
 ## Reading the summary
 
@@ -274,6 +302,17 @@ Notes on the front matter, the reading plan and Personal Gold's authors (documen
   words; one found only loosely (words run together, a scrap glued on) is damaged, and one whose
   opening the EPUB lost runs into the part before it (listed). The same classes and evidence
   rules; again *fix regressions* and *open, EPUB text without damage* must be **0**.
+- **Verse Finder** — its pages (191) and index links (183), topics (183), entries (1,286), lines
+  of another form (0: the book prints no sub-entries), references (1,286) by shape and those
+  printing a list, "see" redirects and "see also" pointers with the topics they name, the
+  topic–verse links, verses cited twice under a topic, verses the NLT omits (listed), link
+  pages by evidence, and the document's words and bytes. The checks: 183 topics paired with
+  the index; every line placed; every reference a real passage; every pointer names a real
+  topic; link pages explained; hygiene and Markdown. Any ✗ blocks the write.
+- **Verse Finder cross-check** (with `--epub`) — keyed by topic number (each topic's name,
+  pointer and entries), cut from the EPUB as the documents are, on its own so the other
+  documents' findings don't move. The same classes and evidence rules; *fix regressions* and
+  *open, EPUB text without damage* must be **0**.
 - **Charts cross-check** (with `--epub`) — the EPUB's images are re-encoded smaller, so it can't
   witness bytes. Its Charts Index witnesses each title and reference (*agree*, *visible EPUB
   damage*, or *open*, which must be **0**), and its images witness where each chart stands: a
@@ -331,6 +370,8 @@ under it. The converter itself holds no EMB text, and its tests use small synthe
   ever committed under `data/` (ADR-0012).
 - `test_licensing_safety.test_clean_checkout_bakes_zero_documents` — a clean checkout bakes no
   documents (ADR-0012).
+- `test_licensing_safety.test_clean_checkout_bakes_zero_private_topics` — a clean checkout bakes
+  the committed topics only, never the Verse Finder (ADR-0013).
 
 See [../../THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES) and
 [../../data/SOURCES.md](../../data/SOURCES.md) for the licensing record.
