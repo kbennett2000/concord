@@ -30,6 +30,7 @@ from bible_core.queries import (
     count_place_verses,
     count_topic_verses,
     distinct_place_types,
+    get_asset,
     get_books,
     get_chapter,
     get_cross_references,
@@ -66,7 +67,7 @@ from bible_semantic.search import cosine_top_k
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import Response
 
-from .caching import cached_json_response, no_store_json_response
+from .caching import cached_bytes_response, cached_json_response, no_store_json_response
 from .dependencies import (
     get_conn,
     resolve_display_translation,
@@ -81,6 +82,7 @@ from .errors import (
     SemanticBusyError,
     SemanticTimeoutError,
     SemanticUnavailableError,
+    UnknownAssetError,
     UnknownJourneyError,
     UnknownPlaceError,
     UnknownStrongsError,
@@ -588,6 +590,30 @@ def notes_endpoint(
         notes=[_translator_note(row) for row in rows],
     )
     return cached_json_response(response, request)
+
+
+_IMAGE_BYTES = {"schema": {"type": "string", "format": "binary"}}
+
+
+@router.get(
+    "/translations/{translation}/assets/{name}",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The image's bytes, exactly as loaded, with their media type.",
+            "content": {"image/jpeg": _IMAGE_BYTES, "image/png": _IMAGE_BYTES},
+        }
+    },
+)
+def asset_endpoint(translation: str, name: str, request: Request, conn: Conn) -> Response:
+    # One of a translation's images (ADR-0012) — a chart a note names in `image`. Unknown
+    # translation → 404 unknown_translation; a name the translation lacks (whatever its shape)
+    # → 404 unknown_asset. The bytes never change, so the immutable ETag + Cache-Control apply.
+    translation_id = resolve_translation(request, translation)
+    asset = get_asset(conn, translation_id, name)
+    if asset is None:
+        raise UnknownAssetError(translation_id, name)
+    return cached_bytes_response(asset.data, asset.media_type, request)
 
 
 def _section_heading(row: SectionHeadingRow) -> SectionHeading:

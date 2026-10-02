@@ -515,7 +515,7 @@
         "type": "object"
       },
       "TranslatorNote": {
-        "description": "One translator's note: its canonical anchor, the point ``char_offset`` a client uses to\nplace the marker, and the note's own cross-references. ``type`` is one of tn, sn, tc, map,\nother, article, chart, or null. The v8 fields (ADR-0011) follow: the source's ``label`` for\nthe kind, a ``title``, ``text_format`` (``\"markdown\"`` or null for plain text; Markdown may\ncarry ``ref:`` links), the ``passages`` covered, and ``image`` (reserved, always null) \u2014\nnull or empty when a source doesn't use them.",
+        "description": "One translator's note: its canonical anchor, the point ``char_offset`` a client uses to\nplace the marker, and the note's own cross-references. ``type`` is one of tn, sn, tc, map,\nother, article, chart, or null. The v8 fields (ADR-0011) follow: the source's ``label`` for\nthe kind, a ``title``, ``text_format`` (``\"markdown\"`` or null for plain text; Markdown may\ncarry ``ref:`` links), the ``passages`` covered, and ``image`` (the name of one of the\ntranslation's images, served at ``/v1/translations/{translation}/assets/{name}`` \u2014 ADR-0012)\n\u2014 null or empty when a source doesn't use them.",
         "properties": {
           "book": {
             "title": "Book",
@@ -2091,6 +2091,61 @@
           }
         },
         "summary": "Translations Endpoint"
+      }
+    },
+    "/v1/translations/{translation}/assets/{name}": {
+      "get": {
+        "operationId": "asset_endpoint_v1_translations__translation__assets__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "translation",
+            "required": true,
+            "schema": {
+              "title": "Translation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The image's bytes, exactly as loaded, with their media type."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Asset Endpoint"
       }
     },
     "/v1/translations/{translation}/headings/{book}/{chapter}": {

@@ -37,8 +37,9 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 # One `pytest` run from the repo root covers both packages' test suites.
 [tool.pytest.ini_options]
 testpaths = ["bible-core/tests", "bible-api/tests", "bible-semantic/tests", "scripts/tests"]
-# scripts/ holds the v8 converter package (emb_convert), imported by its tests.
-pythonpath = ["scripts"]
+# scripts/ holds the v8 converter package (emb_convert), imported by its tests; bible-core/tests
+# holds imagekit, the made-up images every suite's image tests share (ADR-0012).
+pythonpath = ["scripts", "bible-core/tests"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: slow/integration tests, excluded from the default run (CLAUDE.md)",

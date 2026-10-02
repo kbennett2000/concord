@@ -40,7 +40,7 @@ def test_note_count(client: TestClient) -> None:
     counts = {
         t["id"]: t["note_count"] for t in client.get("/v1/translations").json()["translations"]
     }
-    assert counts == {"KJV": 7, "OSHB": 0, "SBLGNT": 0, "WEB": 0, "YLT": 0}
+    assert counts == {"KJV": 8, "OSHB": 0, "SBLGNT": 0, "WEB": 0, "YLT": 0}
 
 
 def test_immutable_cache(client: TestClient) -> None:

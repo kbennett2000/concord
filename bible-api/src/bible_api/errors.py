@@ -107,6 +107,19 @@ class UnknownJourneyError(Exception):
         return {"journey_id": self.journey_id}
 
 
+class UnknownAssetError(Exception):
+    """A requested asset name (a path resource) is not among a translation's images → 404."""
+
+    def __init__(self, translation: str, name: str) -> None:
+        super().__init__(f"unknown asset {name!r} in translation {translation!r}")
+        self.translation = translation
+        self.name = name
+
+    @property
+    def detail(self) -> dict[str, Any]:
+        return {"translation": self.translation, "name": self.name}
+
+
 class FilterError(Exception):
     """A query-param *filter* value did not match a known value (e.g. ``?type=``/``?status=``).
 
@@ -207,6 +220,10 @@ async def _handle_unknown_journey(_request: Request, exc: Exception) -> Response
     return _error_response(404, "unknown_journey", str(exc), cast(UnknownJourneyError, exc).detail)
 
 
+async def _handle_unknown_asset(_request: Request, exc: Exception) -> Response:
+    return _error_response(404, "unknown_asset", str(exc), cast(UnknownAssetError, exc).detail)
+
+
 async def _handle_filter(_request: Request, exc: Exception) -> Response:
     filter_exc = cast(FilterError, exc)
     return _error_response(400, filter_exc.code, str(exc), filter_exc.detail)
@@ -233,5 +250,6 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UnknownTopicError, _handle_unknown_topic)
     app.add_exception_handler(UnknownStrongsError, _handle_unknown_strongs)
     app.add_exception_handler(UnknownJourneyError, _handle_unknown_journey)
+    app.add_exception_handler(UnknownAssetError, _handle_unknown_asset)
     app.add_exception_handler(FilterError, _handle_filter)
     app.add_exception_handler(RequestValidationError, _handle_validation)

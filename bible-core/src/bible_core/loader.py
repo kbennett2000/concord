@@ -82,6 +82,7 @@ class BuildStats:
     place_verse_links_skipped: int
     notes: int
     note_cross_references: int
+    assets: int
     section_headings: int
     topics: int
     topic_verses: int
@@ -375,6 +376,7 @@ def build_database(
     lexicon_dir: Path | None = None,
     tokens_dir: Path | None = None,
     journeys_dir: Path | None = None,
+    assets_dirs: list[Path] | None = None,
 ) -> BuildStats:
     """Build a complete ``bible.db`` from the data under ``data_dirs`` (translations),
     ``cross_ref_dirs`` (cross-reference TSV), ``geo_dir`` (geography JSONL), ``notes_dirs``
@@ -386,7 +388,11 @@ def build_database(
     non-redistributable notes and is gitignored + dockerignored, so a clean build bakes zero
     private notes. Both are scanned non-recursively and are separate from the translation scan
     (``data_dirs``) so a notes file is never mistaken for a translation. Absent/empty dirs load
-    nothing — not an error."""
+    nothing — not an error.
+
+    ``assets_dirs`` is normally ``[data/private/assets]`` (ADR-0012): a translation's images,
+    one folder per translation code. They load before the notes, which may name them in
+    ``image``; a clean build has no ``private/`` and bakes zero assets."""
     start = time.perf_counter()
     cross_ref_dirs = cross_ref_dirs or []
     db_path.unlink(missing_ok=True)
@@ -457,11 +463,14 @@ def build_database(
                 else GeoStats(0, 0, 0, 0, {})
             )
 
-            # Notes loader — same local-import cycle break as geo (notes.py imports LoaderError).
+            # Assets, then notes (a note's `image` names an asset) — same local-import cycle
+            # break as geo (assets.py and notes.py import LoaderError).
+            from .assets import load_assets
             from .notes import NotesStats, load_notes
 
+            assets_stats, asset_names = load_assets(conn, assets_dirs or [], frozenset(seen_codes))
             notes_stats = (
-                load_notes(conn, notes_dirs, frozenset(seen_codes), alias_to_book)
+                load_notes(conn, notes_dirs, frozenset(seen_codes), alias_to_book, asset_names)
                 if notes_dirs is not None
                 else NotesStats(0, 0, {})
             )
@@ -522,6 +531,7 @@ def build_database(
         place_verse_links_skipped=geo_stats.verse_links_skipped,
         notes=notes_stats.notes,
         note_cross_references=notes_stats.note_cross_references,
+        assets=assets_stats.assets,
         section_headings=heading_total,
         topics=topics_stats.topics,
         topic_verses=topics_stats.topic_verses,
@@ -543,6 +553,11 @@ def _default_data_dirs(base: Path) -> list[Path]:
     if private.is_dir():
         dirs.append(private)
     return dirs
+
+
+def _default_assets_dirs(base: Path) -> list[Path]:
+    """`<base>/private/assets` (ADR-0012): absent from a clean checkout, so zero assets."""
+    return [base / "private" / "assets"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -578,6 +593,8 @@ def main(argv: list[str] | None = None) -> int:
     tokens_dir = base / "strongs"
     # Committed curated journeys (Scripture-derived itineraries over v3 places) — ship like geo.
     journeys_dir = base / "journeys"
+    # A translation's images (ADR-0012), user-supplied under the dual-ignored `data/private/`.
+    assets_dirs = _default_assets_dirs(base)
     try:
         stats = build_database(
             Path(args.output),
@@ -589,6 +606,7 @@ def main(argv: list[str] | None = None) -> int:
             lexicon_dir,
             tokens_dir,
             journeys_dir,
+            assets_dirs,
         )
     except LoaderError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -606,6 +624,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{stats.cross_references} cross-references{clamped}, "
             f"{stats.places} places, {stats.place_verses} place-verse links, "
             f"{stats.notes} notes, {stats.note_cross_references} note cross-references, "
+            f"{stats.assets} assets, "
             f"{stats.section_headings} section headings, "
             f"{stats.topics} topics, {stats.topic_verses} topic-verse links, "
             f"{stats.strongs_entries} Strong's entries, {stats.word_tokens} word tokens, "
