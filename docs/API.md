@@ -11,7 +11,9 @@ original-language texts — the SBL Greek New Testament (`SBLGNT`) and the Hebre
   [`docs/openapi.json`](openapi.json) (also served live at `/openapi.json`), versioned with the
   release and CI-checked against the code — build clients against it with confidence.
 - **Responses:** JSON (`application/json`). Verse text is returned exactly as stored —
-  Unicode, editorial brackets (`[is]`), and punctuation are preserved untouched.
+  Unicode, editorial brackets (`[is]`), and punctuation are preserved untouched. The one
+  exception is a translation's images, which come back as their own bytes
+  ([assets](#get-v1translationstranslationassetsname)).
 
 ## Contents
 
@@ -30,6 +32,7 @@ original-language texts — the SBL Greek New Testament (`SBLGNT`) and the Hebre
 - [`GET /v1/journeys/{id}`](#get-v1journeysid)
 - [`GET /v1/places/{id}/journeys`](#get-v1placesidjourneys)
 - [`GET /v1/translations/{translation}/notes/{book}/{chapter}`](#get-v1translationstranslationnotesbookchapter)
+- [`GET /v1/translations/{translation}/assets/{name}`](#get-v1translationstranslationassetsname)
 - [`GET /v1/notes/search`](#get-v1notessearch)
 - [`GET /v1/topics`](#get-v1topics)
 - [`GET /v1/topics/{id}`](#get-v1topicsid)
@@ -86,6 +89,7 @@ Every error uses one envelope:
 | `no_verses_found` | 404 | A well-formed reference matches no verse in any requested translation (e.g. `Genesis 999:1`). |
 | `no_match` | 404 | `/random` filters match nothing (e.g. `book=GEN&testament=NT`). |
 | `unknown_place` | 404 | A place id in a path resolves to no place (`/places/nope`). `detail.place_id` echoes it. |
+| `unknown_asset` | 404 | A loaded translation has no image by that name (`/translations/EMB/assets/nope.jpg`). `detail` echoes `translation` and `name`. |
 | `unknown_type` | 400 | A `/places?type=` filter value isn't a known place type; `detail.available` lists the valid types. |
 | `unknown_status` | 400 | A `/places?status=` filter value isn't one of identified / disputed / unknown / symbolic / multiple. |
 | `invalid_search_query` | 400 | Malformed FTS5 syntax; the SQLite message is in `detail.fts5_error`. |
@@ -703,7 +707,7 @@ when a source doesn't use them, as for NET:
 | `title` | The item's heading. |
 | `text_format` | `"markdown"` when `text` is Markdown; `null` means plain text. |
 | `passages` | The ranges the note covers beyond its anchor verse, in the same book: `start_chapter`, `start_verse`, `end_chapter`, `end_verse` and a `reference` ("Genesis 12:10-20", "Genesis 12:10-13:4"). |
-| `image` | Reserved for charts (the images slice); always `null` for now. |
+| `image` | The name of one of the translation's images, for a chart: fetch it from [`/v1/translations/{translation}/assets/{name}`](#get-v1translationstranslationassetsname) ([ADR-0012](adr/ADR-0012-images-and-documents.md)). |
 
 **`ref:` links.** Markdown `text` marks a reference a client can jump to as an inline link,
 `[display text](ref:TARGET)`. TARGET is a USFM book code, then `.C` (chapter), `.C-C` (chapter
@@ -719,6 +723,39 @@ book + chapter (or `?verse`) that simply has no notes returns empty.
 
 **Errors:** `404 unknown_translation` · `404 unknown_book` · `422 invalid_parameter`
 (`chapter`/`verse` < 1). **Caching:** immutable.
+
+## `GET /v1/translations/{translation}/assets/{name}`
+
+One of a translation's images: a chart a note names in `image`
+([ADR-0012](adr/ADR-0012-images-and-documents.md)). The response is the image itself, exactly as
+it was loaded, not JSON.
+
+> **Images are user-supplied and never shipped**, like notes. The published image holds **zero**,
+> so on a stock image every name is a `404`. They appear only after you bake your own: put them
+> in the gitignored `data/private/assets/<TRANSLATION>/` and rebuild (`make build-db`); see
+> [notes-ingest](v4/notes-ingest.md) for the rules (JPEG or PNG, lower-case names, at most 2 MiB).
+
+| Param | In | Type | Notes |
+|---|---|---|---|
+| `translation` | path | string | A loaded translation id (case-insensitive). Unknown → `404 unknown_translation`. |
+| `name` | path | string | The image's name, exactly as a note's `image` gives it (case-sensitive). Unknown → `404 unknown_asset`. |
+
+```bash
+$ curl -sD- -o chart-01.jpg 'localhost:8000/v1/translations/EMB/assets/chart-01.jpg'
+HTTP/1.1 200 OK
+content-type: image/jpeg
+content-length: 97847
+etag: "…"
+cache-control: public, max-age=31536000, immutable
+vary: Origin
+x-content-type-options: nosniff
+```
+
+`content-type` is `image/jpeg` or `image/png`. The `ETag` is derived from the bytes, so it's the
+same on every request; `If-None-Match` returns `304`.
+
+**Errors:** `404 unknown_translation` · `404 unknown_asset` (`detail.translation`,
+`detail.name`). Any name the translation lacks is a 404, whatever its shape. **Caching:** immutable.
 
 ## `GET /v1/notes/search`
 

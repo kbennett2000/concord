@@ -64,8 +64,8 @@ One file per translation. The loader (`bible_core.notes`) reads every `*.json` d
       "passages": [              // optional — ranges covered beyond the anchor, in the same book
         { "start_chapter": 3, "start_verse": 16, "end_chapter": 3, "end_verse": 21 }
         // a range may cross chapters; a note may have several
-      ]
-      // "image" is reserved for charts until the images slice (V8-S4): omit it or use null
+      ],
+      "image": "chart-01.jpg"    // optional (ADR-0012) — one of this translation's images
     }
   ]
 }
@@ -85,6 +85,7 @@ Notes on the contract:
   - `label` and `title` must be non-empty strings.
   - `text_format` accepts only `"markdown"`.
   - A passage's four numbers are ≥ 1, and its end is not before its start.
+  - `image` names one of the same translation's images (below).
 - **References inside Markdown text** are `ref:` links: `[see John 3:16](ref:JHN.3.16)`. The target
   is a USFM book code plus `.C`, `.C-C`, `.C.V`, `.C.V-V` or `.C.V-C.V`; ADR-0011 has the exact
   grammar.
@@ -94,22 +95,44 @@ Notes on the contract:
   - invalid JSON;
   - an empty `label` or `title`, or a `text_format` other than `"markdown"`;
   - a malformed or backwards passage;
-  - any `image` value;
+  - an `image` that names no image of the file's translation;
   - a `ref:` target outside the grammar.
 - The load is **idempotent** — note ids are assigned deterministically (files in sorted-path
   order, notes in array order), so the same inputs produce a byte-identical `bible.db`.
+
+## Images (ADR-0012)
+
+A note can carry a picture, such as a study Bible's chart. The picture is a file of its own, and
+the note names it in `image`:
+
+```
+data/private/assets/<TRANSLATION>/chart-01.jpg
+```
+
+- One folder per translation, named by its exact id (`EMB`, not `emb`), holding only image files.
+- Names are lower-case letters, digits, `-` and `_`, then `.jpg`, `.jpeg` or `.png`, at most 64
+  characters before the extension.
+- Only complete JPEG and PNG files are accepted, and the extension must match the content. Each is
+  at most 2 MiB and 8,192 pixels a side.
+- The bytes are baked into `bible.db` exactly as supplied and served at
+  `GET /v1/translations/<TRANSLATION>/assets/<name>`.
+- The build fails, naming the file, on anything else: an unknown translation folder, a sub-folder,
+  a bad name, a wrong or truncated file.
+
+Images are loaded before notes, so a note's `image` is checked against them.
 
 ## Why this is safe
 
 The licensing safety is the **dual-ignore rule** (SPEC v4 §2): `data/private/` is excluded by
 **both** `.gitignore` and `.dockerignore`. The Dockerfile's broad `COPY data/ data/` is *not*
 selective — the `.dockerignore` exclusion is the only thing keeping restricted data out of the
-build context and the baked `bible.db`. `data/private/notes/` sits under that already-covered
-path, so it needs no new ignore entry. Two tests enforce this:
+build context and the baked `bible.db`. `data/private/notes/` and `data/private/assets/` sit under
+that already-covered path, so they need no new ignore entry. Two tests enforce this:
 
-- `test_notes_loader.test_clean_build_with_no_private_data_yields_zero_notes` — a build with no
-  private data bakes zero notes (the published-image behavior).
-- `test_licensing_safety` — `data/private/` stays in both ignore files (the dual-ignore guard).
+- `test_notes_loader.test_clean_build_bakes_public_notes_but_zero_private_notes` — a build with
+  no private data bakes zero private notes (the published-image behavior).
+- `test_licensing_safety` — `data/private/` stays in both ignore files (the dual-ignore guard);
+  a clean checkout bakes zero images; no image is committed under `data/`.
 
 See [../../THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES) and
 [../../data/SOURCES.md](../../data/SOURCES.md) for the licensing record.
