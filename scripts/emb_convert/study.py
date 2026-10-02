@@ -241,7 +241,7 @@ class RunRefs:
 
 
 _NAMED = re.compile(r"((?:[1-3] )?[A-Z][a-z]+(?: of [A-Z][a-z]+)?) (?=\d)")
-_CHAPTER_WORD = re.compile(r"^(?:chapters?|chs?\.) ")
+_CHAPTER_WORD = re.compile(r"^(?:chapters?|chs?\.) ", re.IGNORECASE)  # "Chapters 1–3" (S5b)
 _VERSE_WORD = re.compile(r"^vv?\. ")  # "v. 25", "vv. 3-5": verses of the note's chapter
 _REF = re.compile(r"(\d+)(?::(\d+))?(?:\s*[-–]\s*(\d+)(?::(\d+))?)?(?:ff)?")
 _SEPARATOR = re.compile(r"\s*([,;])\s*")

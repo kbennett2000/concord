@@ -8,10 +8,17 @@ from emb_convert.articles import FEATURES
 from emb_convert.charts import CENSUS
 from emb_convert.crosscheck import CrossCheck, Verdict
 from emb_convert.epub_charts import ChartsCross
+from emb_convert.introductions import (
+    FIGURE_WITNESS,
+    EpubIntroductions,
+    IntroductionFindings,
+    word_sizes,
+)
 from emb_convert.notes import NotesResult
 from emb_convert.quotes import QuoteClass
 from emb_convert.text import ParseResult
 from emb_convert.textual import LabelKind
+from emb_convert.topics import Topic
 from emb_convert.validate import Validation
 
 # The S1 acceptance targets (docs/v8/SPEC.md §3, as corrected by the S1 parse).
@@ -71,6 +78,20 @@ EXPECTED: dict[str, int] = {
     "images-front matter": 4,  # cover and title images, the Old Testament's title page
     "images-feature region": 102,  # the Men, Women, and God banner (V8-S3a)
     "images-unclassified": 0,
+    # V8-S5b (docs/v8/SPEC.md §3, as corrected by the S5b parse: 10 section types)
+    "intro-introductions": 66,
+    "intro-figures": 66,
+    "intro-claimed": 66,
+    "intro-heads": 639,
+    "intro-head-forms": 11,  # 10 types, one printed once in the singular
+    "intro-heads-in-all": 7,
+    "intro-points": 66,
+    "intro-ornaments": 66,
+    "intro-timelines": 36,
+    "intro-timeline-entries": 354,
+    "intro-links": 595,
+    "intro-callouts": 3,  # Someone You Should Know callouts the S3a articles anchor at 1:1
+    "intro-headings": 5,  # chapter 1's heading, printed above the first verse (S1's)
 }
 
 
@@ -456,6 +477,12 @@ def _words(counts: list[int]) -> str:
     )
 
 
+def _turned(topic: Topic) -> str:
+    """A note on a title the index sorts with "The" last, given in normal word order."""
+    turned = topic.entry is not None and topic.title != topic.entry.name
+    return ", in normal word order" if turned else ""
+
+
 def features_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
     """The V8-S3b section: What the Bible Says About and Perspectives."""
     found = notes.features
@@ -488,7 +515,7 @@ def features_summary(notes: NotesResult, cross: CrossCheck | None) -> list[str]:
           for kind in _QUOTE_CLASSES),
         _words(found.words.get("WBSA", [])),
         _row("  index names its topic otherwise", len(region.renamed)),
-        *(f"      WBSA {t.number} (title from the index)" for t in region.renamed),
+        *(f"      WBSA {t.number} (title from the index{_turned(t)})" for t in region.renamed),
         _row("Perspectives boxes", len(boxes.boxes), "PERSP-boxes"),
         _row("  index entries", len(boxes.entries), "PERSP-entries"),
         _row("  notes", found.notes["PERSP"]),
@@ -635,4 +662,100 @@ def charts_summary(notes: NotesResult, cross: ChartsCross | None, stale: list[st
             _row("  at no chart's place", len(cross.elsewhere)),
             *(f"      {where}" for where in cross.elsewhere),
         ]  # fmt: skip
+    return lines
+
+
+def introductions_summary(
+    found: IntroductionFindings,
+    cross: CrossCheck | None,
+    witness: EpubIntroductions | None,
+) -> list[str]:
+    """The V8-S5b section: the 66 book introductions, their figures and their checks."""
+    claimed = [i.figure for i in found.introductions if i.figure is not None]
+    sizes = [len(f.data) for f in claimed]
+    types = Counter(f.media_type for f in claimed)
+    order = found.head_order
+    explained = all(f.evidence != "unexplained" for f in found.links)
+    one_each = not found.unclaimed and len(claimed) == len(found.assets)
+    in_all = sum(1 for head in order if found.heads[head] == len(found.head_lists))
+    evidence = Counter(f.evidence for f in found.links)
+    built = found.structures
+    lines = [
+        "Book introductions (documents/EMB.json kind book-introduction; assets/EMB)",
+        _row("introductions", len(found.documents), "intro-introductions"),
+        _row("section heads", sum(found.heads.values()), "intro-heads"),
+        _row("  printed forms", len(found.heads), "intro-head-forms"),
+        _row("  in every introduction", in_all, "intro-heads-in-all"),
+        *(_row(f"    {head}", found.heads[head]) for head in order),
+        _row("What's the Point boxes", built["point"], "intro-points"),
+        _row("  ornaments set aside", found.ornaments, "intro-ornaments"),
+        _row("  point lines", built["point lines"]),
+        _row("timelines", found.timelines, "intro-timelines"),
+        _row("  entries", built["timeline entries"], "intro-timeline-entries"),
+        *(_row(f"  {what}", n) for what, n in sorted(built.items())
+          if what.startswith("timeline ") and what != "timeline entries"),
+        _row("paragraphs", built["paragraph"]),
+        _row("lists", built["list"]),
+        _row("  items", built["list items"]),
+        _row("labels", built["label"]),
+        *(_row(f"  {what}", built[what])
+          for what in ("quotation labels", "sub-heads and other labels")),
+        _row("quotations", built["quotation"]),
+        *(_row(f"  {what}", built[what])
+          for what in ("quoted paragraphs", "quoted lines of poetry")),
+        _row("set aside: callout lines", found.callouts_set_aside, "intro-callouts"),
+        _row("set aside: chapter 1's heading", found.set_aside, "intro-headings"),
+        _row("links", len(found.links), "intro-links"),
+        *(_row(f"  {kind}", n) for kind, n in sorted(evidence.items())),
+        *(_row(f"  fixes: {name}", n) for name, n in sorted(found.fixes.items()) if n),
+    ]  # fmt: skip
+    if found.words:
+        (low, low_book), median, (high, high_book) = word_sizes(found)
+        lines.append(
+            f"  {'words: shortest / median / longest':<34}{low:>8,} / {median:,} / {high:,}"
+            f"  ({low_book}, {high_book})"
+        )
+    lines += [
+        _row("Introduction figures in the PDF", len(found.figures), "intro-figures"),
+        _row("  claimed by their introduction", len(claimed), "intro-claimed"),
+        *(f"  {'  ' + kind:<34}{n:>8,}" for kind, n in sorted(types.items())),
+        f"  {'  bytes (min / median / max)':<34}{_sizes(sizes):>8}",
+        _row("  bytes in all", sum(sizes)),
+        f"  {'  pixels wide (min / median / max)':<34}{_sizes([f.width for f in claimed]):>8}",
+        f"  {'  pixels high (min / median / max)':<34}{_sizes([f.height for f in claimed]):>8}",
+        "",
+        "Introductions checks (any failure blocks writing)",
+        f"  every book has its introduction   {_ok(len(found.documents) == 66)}",
+        f"  every figure claimed, one each    {_ok(one_each)}",
+        f"  links explained                   {_ok(explained)}",
+        f"  text: hygiene and Markdown        {_ok(not any(found.hygiene.values()))}",
+        f"  heads in one order; every line    {_ok(not found.errors)}",
+        "    placed; titles; parse errors",
+    ]  # fmt: skip
+    problems = [
+        *(f"unclaimed figure on p{f.page}" for f in found.unclaimed),
+        *(f"unexplained link {f.note}: {f.link}" for f in found.links
+          if f.evidence == "unexplained"),
+        *found.errors,
+    ]  # fmt: skip
+    lines += [f"    ✗ {problem}" for problem in problems[:40]]
+    for name, where in found.hygiene.items():
+        lines.append(f"    ✗ {name}: {len(where)} — {', '.join(where[:8])}")
+    if cross is not None and witness is not None:
+        lines += [
+            "",
+            *cross_summary(cross, "Cross-check: introductions, PDF vs EPUB", headings=False),
+            _row("EPUB introductions", len(witness.figures)),
+            *(
+                _row(f"  figure: {verdict}", Counter(witness.figures.values())[verdict])
+                for verdict in FIGURE_WITNESS
+            ),
+            *(
+                f"      {book}"
+                for book, verdict in witness.figures.items()
+                if verdict == FIGURE_WITNESS[2]
+            ),
+            _row("  sections whose head it lost", len(witness.lost_heads)),
+            *(f"      {where}" for where in witness.lost_heads),
+        ]
     return lines

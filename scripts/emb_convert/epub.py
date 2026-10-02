@@ -46,6 +46,7 @@ Key = tuple[str, int, int]
 # Where the conversion dropped text it left an empty, attribute-less <a>. The parser keeps a
 # sentinel there so the cross-check can tell "the EPUB shows a break at this spot".
 BREAK = "\ue000"
+IMAGE = "\ue001"  # an image in a book's introduction (V8-S5b)
 
 
 class EpubError(Exception):
@@ -62,6 +63,9 @@ class EpubBible:
     boxes: list[str] = field(default_factory=list[str])  # each Perspectives box's text (V8-S3b)
     # each image placed in a book: (book, chapter, the verse open, its path in the archive) (V8-S4b)
     images: list[tuple[str, int, int, str]] = field(default_factory=list[tuple[str, int, int, str]])
+    # each book's introduction (before its first chapter): its blocks' text, and IMAGE where an
+    # image stands (V8-S5b)
+    intros: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
 
 
 def spine_documents(archive: zipfile.ZipFile) -> list[str]:
@@ -144,6 +148,9 @@ class _Reader(HTMLParser):
 
     def image(self, src: str | None) -> None:
         """Note where an image stands: after the verse open, in a chapter of a book."""
+        if src and self.book is not None and not self.chapter:
+            self.end_block()
+            self.out.intros.setdefault(self.book, []).append(IMAGE)
         if src and self.book is not None and self.chapter:
             path = posixpath.normpath(posixpath.join(posixpath.dirname(self.document), src))
             verse = self.verse[0] if self.verse is not None else 0
@@ -207,6 +214,8 @@ class _Reader(HTMLParser):
             if block.text and self.verse is not None:
                 self.parts.append(" ")
             return
+        if self.book is not None and self.chapter == 0 and not all(b and i for _, b, i in words):
+            self.out.intros.setdefault(self.book, []).append(block.plain())  # (V8-S5b)
         if self.book is None or self.chapter == 0:
             return  # intro or front matter
         text = block.plain()

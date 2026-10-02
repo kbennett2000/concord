@@ -4,13 +4,16 @@ Writes, only when every structural check passes:
 
 - ``<out>/EMB.json`` — the translation (Concord's translation contract, code ``EMB``);
 - ``<out>/notes/EMB.json`` — its textual and study notes, feature articles and charts (ADR-0011);
+- ``<out>/documents/EMB.json`` — its 66 book introductions (ADR-0012, V8-S5b);
 - ``<out>/assets/EMB/chart-NN.jpg`` — each chart's image as the PDF stores it (ADR-0012, V8-S4b);
+- ``<out>/assets/EMB/reading-time-<book>.jpg`` — each introduction's figure, likewise (V8-S5b);
 - ``<out>/work/EMB/markers.json`` — where each removed ``*`` sat (the textual notes' anchors);
 - ``<out>/work/EMB/crosscheck.tsv`` — every verse cross-check finding by reference;
 - ``<out>/work/EMB/notes-crosscheck.tsv`` — every note cross-check finding by note;
 - ``<out>/work/EMB/articles-crosscheck.tsv`` — every article cross-check finding (V8-S3a);
 - ``<out>/work/EMB/topics-crosscheck.tsv`` — every topic and box cross-check finding (V8-S3b);
 - ``<out>/work/EMB/charts-crosscheck.tsv`` — each chart against the EPUB (V8-S4b);
+- ``<out>/work/EMB/introductions-crosscheck.tsv`` — every introduction finding (V8-S5b);
 - ``<out>/work/EMB/summary.txt`` — the printed summary.
 
 ``work/`` is never scanned by a loader. The same PDF gives byte-identical files. The run
@@ -32,10 +35,17 @@ from emb_convert.clean import Fixes, PublicWords, collapse
 from emb_convert.crosscheck import CrossCheck, cross_check
 from emb_convert.epub import parse_epub
 from emb_convert.epub_charts import charts_tsv, cross_check_epub_charts
+from emb_convert.introductions import (
+    build_introductions,
+    cross_check_epub_introductions,
+    documents_payload,
+    read_figures,
+)
 from emb_convert.layout import Layout, canonical_books, find_layout
 from emb_convert.lines import group_lines
 from emb_convert.notes import (
     build_notes,
+    context,
     cross_check_epub_articles,
     cross_check_epub_features,
     cross_check_epub_notes,
@@ -46,6 +56,7 @@ from emb_convert.report import (
     articles_summary,
     charts_summary,
     features_summary,
+    introductions_summary,
     notes_summary,
     summary,
 )
@@ -242,6 +253,7 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
         doc = parse_pdf_xml(run_pdftohtml(pdf, Path(images)))
         layout = find_layout(doc)
         charts = find_charts(doc, layout)  # reads each chart's bytes while the files exist
+        figures, figure_errors = read_figures(doc, layout)  # and each introduction figure's
     public = PublicWords(load_public_texts())
     result = parse_bible(doc, layout, Fixes(), public, charts.images)
     skeleton = load_skeleton()
@@ -258,8 +270,20 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     charts_cross = (
         cross_check_epub_charts(charts.charts, notes.charts.spots, epub, skeleton) if epub else None
     )
+    intros = build_introductions(
+        doc, layout, result, context(doc, layout, result, public, skeleton), figures
+    )
+    intros.errors += figure_errors
+    intros_cross, intros_witness = (
+        cross_check_epub_introductions(
+            intros, parse_epub(epub, canonical_books(), skeleton), doc, layout, _texts(result)
+        )
+        if epub
+        else (None, None)
+    )
+    assets = {**notes.charts.assets, **intros.assets}
     assets_dir = out_dir / "assets" / CODE
-    stale = stale_assets(assets_dir, notes.charts.assets)
+    stale = stale_assets(assets_dir, assets)
     rights = copyright_lines(doc, layout)
     lines = summary(
         result, validation, cross, source=pdf.name, pages=doc.page_count,
@@ -269,20 +293,25 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
     lines += ["", *articles_summary(notes, articles_cross)]
     lines += ["", *features_summary(notes, features_cross)]
     lines += ["", *charts_summary(notes, charts_cross, stale)]
+    lines += ["", *introductions_summary(intros, intros_cross, intros_witness)]
     ok = (
         validation.ok
         and not result.diagnostics.unclassified
         and not result.diagnostics.errors
         and notes.ok
+        and intros.ok
         and not stale
     )
     work = out_dir / "work" / CODE
     notes_file = out_dir / "notes" / f"{CODE}.json"
+    documents_file = out_dir / "documents" / f"{CODE}.json"
     if ok:
         work.mkdir(parents=True, exist_ok=True)
         notes_file.parent.mkdir(parents=True, exist_ok=True)
+        documents_file.parent.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{CODE}.json").write_text(_dump(translation_payload(result, rights)), "utf-8")
         notes_file.write_text(_dump(notes_payload(notes, CODE)), "utf-8")
+        documents_file.write_text(_dump(documents_payload(intros, CODE)), "utf-8")
         (work / "markers.json").write_text(_dump(marker_payload(result.markers)), "utf-8")
         if cross is not None:
             (work / "crosscheck.tsv").write_text(crosscheck_tsv(cross), "utf-8")
@@ -300,10 +329,15 @@ def convert(pdf: Path, epub: Path | None, nlt: Path | None, out_dir: Path) -> tu
             )
         if charts_cross is not None:
             (work / "charts-crosscheck.tsv").write_text(charts_tsv(charts_cross), "utf-8")
-        write_assets(assets_dir, notes.charts.assets)
+        if intros_cross is not None:
+            (work / "introductions-crosscheck.tsv").write_text(
+                crosscheck_tsv(intros_cross, "introduction\tchapter\toccurrence"), "utf-8"
+            )
+        write_assets(assets_dir, assets)
         lines += [
             "",
-            f"Wrote {out_dir / f'{CODE}.json'}, {notes_file}, {assets_dir}/ and {work}/",
+            f"Wrote {out_dir / f'{CODE}.json'}, {notes_file}, {documents_file}, {assets_dir}/ "
+            f"and {work}/",
         ]
     else:
         lines += ["", "Checks failed — nothing written."]
