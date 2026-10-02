@@ -24,7 +24,7 @@ EXO = start("EXO") + 1
 TOPIC = WBSA_PAGE + 1
 TOPIC_2 = WBSA_PAGE + 3
 MWG_ARTICLE = MWG_PAGE + 1
-PUBLIC = ("aw " * 30,)  # "A. W." must not read as a broken "aw"
+PUBLIC = ("qz " * 30,)  # "Q. Z." must not read as a broken "qz"
 
 V1 = "A poetic line, a long poetic line that runs to the margin and wraps back."
 V2 = "Second made-up verse that runs on to the end."
@@ -68,7 +68,7 @@ GENESIS = [
         V3,
         "GENESIS 1:3",
         [
-            T("A. W. SOMEONE (1900–1950), 30TH ", 300, 61, 7, width=150),
+            T("Q. Z. SOMEONE (1900–1950), 12TH ", 300, 61, 7, width=150),
             T("MADE-UP BOOK", 300, 211, 7, italic=True, width=60),
         ],
     ),
@@ -240,7 +240,7 @@ def test_boxes_split_into_their_parts_and_anchor_where_they_stand() -> None:
     assert first["text"].split("\n\n") == [
         f"{V3}\\\n[GENESIS 1:3](ref:GEN.1.3)",
         "A made-up saying,\\\non two short lines.",
-        "A. W. SOMEONE (1900–1950), 30TH *MADE-UP BOOK*",
+        "Q. Z. SOMEONE (1900–1950), 12TH *MADE-UP BOOK*",
     ]
     # inside verse 4, after its passage: the end of 1:4, both parts as passages
     assert (second["chapter"], second["verse"], second["char_offset"]) == (1, 4, len(verses[4]))
@@ -327,7 +327,7 @@ PAGE = """<html><body>
 <p><sup>3</sup> A stanza after a gap.</p>
 <hr/><p><small><a>PERSPECTIVES</a>mall&gt;</small></p>
 <p>A stanza after a gap.</p><p><small>GENESIS 1:3</small></p>
-<p>A made-up saying, on two short lines.</p><p><small>A. W. SOMEONE</small></p><hr/>
+<p>A made-up saying, on two short lines.</p><p><small>Q. Z. SOMEONE</small></p><hr/>
 <p><b>MADE-UP FEATURE . . . INDEX</b></p><p><a>Patience</a></p>
 <p><b>What the Bible Says about patience</b></p>
 <p><b>A MADE-UP SUBHEAD</b> Second made-up verse that runs on to the end.
@@ -355,6 +355,6 @@ def test_epub_topics_and_boxes_are_found_and_keyed(tmp_path: Path) -> None:
     assert topics.damaged == {("WBSA 2", 0, 1)} and not topics.missing
     boxes = parse_epub_boxes(path, notes.features.box_order)
     assert boxes.texts[("PERSP Genesis 1:3", 0, 1)] == (
-        "A stanza after a gap. GENESIS 1:3 A made-up saying, on two short lines. A. W. SOMEONE"
+        "A stanza after a gap. GENESIS 1:3 A made-up saying, on two short lines. Q. Z. SOMEONE"
     )
     assert boxes.missing == [("PERSP Genesis 1:1; 1:2", 0, 1)]  # not in this EPUB

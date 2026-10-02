@@ -145,7 +145,7 @@ _HYGIENE: dict[str, re.Pattern[str]] = {
     "asterisk": re.compile(r"\*"),
     "double-space": re.compile(r"  "),
     "letter-spacing": re.compile(r"(?:^|\s)(?:[A-Za-z] ){2,}[A-Za-z](?:\s|[.,;:!?]|$)"),
-    # digits glued to letters — but not ordinals ("430th", small capitals "30TH"), Dead Sea
+    # digits glued to letters — but not ordinals ("430th", small capitals "12TH"), Dead Sea
     # Scrolls sigla ("4QSam",
     # "1QpHab"), a reference to part of a verse ("see 13:2a"), decades ("1960s") or a verse
     # "and following" ("2:15ff")
@@ -371,7 +371,7 @@ def _broken_words(pieces: list[Piece], vocabulary: Vocabulary) -> bool:
     return any(
         parts[n] == " "
         and not parts[n - 1].endswith(("’", "'"))  # "Name’ s": as the book prints it
-        and not _INITIAL.fullmatch(parts[n - 1])  # "A. W. Name": initials, not a broken word
+        and not _INITIAL.fullmatch(parts[n - 1])  # "Q. Z. Name": initials, not a broken word
         and not (len(b := parts[n + 1].strip(".,;:!?)”’")) > 1 and b.isupper())  # an acronym
         and (a := letters(parts[n - 1]))
         and (b := letters(parts[n + 1]))
