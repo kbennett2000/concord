@@ -62,6 +62,7 @@ include = [
     "bible-semantic/tests",
     "scripts/emb_convert",
     "scripts/convert_emb.py",
+    "scripts/fix_broken_words.py",
     "scripts/tests",
 ]
 # Let tests import sibling test-helper modules (e.g. bible-core/tests/loaderkit.py),
