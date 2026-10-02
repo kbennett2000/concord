@@ -2726,3 +2726,47 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - 20 translations, the same ids; only EMB's `document_count` changed (66 → 73);
     - Songbird's client already reads documents: its schema parses all three new kinds
       (`front-matter-1`, `reading-plan-1`, `about-1`), which were 404 before the swap.
+
+### Feature V8-S6a — the topics contract (ADR-0013)
+
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`slice/v8-s6a-topics-contract`). V8-S6 splits in two
+  (Kris's call): this is S6a, the topics contract, with no converter work and no deploy; S6b is
+  the Tyndale Verse Finder as a second topical source, plus italics in the Perspectives boxes
+  (deployed). SPEC §7 shows both rows.
+- **Contract** (ADR-0013):
+  - `build_database(topics_dirs=…)` replaces `topics_dir`; the CLI scans `data/topics` then
+    `data/private/topics` (`_default_topics_dirs`), files sorted within each. No schema change:
+    `topics.source` was there since ADR-0006.
+  - Shared rules, all failing the build: a file holds at least one topic; a source name belongs
+    to one file; ids match `^[a-z0-9-]+$` and are unique across sources (the message names the
+    file that claimed the id first); sections match `^[A-Z]$`. A private source's ids carry a
+    prefix of its own (`vf-`): a committed-data test proves no committed id starts with it. A
+    loader-checked `id_prefix` was dropped in review — it could only ever run on an operator's
+    machine, never in CI.
+  - `source` appended to every topic summary, to a topic's detail and to its verses page.
+    `/v1/topics?source=` (exact, trimmed) combines with `q`/`section`; an unknown name is
+    `400 unknown_source`. The page appends `source` (echo) and `sources`: every loaded source with
+    its count under `q`/`section`, 0 included, ordered by name — one `GROUP BY` sharing the
+    page's where-clause helper. Order stays `name, id`.
+  - The four topic endpoints now declare their bodies: `docs/openapi.json` gains the seven topic
+    schemas and `?source=`.
+- **Tests:** 12 more in `test_topics_loader.py` (two folders, an absent private folder, the
+  filter, the totals and their invariants, the cross-source reverse lookup, duplicates across
+  folders, a source in two files, four bad ids/sections, an empty file, the committed ids);
+  `test_topics_endpoint.py` pins key order and adds 6 against a copy of the corpus with two
+  made-up topics of a made-up source (the union, `?source=`, `sources` under `q`/`section`, the
+  400, detail/verses/reverse, ETag on a filtered page); the licensing tests gain
+  `test_clean_checkout_bakes_zero_private_topics` (shown non-vacuous) and the mirror guard that
+  `data/topics/` is in neither ignore file.
+- **Nave's unchanged apart from `source`:** before touching code, 11,161 responses were dumped
+  through `TestClient` on `main` — all 27 list pages (limit 200), 5,319 details, every topic's
+  verse pages, 200 reverse lookups. After: on a public build, all 11,159 distinct responses equal
+  byte for byte with `source`/`sources` removed; on a build with a made-up private source, the
+  `?source=Nave's Topical Bible` pages, every detail and verse page, and the reverse lookups
+  filtered to Nave's topics equal too.
+- **Docs:** ADR-0013; `docs/API.md` (the four sections, `unknown_source`); a user-flow page,
+  `docs/v8/topics-ingest.md`; SPEC §4.5, §5, §7.
+- **Proof with real private data:** `make build-db` loads 5,319 topics and 138,138 links, as
+  before; `bible.db` 305,848,320 bytes, unchanged.
+- **`make check` green** (1,053 passed, 48 deselected; ruff and pyright strict clean; openapi.json
+  regenerated and up to date).
