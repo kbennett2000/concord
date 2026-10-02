@@ -2830,3 +2830,26 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     only in `text`, same plain text (GEN 39:23's shown by shape); NET John 3's 71 notes equal.
 - **`make check` green** (1,065 passed, 48 deselected; ruff and pyright strict clean; openapi.json
   unchanged); the licensing tests pass; `git status` shows nothing under `data/private`.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  - **Build:** `make docker-build-private` took 61 s, the embed step `CACHED` (the WEB verse
+    export is unchanged); the temporary `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (bc8dd54e9ec1) checked on :8077:** the local API's checks above, all passing;
+    `chart-01.jpg` byte-identical; an unknown slug 404; semantic search on.
+  - **Ship:** `docker save | gzip` 10 s (510 MB); `scp` 40 s; `docker load` 27 s + `compose up
+    -d` 13 s; healthy after ~12 s; both tarballs removed.
+  - **Rollback:** `concord:pre-emb-verse-finder` (the V8-S5c image, 80ec5176622d) —
+    `docker tag concord:pre-emb-verse-finder concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now:** `latest`, `pre-emb-verse-finder`, `pre-emb-front-matter`,
+    `pre-emb-introductions`, `pre-emb-charts`, `pre-emb-topics`, `pre-emb-articles`,
+    `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (1.62–1.65 GB each, layers shared; 16 GB
+    free).
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`, against a
+    capture taken before the swap:
+    - NET John 3's 71 notes are identical in every field Songbird reads;
+    - EMB Genesis 1's 31 verses and Genesis 13's 4 notes load unchanged; in Genesis 39 only the
+      Perspectives box at 39:23 changed, in `text` alone, with the same plain text;
+    - the Topics list loads (total 5,319 → 5,502; its first page unchanged; section V
+      unchanged), `vf-1` and its 12 verses load with EMB text (404 before), and EXO 21:22's
+      topics gain `vf-1`;
+    - 20 translations, the same ids; only EMB's `document_count` changed (73 → 74).
