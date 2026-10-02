@@ -473,16 +473,27 @@ class VersePlacesResponse(BaseModel):
 
 class TopicSummary(BaseModel):
     """A topic's summary. ``see_also`` is another topic's id for a 'See X' redirect (those carry
-    no verses of their own), else null."""
+    no verses of their own), else null. ``source`` is the topical source it comes from
+    (ADR-0013), appended last."""
 
     id: str
     name: str
     section: str
     see_also: str | None
+    source: str
+
+
+class TopicSourceTotal(BaseModel):
+    """One loaded topical source and how many of its topics match the page's ``q``/``section``."""
+
+    source: str
+    total: int
 
 
 class TopicsResponse(BaseModel):
-    """A page of topics: the echoed filter/pagination state, total count, and summaries."""
+    """A page of topics: the echoed filter/pagination state, total count, and summaries. Appended
+    (ADR-0013): the echoed ``source`` filter and ``sources`` — every loaded source with its count
+    under the same ``q``/``section`` (ignoring ``source``), ordered by name."""
 
     q: str | None
     section: str | None
@@ -490,16 +501,20 @@ class TopicsResponse(BaseModel):
     offset: int
     total: int
     topics: list[TopicSummary]
+    source: str | None
+    sources: list[TopicSourceTotal]
 
 
 class TopicDetail(BaseModel):
-    """A single topic's full detail plus its verse count (0 for a 'See X' redirect)."""
+    """A single topic's full detail plus its verse count (0 for a 'See X' redirect) and, appended,
+    its ``source`` (ADR-0013)."""
 
     id: str
     name: str
     section: str
     see_also: str | None
     verse_count: int
+    source: str
 
 
 class TopicVerse(BaseModel):
@@ -515,7 +530,8 @@ class TopicVerse(BaseModel):
 class TopicVersesResponse(BaseModel):
     """A page of the verses curated under a topic, echoing the request state.
 
-    ``translation`` is null unless ``include_text=true``."""
+    ``translation`` is null unless ``include_text=true``. ``source`` is the topic's source
+    (ADR-0013), appended last."""
 
     id: str
     translation: str | None
@@ -524,6 +540,7 @@ class TopicVersesResponse(BaseModel):
     offset: int
     total: int
     verses: list[TopicVerse]
+    source: str
 
 
 class VerseTopicsResponse(BaseModel):

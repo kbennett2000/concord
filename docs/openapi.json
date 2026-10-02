@@ -626,6 +626,288 @@
         "title": "SemanticHealth",
         "type": "object"
       },
+      "TopicDetail": {
+        "description": "A single topic's full detail plus its verse count (0 for a 'See X' redirect) and, appended,\nits ``source`` (ADR-0013).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "see_also": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "See Also"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "verse_count": {
+            "title": "Verse Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "section",
+          "see_also",
+          "verse_count",
+          "source"
+        ],
+        "title": "TopicDetail",
+        "type": "object"
+      },
+      "TopicSourceTotal": {
+        "description": "One loaded topical source and how many of its topics match the page's ``q``/``section``.",
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "total"
+        ],
+        "title": "TopicSourceTotal",
+        "type": "object"
+      },
+      "TopicSummary": {
+        "description": "A topic's summary. ``see_also`` is another topic's id for a 'See X' redirect (those carry\nno verses of their own), else null. ``source`` is the topical source it comes from\n(ADR-0013), appended last.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "see_also": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "See Also"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "section",
+          "see_also",
+          "source"
+        ],
+        "title": "TopicSummary",
+        "type": "object"
+      },
+      "TopicVerse": {
+        "description": "One verse curated under a topic. ``text`` is null when not requested or absent.",
+        "properties": {
+          "book": {
+            "title": "Book",
+            "type": "string"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "verse": {
+            "title": "Verse",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "book",
+          "chapter",
+          "verse",
+          "reference",
+          "text"
+        ],
+        "title": "TopicVerse",
+        "type": "object"
+      },
+      "TopicVersesResponse": {
+        "description": "A page of the verses curated under a topic, echoing the request state.\n\n``translation`` is null unless ``include_text=true``. ``source`` is the topic's source\n(ADR-0013), appended last.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "include_text": {
+            "title": "Include Text",
+            "type": "boolean"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "translation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation"
+          },
+          "verses": {
+            "items": {
+              "$ref": "#/components/schemas/TopicVerse"
+            },
+            "title": "Verses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "translation",
+          "include_text",
+          "limit",
+          "offset",
+          "total",
+          "verses",
+          "source"
+        ],
+        "title": "TopicVersesResponse",
+        "type": "object"
+      },
+      "TopicsResponse": {
+        "description": "A page of topics: the echoed filter/pagination state, total count, and summaries. Appended\n(ADR-0013): the echoed ``source`` filter and ``sources`` \u2014 every loaded source with its count\nunder the same ``q``/``section`` (ignoring ``source``), ordered by name.",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/TopicSourceTotal"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicSummary"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "q",
+          "section",
+          "limit",
+          "offset",
+          "total",
+          "topics",
+          "source",
+          "sources"
+        ],
+        "title": "TopicsResponse",
+        "type": "object"
+      },
       "Translation": {
         "description": "A loaded translation's catalog metadata. ``note_count`` is the number of notes loaded for\nit (0 when none) \u2014 a client offers any translation with notes as a notes source.\n``document_count`` (v8, ADR-0012) is the number of its documents (0 when none), listed at\n``/v1/translations/{translation}/documents``.",
         "properties": {
@@ -869,6 +1151,33 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerseTopicsResponse": {
+        "description": "The topics a verse or range appears under (the inverse lookup): the full deduped union.",
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicSummary"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reference",
+          "total",
+          "topics"
+        ],
+        "title": "VerseTopicsResponse",
         "type": "object"
       }
     }
@@ -2112,13 +2421,33 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "description": "Only this topical source, by its exact name (one of `sources`).",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this topical source, by its exact name (one of `sources`).",
+              "title": "Source"
+            }
           }
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TopicsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -2155,7 +2484,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TopicDetail"
+                }
               }
             },
             "description": "Successful Response"
@@ -2241,7 +2572,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TopicVersesResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -2712,7 +3045,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VerseTopicsResponse"
+                }
               }
             },
             "description": "Successful Response"
