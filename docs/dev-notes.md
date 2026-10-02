@@ -2889,3 +2889,28 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `docs/v8/topics-ingest.md`; SPEC §4.5 and §5.
 - **`make check` green** (1,069 passed, 48 deselected; ruff and pyright strict clean;
   `docs/openapi.json` unchanged).
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000) from this branch.
+  - **Build:** `make docker-build-private` took 50 s, the embed step `CACHED`; the temporary
+    `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (12b114477d8b) checked on :8077 against the server:** the same 5,502 topics
+    with identical summaries, in the new order (an exact emulation of `NOCASE`, then id; the
+    server's was binary); within Nave's only the ANGEL pair moved, within the Verse Finder
+    nothing; the sources now interleave in 21 letters; `?source=` pages each source (5,319 /
+    183). 2,349 reverse lookups (the 35 ANGEL verses and every verse the Verse Finder cites)
+    return the same topics in the new order (511 in a changed order). Translations, EMB
+    documents and notes, NET John 3's notes, topic details and verse pages, verses, books,
+    journeys, places and `chart-01.jpg` byte-identical.
+  - **Ship:** `docker save | gzip` 11 s (510 MB); `scp` 44 s; `docker load` 30 s, the running
+    container untouched; then the swap, `compose up -d` 11.8 s and healthy 11.6 s later (23.4 s
+    in all, 13:06:59–13:07:23 local); both tarballs removed.
+  - **Rollback:** `concord:pre-topics-order` (the V8-S6b image, bc8dd54e9ec1) —
+    `docker tag concord:pre-topics-order concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now:** `latest`, `pre-topics-order`, `pre-emb-verse-finder`,
+    `pre-emb-front-matter`, `pre-emb-introductions`, `pre-emb-charts`, `pre-emb-topics`,
+    `pre-emb-articles`, `pre-note-spacing`, `pre-emb-notes`, `pre-emb` (11; 15 GB free).
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`, against a
+    capture taken before the swap: the Topics list loads (28 pages, the same 5,502 summaries,
+    now in the one A–Z order; before, the binary one); EXO 21:22, PHP 4:6 and 1KI 19:7 (both
+    ANGEL topics) load the same topics in the new order; `vf-1`'s detail and its 12 verses in
+    EMB, and `angel-a-spirit`'s detail, unchanged.
