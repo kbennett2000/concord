@@ -22,7 +22,7 @@ translations:
   the translation prints it thrice or more and the fragment is a word nowhere.
   A one-letter word beside a word printed anywhere else is the real phrase ("a lone witness").
 * Where pieces could join two ways ("tha t he", "word s hall"), the reading that leaves no
-  fragment wins, then the one whose word sequence the sibling verse prints; a tie is listed.
+  fragment wins, next the reading whose word pairs the sibling verse prints; a tie is listed.
 * "X- y" / "X -y" closes up when "X-y" is printed elsewhere in the translation or in the
   sibling verse; a line-break hyphen ("thou- sand") is listed, as the hyphen would have to go.
 * A glued token is split in two when nothing else prints it, it splits exactly one way into
