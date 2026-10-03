@@ -15,14 +15,14 @@ translations:
 
 * A *piece is a word* when it stands alone at least twice in the translation (not counting
   places where it joins a neighbour into a word), when it is "a", "A", "I" or "O", or when a
-  sibling prints it in the same verse without the same partner (rare names: "Sephar a mount").
+  sibling verse prints it without the same partner (rare names: "Sephar a mount").
 * A *run* of 2-3 pieces is joined when the joined form stands alone at least twice, at least
   one piece is no word, the translation does not print the pieces as a phrase more often than
-  as the word ("fallow deer"), and the word is corroborated: a sibling prints it in the same
-  verse, or the translation prints it at least three times and the fragment is a word nowhere.
+  as the word ("fallow deer"), and the word is corroborated: a sibling verse prints it, or
+  the translation prints it thrice or more and the fragment is a word nowhere.
   A one-letter word beside a word printed anywhere else is the real phrase ("a lone witness").
 * Where pieces could join two ways ("tha t he", "word s hall"), the reading that leaves no
-  fragment wins, then the one whose word sequence the sibling verse prints; a tie is listed.
+  fragment wins, next the reading whose word pairs the sibling verse prints; a tie is listed.
 * "X- y" / "X -y" closes up when "X-y" is printed elsewhere in the translation or in the
   sibling verse; a line-break hyphen ("thou- sand") is listed, as the hyphen would have to go.
 * A glued token is split in two when nothing else prints it, it splits exactly one way into
@@ -186,7 +186,7 @@ class Words:
 
 
 class Corpus:
-    """Every English translation's words, for the evidence of the same verse in each other."""
+    """Every English translation's words: each one's verses are evidence for the others'."""
 
     def __init__(self, texts: Mapping[str, Mapping[Ref, str]]) -> None:
         self.texts = texts
@@ -456,7 +456,7 @@ class _Verse:
 
         The translation must print the joined word after this verse's left neighbour or before
         its right one elsewhere (both, when no sibling prints it in this verse), and the piece
-        must not go on to the next word more often elsewhere than the joined word does
+        must not precede the next word more often elsewhere than the joined word does
         ("lone witness" beside a never-printed "alone witness")."""
         pairs, lower = self.words.pairs, self.lower
         end = run.start + run.size
@@ -778,8 +778,8 @@ def _write_manifest(
         "[broken_words_manifest.csv](broken_words_manifest.csv): translation, reference, the "
         "character offset of the edit in the verse as it stood, kind, the text before and after "
         "(with a word of context each side), and the evidence — how often the repaired word (or, "
-        "for a glued pair, the two-word phrase) stands in that translation, and how many sibling "
-        "translations print it in the same verse.",
+        "for a glued pair, the two-word phrase) stands in that translation, and how many "
+        "sibling verses print it.",
         "",
         f"**{len(rows)} changes** in {sum(len(v) for v in verses.values())} verses. "
         "Kinds: `split` — a word split by a stray space; `hyphen` — a stray space beside a hyphen; "

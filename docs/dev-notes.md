@@ -2996,7 +2996,7 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   It is the quirk the EMB converter repairs (V8-S1): KJV Gen 6:14 read "in t he ark". The breaks
   spoil reading, keyword search (FTS) and the WEB embeddings, which all read verse text. Kris's
   rough test put it at about 390–510 verses per translation, and 2 in BSB. The test counted a
-  split whose joined form is a common word while one half is not a word.
+  split whose joined form is a common word while one half is no word.
 - **Measured** (read-only, before any change):
   - **About four times Kris's estimate:** roughly 1,650–1,850 letter splits per English
     translation. A raw count calls the commonest fragments words. KJV prints a lone "t" 231
@@ -3018,7 +3018,7 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - about a dozen real glues, plus ASV's 66 sentences run into the next ("Damascus.Behold");
     - Kris chose to fix these too, in their own commit.
   - **Out of scope:** about 515–618 verses per translation have a double space between two
-    whole words. No word is broken, so they were not touched.
+    whole words. No word is broken, so they stay.
 - **What landed:**
   - **The script:** `scripts/fix_broken_words.py` (stdlib, pyright strict, one-shot), with
     its manifest `scripts/broken_words_manifest.{csv,md}`.
@@ -3026,9 +3026,9 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     in the 12 other English translations. The rules are the EMB converter's
     (`emb_convert.clean`), restated for whole translations:
     - **Words.** A piece is a word when it stands alone at least twice. A lone letter is a
-      word only if it is a/A/I/O. A piece also counts as a word when a sibling verse prints
+      word only when it is a/A/I/O. A piece also counts as a word when a sibling verse prints
       it without the same partner, which keeps rare names ("Sephar a mount").
-    - **Joining a run.** A run is joined when all of these hold:
+    - **Joining a run.** A run is joined when these conditions all hold:
       - the joined form stands alone at least twice;
       - a piece is no word;
       - the translation doesn't prefer the phrase ("fallow deer");
@@ -3037,10 +3037,10 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - **A one-letter word as a piece** needs the joined word attested beside its neighbours.
       That keeps BSB's "a lone witness" and CPDV's "a lone eagle".
     - **Rival readings** ("tha t he", "word s hall"): the reading that leaves no fragment wins,
-      then the one whose word pairs the sibling verse prints.
+      next the reading whose word pairs the sibling verse prints.
     - **Hyphen spaces** close up only when the compound is printed whole. Line-break hyphens
       ("thou- sand", DRB) are listed instead, because the hyphen would have to go too.
-    - **A glued token** is split only when all of these hold:
+    - **A glued token** is split only when these conditions all hold:
       - nothing else prints it;
       - it splits exactly one way into two common words;
       - a sibling verse prints that pair.
@@ -3176,7 +3176,10 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
       plus Hosea).
     - Live on :8077: healthz showed 20 translations, 591,423 verses and semantic on (31,054);
       `/docs` loads no CDN; KJV Gen 6:14 reads "in the ark"; WEB keyword search for
-      "tabernacle twenty boards south" finds Exod 26:18; NLT Hosea reads 11, 23 … 9.
+      "tabernacle twenty boards south" finds Exod 26:18. (An NLT Hosea check on :8077 asked
+      `/v1/verses` with `?translation=`, which that endpoint ignores, so it read KJV. NLT Hosea
+      was proven through Songbird below and, at the v1.3.1 release, with `?translations=NLT`
+      on the server: 11, 23, 5 … 16, 9.)
   - **Ship:**
     - `docker save | gzip` took 10 s (510 MB) and `scp` 37 s.
     - `docker load` took 28 s, with the running container untouched.
@@ -3202,3 +3205,60 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
     - Unchanged: EMB notes over 273 chapters (Genesis, Psalms, Hosea, John, Romans,
       Revelation); NET John 3's notes; EMB's 74 documents (details checked for 40); the
       5,502-topic list; and `vf-1` with its verses.
+
+### Release v1.3.1
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`chore/release-v1.3.1`).
+- **What ships:** the broken- and glued-word cleanup of the committed translations (PR #91).
+  - 28,365 repairs in 12 translations; every repair removes or inserts one space.
+  - The WEB embeddings rebuilt from the cleaned text.
+  - The guard test against broken words coming back.
+
+  No `/v1` key, endpoint or parameter changes, so this is a **semver patch**.
+- **Mechanics** (as v1.3.0):
+  - `bible_api.__version__`, `bible-api/pyproject.toml` and `uv.lock` go `1.3.0 → 1.3.1`.
+    `make openapi` moved only `info.version`.
+  - README pull examples now point at `:v1.3.1`.
+  - Release notes: `docs/releases/v1.3.1.md`, the GitHub release's body, with links pinned to
+    the tag.
+  - SPEC §7 is unchanged: the fix is not a v8 slice.
+- **Made-up test text** (Kris's catch, at release time):
+  - One test string in `scripts/tests/test_fix_broken_words.py` matched five consecutive
+    words of a private translation's verse.
+  - A check of every string and comment in that file against the five private translations
+    found 43 lines sharing a run of 4–6 words with a private verse. The longest was 6 words,
+    in a filler line. Nearly all were everyday phrases of plain English.
+  - The tests now use invented words, except "a", "I" and "O", which the one-letter rules
+    need.
+  - Three tests were redesigned so that each of the script's 14 rules has a test that fails
+    with that rule switched off. Before the rewrite, 3 rules had no such test.
+  - The same check, run on the script's docstrings, the guard's spot checks and the prose
+    added for #91, found a few common 4-word phrases. They were reworded.
+  - What's left: the semantic-search query "do not be anxious" (in use since v2), and WEB's
+    Job 6:21 quoted in `docs/API.md`, which NET shares word for word.
+- **Pre-release gate:**
+  - **Tests:** `make check` green: 1,116 passed, 49 deselected; ruff and pyright strict
+    clean.
+  - **Integration:** the full-detector guard (`-m integration`, 1 passed, 38 s). The full
+    integration suite ran green on the merged fix (49 passed, PR #91). Since then the release
+    diff touches only test strings, docstrings and version lines, and the suite was skipped. That
+    spared Kris's machine another 38 minutes of load.
+  - **The build:** `git archive d0d53a2 | docker build -t concord-gate:v1.3.1 -`. The context
+    holds 0 `data/private` entries, and `git ls-files data/private` is empty. The build took
+    45 s, embed `CACHED`.
+  - **Its `bible.db`:**
+    - exactly the 15 committed translations (435,951 verses), and 0 verses of the private
+      codes;
+    - 0 notes, note cross-references, note passages, assets, documents and document images;
+    - Nave's 5,319 topics only, with no `vf-` id;
+    - a byte scan finds none of the private translations' names nor the Verse Finder's
+      source name. "Tyndale" alone occurs 19,571 times, all in the public STEPBible
+      attribution ("Tyndale House Cambridge") on OSHB, SBLGNT and the Strong's lexicon.
+    - `/app` holds `bible.db`, `embeddings.db` and `model` only.
+  - **Live on :8078, 20 checks passing:**
+    - healthz (15 translations, semantic on) and `/docs` offline;
+    - every `note_count` and `document_count` is 0, notes `200` empty, documents total 0;
+    - KJV Gen 6:14 reads "in the ark", WEB keyword search finds Exod 26:18, and meaning
+      search answers;
+    - EMB, NLT, NET, ESV and NKJV verses and notes are all `404`;
+    - topics: 5,319, Nave's only; `vf-1` is a `404`.
+

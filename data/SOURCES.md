@@ -49,7 +49,7 @@ The committed English JSON is the source editions' text with two extraction arti
 repaired. No wording was changed:
 
 - **Fused section headings** (issue #67). The extractor had glued each section heading onto
-  the end of the verse before it. The headings were moved back into their chapter's `headings`
+  the verse just before it. The headings were moved back into their chapter's `headings`
   ([scripts/fix_fused_headings.py](../scripts/fix_fused_headings.py)).
 - **Broken and glued words** (2026-10-02):
   - Words split by a stray space were closed up ("in t he ark", "sin- offering", "father’ s").
@@ -60,7 +60,7 @@ repaired. No wording was changed:
     same verse in the other English translations.
   - Every change is listed in
     [scripts/broken_words_manifest.md](../scripts/broken_words_manifest.md) and its `.csv`,
-    and so is every case left alone for want of evidence.
+    as is each case left alone for want of evidence.
   - BSB, SBLGNT and OSHB needed none.
 
 ## Cross-references (`data/cross-references/`)
