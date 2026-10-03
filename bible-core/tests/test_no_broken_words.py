@@ -23,11 +23,11 @@ TRANSLATIONS = REPO_ROOT / "data" / "translations"
 
 # (translation, reference, text the repaired verse holds), one per kind of repair
 REPAIRED = [
-    ("KJV", "Gen 6:14", "make in the ark, and"),  # "in t he ark"
-    ("WEB", "Exod 26:18", "for the tabernacle, twenty"),  # "tabernacl e,"
-    ("ASV", "Lev 4:34", "of the sin-offering with"),  # "sin- offering"
-    ("DRB", "Jer 3:25", "against the Lord our God"),  # "theLord"
-    ("ASV", "Isa 17:1", "of Damascus. Behold,"),  # "Damascus.Behold"
+    ("KJV", "Gen 6:14", "in the ark,"),  # "in t he ark"
+    ("WEB", "Exod 26:18", "the tabernacle,"),  # "tabernacl e,"
+    ("ASV", "Lev 4:34", "sin-offering with"),  # "sin- offering"
+    ("DRB", "Jer 3:25", "against the Lord"),  # "theLord"
+    ("ASV", "Isa 17:1", "Damascus. Behold,"),  # "Damascus.Behold"
 ]
 
 

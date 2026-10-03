@@ -1,6 +1,6 @@
 # Broken- and glued-word cleanup manifest
 
-Written by [fix_broken_words.py](fix_broken_words.py). Every change is a row of [broken_words_manifest.csv](broken_words_manifest.csv): translation, reference, the character offset of the edit in the verse as it stood, kind, the text before and after (with a word of context each side), and the evidence — how often the repaired word (or, for a glued pair, the two-word phrase) stands in that translation, and how many sibling translations print it in the same verse.
+Written by [fix_broken_words.py](fix_broken_words.py). Every change is a row of [broken_words_manifest.csv](broken_words_manifest.csv): translation, reference, the character offset of the edit in the verse as it stood, kind, the text before and after (with a word of context each side), and the evidence — how often the repaired word (or, for a glued pair, the two-word phrase) stands in that translation, and how many sibling verses print it.
 
 **28365 changes** in 26994 verses. Kinds: `split` — a word split by a stray space; `hyphen` — a stray space beside a hyphen; `apostrophe` — one inside a possessive; `glued` — two words run together; `punctuation` — no space after a sentence's mark.
 
