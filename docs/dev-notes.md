@@ -2989,3 +2989,216 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   `publish-image.yml`, which publishes `ghcr.io/kbennett2000/concord:v1.3.0`, `:latest` and
   `:sha-…`. The published image is then pulled and checked the same way, and the GitHub release
   is published from `docs/releases/v1.3.0.md`. The LAN server keeps its private image.
+
+### Fix — broken and glued words in the committed translations
+- **Date:** 2026-10-02. **PR:** _(this PR)_ (`fix/broken-words`).
+- **Why:** the committed English translations carried their source text layer's word breaks.
+  It is the quirk the EMB converter repairs (V8-S1): KJV Gen 6:14 read "in t he ark". The breaks
+  spoil reading, keyword search (FTS) and the WEB embeddings, which all read verse text. Kris's
+  rough test put it at about 390–510 verses per translation, and 2 in BSB. The test counted a
+  split whose joined form is a common word while one half is not a word.
+- **Measured** (read-only, before any change):
+  - **About four times Kris's estimate:** roughly 1,650–1,850 letter splits per English
+    translation. A raw count calls the commonest fragments words. KJV prints a lone "t" 231
+    times, and every one is inside a break; "t he" alone occurs 77 times.
+  - **Kinds, KJV** (the others are similar):
+    - a split inside a word: 756;
+    - the first letter split off: 641 ("t he", "w ith");
+    - the last letter split off: 444 ("an d", "hi s");
+    - about 10% capitalised: names, LORD, God.
+  - **Two more kinds:**
+    - a stray space beside a hyphen ("sin- offering", "Ben -hadad"): about 1,000–1,300 each
+      in ASV, DBT, JPS, WBT and YLT, almost none in KJV and AKJV;
+    - a split possessive ("father’ s"): up to 5 per translation.
+  - **BSB:** none. Its 11 candidates are its real wording ("a lone witness", "to ward off",
+    "the earth quakes", "a blaze").
+  - **OSHB and SBLGNT:** none. Their only hits ("ὅ τι") are real words.
+  - **The opposite fault, glued words:**
+    - about 400 candidates, nearly all real compounds, spellings or names;
+    - about a dozen real glues, plus ASV's 66 sentences run into the next ("Damascus.Behold");
+    - Kris chose to fix these too, in their own commit.
+  - **Out of scope:** about 515–618 verses per translation have a double space between two
+    whole words. No word is broken, so they were not touched.
+- **What landed:**
+  - **The script:** `scripts/fix_broken_words.py` (stdlib, pyright strict, one-shot), with
+    its manifest `scripts/broken_words_manifest.{csv,md}`.
+  - **The evidence** for each repair is the translation's own word counts plus the same verse
+    in the 12 other English translations. The rules are the EMB converter's
+    (`emb_convert.clean`), restated for whole translations:
+    - **Words.** A piece is a word when it stands alone at least twice. A lone letter is a
+      word only if it is a/A/I/O. A piece also counts as a word when a sibling verse prints
+      it without the same partner, which keeps rare names ("Sephar a mount").
+    - **Joining a run.** A run is joined when all of these hold:
+      - the joined form stands alone at least twice;
+      - a piece is no word;
+      - the translation doesn't prefer the phrase ("fallow deer");
+      - a sibling verse prints the word, or the translation prints it at least three times
+        and the fragment is a word nowhere.
+    - **A one-letter word as a piece** needs the joined word attested beside its neighbours.
+      That keeps BSB's "a lone witness" and CPDV's "a lone eagle".
+    - **Rival readings** ("tha t he", "word s hall"): the reading that leaves no fragment wins,
+      then the one whose word pairs the sibling verse prints.
+    - **Hyphen spaces** close up only when the compound is printed whole. Line-break hyphens
+      ("thou- sand", DRB) are listed instead, because the hyphen would have to go too.
+    - **A glued token** is split only when all of these hold:
+      - nothing else prints it;
+      - it splits exactly one way into two common words;
+      - a sibling verse prints that pair.
+
+      Hyphenated siblings ("mercy-seat") and a- words ("awork") make it a compound. So do
+      repeats without an inner capital ("goodwill" ×2 in BSB), as opposed to "Iwill".
+  - **Changes:** 28,365 in 12 translations.
+
+    | Kind | Changes |
+    |---|---|
+    | split | 21,020 |
+    | hyphen | 7,240 |
+    | apostrophe | 23 |
+    | glued | 15 |
+    | punctuation | 67 |
+
+    By translation: AKJV 1,744, ASV 2,781, CPDV 2,297, DBT 2,908, DRB 1,869, ERV 2,207,
+    JPS 2,913, KJV 1,845, SLT 2,097, WBT 2,847, WEB 1,892, YLT 2,965. BSB, OSHB and SBLGNT
+    are unchanged.
+  - **Left alone and listed in the `.md`:** 1,421 cases.
+
+    | Reason | Cases |
+    |---|---|
+    | both halves are words ("he art", "in to") | 621 |
+    | the compound is printed nowhere else | 394 |
+    | thin evidence | 172 |
+    | line-break hyphens | 133 |
+    | one-letter words not attested beside their neighbours | 51 |
+    | glued, but no sibling prints the pair | 22 |
+    | a one-letter word beside a word printed elsewhere | 19 |
+    | compounds and a translation's own spellings | 9 |
+  - **Commits:** the glued kinds went first (81 changes), then the broken ones, then one
+    glued word the joins uncovered (ASV Esth 1:10 "wasmerry").
+- **Checked:**
+  - Every changed verse equals the old one with only spaces removed or inserted (asserted
+    per verse by the script, and again file by file against the previous commit).
+  - Verse numbers, headings and metadata are identical, and the files round-trip
+    byte-identically.
+  - A dry run of every kind afterwards proposes nothing.
+  - Hand review before applying:
+    - every glued and punctuation change;
+    - every BSB candidate;
+    - 60 rival resolutions;
+    - 50 joins resting on own counts alone;
+    - 25 hyphen joins.
+
+    Two rules came from that review: the one-letter one and the compound ones.
+  - Translations with character-anchored notes are refused by the script.
+- **Guard:** `bible-core/tests/test_no_broken_words.py`.
+  - `quick_check` (lone letters and hyphen spaces, the commonest kinds) runs in the default
+    suite, in about 3 s. On the pre-fix KJV it flags 964. The default run went from 11.4 s to
+    about 15 s.
+  - The full detector, about 40 s, runs as an integration test.
+  - Spot checks: KJV Gen 6:14, WEB Exod 26:18, ASV Lev 4:34, DRB Jer 3:25, ASV Isa 17:1.
+- **Tests:** 43 in `scripts/tests/test_fix_broken_words.py`, made-up text only.
+  - They were written before the script and failed until it existed.
+  - Each rule added after review had its tests fail with the rule switched off.
+- **Found in passing:** the committed #67 manifest (`scripts/fused_headings_manifest.{md,csv}`)
+  is empty, header only, in its own commit f379080. Its script rewrote it on a second,
+  idempotent run before that commit. The new script writes its manifest only when it applies
+  changes, and appends.
+- **Docs:** `data/SOURCES.md` has a new "Cleanups applied to the committed text" section
+  covering #67 and this fix.
+- **Private files** (local only, under the gitignored `data/private/`; counts and references,
+  no text):
+  - **NLT Hosea**, measured against the KJV verse skeleton and EMB's Hosea (the same
+    translation, which parses complete):
+    - nlt.json held 46 of Hosea's 197 verses.
+    - 1:11 also carried 2:1.
+    - Chapters 2–13 held one verse each, chapter 2's verses 2–14 filed as "2:1"…"14:1".
+    - Chapter 14 held 23 verses. Only 14:2–9 were in place; the rest sat under the wrong
+      chapter, by verse number, from chapters 2, 4, 9, 13 and 14.
+    - 151 verses were missing.
+    - nlt.json and EMB.json are different NLT printings: outside Hosea only 27% of verses
+      have the same words. nlt.json prints straight quotes and `--`; EMB prints curly
+      quotes and em dashes.
+
+    Kris chose the whole book from EMB. All 14 chapters were rewritten (197 verses), with
+    quotes and dashes mapped to nlt.json's style. Every byte outside Hosea is unchanged, and
+    NLT's total went 30,952 → 31,103 (as NET's). The EMB converter reads nlt.json only as
+    cross-check evidence.
+  - **The detector over all five, report-only, before any change:**
+    - NLT: hyphen 164.
+    - ESV: hyphen 122, glued 1, punctuation 6.
+    - NKJV: hyphen 38.
+    - NET: split 5, apostrophe 656, glued 1. The 656 are one systematic pattern: a space
+      before "’s" after the same word.
+    - EMB: split 1.
+
+    NLT, ESV and NKJV have no letter splits.
+  - **Applied** (Kris's call: NLT, ESV and NKJV, hyphen spaces only). The script gained a
+    `--kinds hyphen` choice for this, and refuses a code that appears in both the data and
+    the evidence folders.
+    - NLT 180 (176 verses, none in Hosea), ESV 123, NKJV 38.
+    - The counts exceed the report-only pass because the applying run also had NET and EMB
+      as siblings, and EMB prints NLT's compounds.
+    - Each change is only a space. Headings, footnotes and metadata are identical to the
+      backups.
+    - ESV's 8 glued and punctuation proposals are left alone (not an approved kind).
+  - **NET and EMB are untouched.** The script refuses translations with character-anchored
+    notes, so NET's note anchors never move. Every NET and EMB file (translation, notes,
+    documents, topics, assets, converter work files) hashes the same before and after.
+  - **Other NET damage seen while measuring**, not fixable by a space and reported only:
+    - about 33 places where a word lost its last three letters, mostly in Joel;
+    - Exod 23:2, garbled throughout.
+  - **Where things are:** backups of the three changed files in
+    `data/private/backups/2026-10-02/`; the report and change manifest in
+    `data/private/reports/`.
+- **`docs/API.md`:** the two semantic-search examples are refreshed from this build.
+  - The "do not be anxious" example was already stale before this fix. It dated from
+    2026-06-05, before #67, and the server returned Deut 1:29, 1 Thess 5:20, Job 6:21 rather
+    than its Haggai 2:5 in second place.
+  - This build moves the scores in the third decimal. That includes unchanged verses: a
+    batch's padding changes when one of its verses does.
+- **Gate:**
+  - `make check` green: 1,116 passed, 49 deselected; ruff and pyright strict clean;
+    `docs/openapi.json` unchanged.
+  - `pytest -m integration`: 49 passed in 37 min 57 s. That is the 48 from v1.3.0 plus the
+    full-detector guard. The machine was shared, with a load of about 14.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000), from this branch.
+  - **Build:** `make docker-build-private`, 17:46–18:14 (28.5 min).
+    - The deps stage re-ran because `pyproject.toml` gained the pyright include.
+    - The embed baked once, because WEB's text changed: 31,054 WEB verses in 1,645.8 s.
+    - The temporary `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (c4014cf9e3ee) against the server's `bible.db`:**
+    - Every table except `verses` and its FTS index is identical: notes, note
+      cross-references and passages, documents, assets, topics, headings, cross-references,
+      places, journeys, Strong's and word tokens.
+    - Its 591,423 verses equal the JSON on disk exactly (the server had 591,272; the 151 more
+      are NLT Hosea).
+    - 27,536 verses differ, every one named by a manifest or in NLT Hosea. All 26,994 public
+      manifest verses are among them, plus ESV 120, NKJV 38 and NLT 384 (176 hyphen repairs
+      plus Hosea).
+    - Live on :8077: healthz showed 20 translations, 591,423 verses and semantic on (31,054);
+      `/docs` loads no CDN; KJV Gen 6:14 reads "in the ark"; WEB keyword search for
+      "tabernacle twenty boards south" finds Exod 26:18; NLT Hosea reads 11, 23 … 9.
+  - **Ship:**
+    - `docker save | gzip` took 10 s (510 MB) and `scp` 37 s.
+    - `docker load` took 28 s, with the running container untouched.
+    - The swap: `compose up -d` took 7.8 s and the container was healthy 11.5 s later
+      (19.3 s in all, 18:17:55–18:18:14 local).
+    - Both tarballs were removed.
+  - **Rollback:** `concord:pre-broken-words` (the V8-S7a image, 12b114477d8b).
+    `docker tag concord:pre-broken-words concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now** (12; 17 GB free): `latest`, `pre-broken-words`, `pre-topics-order`,
+    `pre-emb-verse-finder`, `pre-emb-front-matter`, `pre-emb-introductions`,
+    `pre-emb-charts`, `pre-emb-topics`, `pre-emb-articles`, `pre-note-spacing`,
+    `pre-emb-notes`, `pre-emb`.
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`, against a
+    capture taken before the swap:
+    - KJV Gen 6:14 went "in t he ark" → "in the ark".
+    - The WEB keyword search for "tabernacle twenty boards south" went from Exod 36:23 alone
+      to 26:18 and 36:23. The control query, "boards south side", is unchanged.
+    - The meaning search for "do not be anxious" returns the same five references.
+    - NLT Hosea went from 11, 1 … 1, 23 to 11, 23, 5, 19, 15, 11, 16, 14, 17, 15, 12, 14,
+      16, 9.
+    - NLT 1 Chr 5, ESV Ruth 4 and NKJV Jer 6 lost their stray hyphen spaces.
+    - Unchanged: EMB notes over 273 chapters (Genesis, Psalms, Hosea, John, Romans,
+      Revelation); NET John 3's notes; EMB's 74 documents (details checked for 40); the
+      5,502-topic list; and `vf-1` with its verses.
