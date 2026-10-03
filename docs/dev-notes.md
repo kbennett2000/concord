@@ -3104,3 +3104,101 @@ polylines. Purely additive, reuses v3 geography, no new package, no ML.
   changes, and appends.
 - **Docs:** `data/SOURCES.md` has a new "Cleanups applied to the committed text" section
   covering #67 and this fix.
+- **Private files** (local only, under the gitignored `data/private/`; counts and references,
+  no text):
+  - **NLT Hosea**, measured against the KJV verse skeleton and EMB's Hosea (the same
+    translation, which parses complete):
+    - nlt.json held 46 of Hosea's 197 verses.
+    - 1:11 also carried 2:1.
+    - Chapters 2–13 held one verse each, chapter 2's verses 2–14 filed as "2:1"…"14:1".
+    - Chapter 14 held 23 verses. Only 14:2–9 were in place; the rest sat under the wrong
+      chapter, by verse number, from chapters 2, 4, 9, 13 and 14.
+    - 151 verses were missing.
+    - nlt.json and EMB.json are different NLT printings: outside Hosea only 27% of verses
+      have the same words. nlt.json prints straight quotes and `--`; EMB prints curly
+      quotes and em dashes.
+
+    Kris chose the whole book from EMB. All 14 chapters were rewritten (197 verses), with
+    quotes and dashes mapped to nlt.json's style. Every byte outside Hosea is unchanged, and
+    NLT's total went 30,952 → 31,103 (as NET's). The EMB converter reads nlt.json only as
+    cross-check evidence.
+  - **The detector over all five, report-only, before any change:**
+    - NLT: hyphen 164.
+    - ESV: hyphen 122, glued 1, punctuation 6.
+    - NKJV: hyphen 38.
+    - NET: split 5, apostrophe 656, glued 1. The 656 are one systematic pattern: a space
+      before "’s" after the same word.
+    - EMB: split 1.
+
+    NLT, ESV and NKJV have no letter splits.
+  - **Applied** (Kris's call: NLT, ESV and NKJV, hyphen spaces only). The script gained a
+    `--kinds hyphen` choice for this, and refuses a code that appears in both the data and
+    the evidence folders.
+    - NLT 180 (176 verses, none in Hosea), ESV 123, NKJV 38.
+    - The counts exceed the report-only pass because the applying run also had NET and EMB
+      as siblings, and EMB prints NLT's compounds.
+    - Each change is only a space. Headings, footnotes and metadata are identical to the
+      backups.
+    - ESV's 8 glued and punctuation proposals are left alone (not an approved kind).
+  - **NET and EMB are untouched.** The script refuses translations with character-anchored
+    notes, so NET's note anchors never move. Every NET and EMB file (translation, notes,
+    documents, topics, assets, converter work files) hashes the same before and after.
+  - **Other NET damage seen while measuring**, not fixable by a space and reported only:
+    - about 33 places where a word lost its last three letters, mostly in Joel;
+    - Exod 23:2, garbled throughout.
+  - **Where things are:** backups of the three changed files in
+    `data/private/backups/2026-10-02/`; the report and change manifest in
+    `data/private/reports/`.
+- **`docs/API.md`:** the two semantic-search examples are refreshed from this build.
+  - The "do not be anxious" example was already stale before this fix. It dated from
+    2026-06-05, before #67, and the server returned Deut 1:29, 1 Thess 5:20, Job 6:21 rather
+    than its Haggai 2:5 in second place.
+  - This build moves the scores in the third decimal. That includes unchanged verses: a
+    batch's padding changes when one of its verses does.
+- **Gate:**
+  - `make check` green: 1,116 passed, 49 deselected; ruff and pyright strict clean;
+    `docs/openapi.json` unchanged.
+  - `pytest -m integration`: 49 passed in 37 min 57 s. That is the 48 from v1.3.0 plus the
+    full-detector guard. The machine was shared, with a load of about 14.
+- **Deployed 2026-10-02** to the LAN Concord (192.168.1.62:8000), from this branch.
+  - **Build:** `make docker-build-private`, 17:46–18:14 (28.5 min).
+    - The deps stage re-ran because `pyproject.toml` gained the pyright include.
+    - The embed baked once, because WEB's text changed: 31,054 WEB verses in 1,645.8 s.
+    - The temporary `Dockerfile.dockerignore` was gone afterwards.
+  - **The image (c4014cf9e3ee) against the server's `bible.db`:**
+    - Every table except `verses` and its FTS index is identical: notes, note
+      cross-references and passages, documents, assets, topics, headings, cross-references,
+      places, journeys, Strong's and word tokens.
+    - Its 591,423 verses equal the JSON on disk exactly (the server had 591,272; the 151 more
+      are NLT Hosea).
+    - 27,536 verses differ, every one named by a manifest or in NLT Hosea. All 26,994 public
+      manifest verses are among them, plus ESV 120, NKJV 38 and NLT 384 (176 hyphen repairs
+      plus Hosea).
+    - Live on :8077: healthz showed 20 translations, 591,423 verses and semantic on (31,054);
+      `/docs` loads no CDN; KJV Gen 6:14 reads "in the ark"; WEB keyword search for
+      "tabernacle twenty boards south" finds Exod 26:18; NLT Hosea reads 11, 23 … 9.
+  - **Ship:**
+    - `docker save | gzip` took 10 s (510 MB) and `scp` 37 s.
+    - `docker load` took 28 s, with the running container untouched.
+    - The swap: `compose up -d` took 7.8 s and the container was healthy 11.5 s later
+      (19.3 s in all, 18:17:55–18:18:14 local).
+    - Both tarballs were removed.
+  - **Rollback:** `concord:pre-broken-words` (the V8-S7a image, 12b114477d8b).
+    `docker tag concord:pre-broken-words concord:latest && docker compose up -d` in
+    `~/applications/concord`.
+  - **Server tags now** (12; 17 GB free): `latest`, `pre-broken-words`, `pre-topics-order`,
+    `pre-emb-verse-finder`, `pre-emb-front-matter`, `pre-emb-introductions`,
+    `pre-emb-charts`, `pre-emb-topics`, `pre-emb-articles`, `pre-note-spacing`,
+    `pre-emb-notes`, `pre-emb`.
+  - **Read through Songbird's own `ConcordClient`** inside `songbird-songbird-1`, against a
+    capture taken before the swap:
+    - KJV Gen 6:14 went "in t he ark" → "in the ark".
+    - The WEB keyword search for "tabernacle twenty boards south" went from Exod 36:23 alone
+      to 26:18 and 36:23. The control query, "boards south side", is unchanged.
+    - The meaning search for "do not be anxious" returns the same five references.
+    - NLT Hosea went from 11, 1 … 1, 23 to 11, 23, 5, 19, 15, 11, 16, 14, 17, 15, 12, 14,
+      16, 9.
+    - NLT 1 Chr 5, ESV Ruth 4 and NKJV Jer 6 lost their stray hyphen spaces.
+    - Unchanged: EMB notes over 273 chapters (Genesis, Psalms, Hosea, John, Romans,
+      Revelation); NET John 3's notes; EMB's 74 documents (details checked for 40); the
+      5,502-topic list; and `vf-1` with its verses.

@@ -315,12 +315,12 @@ $ curl -s 'localhost:8000/v1/semantic-search?q=do+not+be+anxious&limit=3'
 {
   "query": "do not be anxious", "translation": "WEB", "count": 3,
   "results": [
-    { "book": "DEU", "chapter": 1, "verse": 29, "reference": "Deuteronomy 1:29", "score": 0.9174,
+    { "book": "DEU", "chapter": 1, "verse": 29, "reference": "Deuteronomy 1:29", "score": 0.915,
       "text": "Then I said to you, “Don’t dread, neither be afraid of them." },
-    { "book": "HAG", "chapter": 2, "verse": 5, "reference": "Haggai 2:5", "score": 0.8967,
-      "text": "This is the word that I covenanted with you when you came out of Egypt, ..." },
-    { "book": "1TH", "chapter": 5, "verse": 20, "reference": "1 Thessalonians 5:20", "score": 0.8952,
-      "text": "Don’t despise prophesies." }
+    { "book": "1TH", "chapter": 5, "verse": 20, "reference": "1 Thessalonians 5:20", "score": 0.8945,
+      "text": "Don’t despise prophesies." },
+    { "book": "JOB", "chapter": 6, "verse": 21, "reference": "Job 6:21", "score": 0.8895,
+      "text": "For now you are nothing. You see a terror, and are afraid." }
   ]
 }
 ```
@@ -340,9 +340,9 @@ $ curl -s 'localhost:8000/v1/semantic-search?q=the+good+shepherd&translation=KJV
 {
   "query": "the good shepherd", "translation": "KJV", "count": 2,
   "results": [
-    { "book": "JHN", "chapter": 10, "verse": 11, "reference": "John 10:11", "score": 0.9421,
+    { "book": "JHN", "chapter": 10, "verse": 11, "reference": "John 10:11", "score": 0.9419,
       "text": "I am the good shepherd: the good shepherd giveth his life for the sheep." },
-    { "book": "JHN", "chapter": 10, "verse": 14, "reference": "John 10:14", "score": 0.9111,
+    { "book": "JHN", "chapter": 10, "verse": 14, "reference": "John 10:14", "score": 0.917,
       "text": "I am the good shepherd, and know my [sheep], and am known of mine." }
   ]
 }
